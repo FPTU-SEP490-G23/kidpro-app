@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KIDPRO - Face Attendance Live Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen p-6">
+  <div class="max-w-4xl mx-auto">
+    <header class="flex items-center justify-between mb-8 pb-4 border-b border-slate-700">
+      <div>
+        <h1 class="text-2xl font-bold text-indigo-400">KIDPRO • Face Attendance AI Demo</h1>
+        <p class="text-sm text-slate-400">InsightFace (buffalo_sc) + Cosine Similarity Vector Matching</p>
+      </div>
+      <div id="serverStatus" class="px-3 py-1 text-xs rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">
+        Đang kiểm tra Server...
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Camera Preview & Action -->
+      <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700">
+        <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
+          <span>📷</span> Live Camera
+        </h2>
+        <div class="relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center border-2" id="cameraBox">
+          <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
+          <canvas id="canvas" class="hidden"></canvas>
+          <div id="resultOverlay" class="absolute inset-0 pointer-events-none transition-all duration-300"></div>
+        </div>
+
+        <div class="mt-4 flex gap-3">
+          <button id="btnCheckin" class="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 font-semibold rounded-xl transition flex items-center justify-center gap-2">
+            <span>✨</span> Điểm danh khuôn mặt
+          </button>
+          <button id="btnSwitchCam" class="py-3 px-4 bg-slate-700 hover:bg-slate-600 rounded-xl">
+            🔄
+          </button>
+        </div>
+
+        <!-- Result Card -->
+        <div id="resultCard" class="mt-4 p-4 rounded-xl hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span id="badgeStatus" class="font-bold text-sm px-2.5 py-1 rounded-md"></span>
+            <span id="txtScore" class="text-xs text-slate-300"></span>
+          </div>
+          <div id="studentInfo" class="text-sm space-y-1"></div>
+        </div>
+      </div>
+
+      <!-- Registration Form -->
+      <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700">
+        <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
+          <span>📝</span> Đăng ký khuôn mặt học sinh mới
+        </h2>
+        <form id="formRegister" class="space-y-3">
+          <div>
+            <label class="block text-xs text-slate-300 mb-1">Mã học sinh (ID):</label>
+            <input type="text" id="regId" required value="HS001" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:border-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-300 mb-1">Họ và tên:</label>
+            <input type="text" id="regName" required value="Bé Nguyễn Minh An" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:border-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-300 mb-1">Lớp:</label>
+            <input type="text" id="regClass" required value="Mầm 1" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:border-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-300 mb-1">Ảnh chân dung:</label>
+            <div class="flex gap-2">
+              <button type="button" id="btnSnapRegister" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-xs rounded-lg">
+                📸 Chụp từ Camera hiện tại
+              </button>
+              <input type="file" id="regFileInput" accept="image/*" class="hidden">
+              <button type="button" onclick="document.getElementById('regFileInput').click()" class="py-2 px-3 bg-slate-700 hover:bg-slate-600 text-xs rounded-lg">
+                Tải tệp
+              </button>
+            </div>
+            <div id="snapPreviewText" class="text-xs text-indigo-400 mt-1"></div>
+          </div>
+          <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 font-semibold rounded-lg text-sm transition">
+            Lưu & Trích xuất Vector AI (512-dim)
+          </button>
+        </form>
+
+        <!-- Registered list -->
+        <div class="mt-6 pt-4 border-t border-slate-700">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-slate-300">Danh sách học sinh đã nạp:</h3>
+            <button id="btnReloadList" class="text-xs text-indigo-400 hover:underline">Làm mới</button>
+          </div>
+          <div id="studentsList" class="space-y-2 max-h-48 overflow-y-auto text-xs text-slate-400">
+            Đang tải...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin.includes('8000') ? window.location.origin : 'http://localhost:8000';
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    let capturedBlob = null;
+
+    // Camera Init
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+        video.srcObject = stream;
+      } catch (err) {
+        alert('Không thể mở Camera: ' + err.message);
+      }
+    }
+    startCamera();
+
+    // Check Server Health
+    async function checkServer() {
+      try {
+        const res = await fetch(`${API_BASE}/`);
+        const data = await res.json();
+        document.getElementById('serverStatus').innerHTML = `🟢 Server Online (${data.registered_students_count} học sinh)`;
+        document.getElementById('serverStatus').className = 'px-3 py-1 text-xs rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+        loadStudents();
+      } catch (e) {
+        document.getElementById('serverStatus').innerHTML = '🔴 Server Offline (Chạy: uvicorn main:app)';
+        document.getElementById('serverStatus').className = 'px-3 py-1 text-xs rounded-full bg-red-500/20 text-red-300 border border-red-500/40';
+      }
+    }
+    checkServer();
+
+    function captureImageBlob() {
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+    }
+
+    // Check-in
+    document.getElementById('btnCheckin').onclick = async () => {
+      const blob = await captureImageBlob();
+      const formData = new FormData();
+      formData.append('file', blob, 'checkin.jpg');
+
+      const card = document.getElementById('resultCard');
+      const box = document.getElementById('cameraBox');
+      const badge = document.getElementById('badgeStatus');
+      const info = document.getElementById('studentInfo');
+      const score = document.getElementById('txtScore');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/check-in`, { method: 'POST', body: formData });
+        const data = await res.json();
+        card.classList.remove('hidden');
+
+        if (data.status === 'PRESENT') {
+          box.style.borderColor = '#10B981';
+          card.className = 'mt-4 p-4 rounded-xl bg-emerald-950/80 border border-emerald-500';
+          badge.className = 'font-bold text-sm px-2.5 py-1 rounded-md bg-emerald-500 text-white';
+          badge.innerText = '✅ CÓ MẶT (PRESENT)';
+          score.innerText = `Độ khớp: ${(data.confidence_score * 100).toFixed(1)}%`;
+          info.innerHTML = `
+            <p><b class="text-white">Tên:</b> ${data.name}</p>
+            <p><b class="text-white">Lớp:</b> ${data.class_name}</p>
+            <p><b class="text-white">Mã:</b> ${data.student_id}</p>
+            <p><b class="text-white">Thời gian:</b> ${data.checkin_time}</p>
+          `;
+        } else {
+          box.style.borderColor = '#EF4444';
+          card.className = 'mt-4 p-4 rounded-xl bg-red-950/80 border border-red-500';
+          badge.className = 'font-bold text-sm px-2.5 py-1 rounded-md bg-red-500 text-white';
+          badge.innerText = '❌ NGƯỜI LẠ / CHƯA NHẬN DIỆN';
+          score.innerText = `Điểm: ${(data.confidence_score * 100).toFixed(1)}%`;
+          info.innerHTML = `<p class="text-red-300">${data.message || 'Không khớp danh sách'}</p>`;
+        }
+      } catch (err) {
+        alert('Lỗi gọi API: ' + err.message);
+      }
+    };
+
+    // Snap photo for register
+    document.getElementById('btnSnapRegister').onclick = async () => {
+      capturedBlob = await captureImageBlob();
+      document.getElementById('snapPreviewText').innerText = '✓ Đã chụp ảnh chân dung từ camera';
+    };
+
+    document.getElementById('regFileInput').onchange = (e) => {
+      if (e.target.files.length > 0) {
+        capturedBlob = e.target.files[0];
+        document.getElementById('snapPreviewText').innerText = `✓ Đã chọn file: ${capturedBlob.name}`;
+      }
+    };
+
+    // Register submit
+    document.getElementById('formRegister').onsubmit = async (e) => {
+      e.preventDefault();
+      if (!capturedBlob) {
+        alert('Vui lòng chụp ảnh hoặc tải file chân dung!');
+        return;
+      }
+      const formData = new FormData();
+      formData.append('student_id', document.getElementById('regId').value);
+      formData.append('name', document.getElementById('regName').value);
+      formData.append('class_name', document.getElementById('regClass').value);
+      formData.append('file', capturedBlob, 'avatar.jpg');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/register`, { method: 'POST', body: formData });
+        const data = await res.json();
+        if (res.ok) {
+          alert('Đăng ký thành công: ' + data.name);
+          capturedBlob = null;
+          document.getElementById('snapPreviewText').innerText = '';
+          checkServer();
+        } else {
+          alert('Thất bại: ' + (data.detail || 'Lỗi server'));
+        }
+      } catch (err) {
+        alert('Lỗi kết nối: ' + err.message);
+      }
+    };
+
+    async function loadStudents() {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/students`);
+        const list = await res.json();
+        const container = document.getElementById('studentsList');
+        if (list.length === 0) {
+          container.innerHTML = '<i>Chưa có học sinh nào.</i>';
+          return;
+        }
+        container.innerHTML = list.map(s => `
+          <div class="p-2 bg-slate-900 rounded border border-slate-700 flex justify-between">
+            <span><b>${s.name}</b> (${s.class_name})</span>
+            <span class="text-slate-500">${s.student_id}</span>
+          </div>
+        `).join('');
+      } catch (e) {}
+    }
+    document.getElementById('btnReloadList').onclick = loadStudents;
+  </script>
+</body>
+</html>

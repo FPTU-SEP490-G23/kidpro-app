@@ -1,0 +1,46 @@
+name: kidpro_mobile
+description: KidPro - Hệ thống Quản lý Mầm non Thông minh
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+  flutter: '>=3.41.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Network
+  dio: ^5.7.0
+
+  # State Management
+  provider: ^6.1.2
+
+  # Routing
+  go_router: ^14.6.2
+
+  # Secure Storage
+  flutter_secure_storage: ^9.2.4
+
+  # Image caching
+  cached_network_image: ^3.4.1
+
+  # QR Code
+  qr_flutter: ^4.1.0
+
+  # Firebase
+  firebase_core: ^3.8.1
+  firebase_messaging: ^15.2.1
+
+  # Intl
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

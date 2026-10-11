@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KidPro Backend - Kiến Trúc & Tài Liệu Kỹ Thuật Tổng Thể</title>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+            },
+            dark: {
+              bg: '#0B0F19',
+              card: '#111827',
+              border: '#1F2937',
+              hover: '#1E293B',
+              muted: '#94A3B8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Mermaid.js CDN for Architecture Diagram -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0B0F19; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4B5563; }
+    
+    .glass-panel {
+      background: rgba(17, 24, 39, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .light .glass-panel {
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    /* Glow Effects */
+    .glow-indigo { box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.25); }
+    .glow-emerald { box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.25); }
+
+    /* Method Badges */
+    .badge-get { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .badge-post { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-put { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-patch { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .badge-delete { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Schema Pills */
+    .schema-core { background: #3b82f620; color: #60a5fa; border: 1px solid #3b82f640; }
+    .schema-academic { background: #8b5cf620; color: #a78bfa; border: 1px solid #8b5cf640; }
+    .schema-attendance { background: #06b6d420; color: #22d3ee; border: 1px solid #06b6d440; }
+    .schema-health { background: #10b98120; color: #34d399; border: 1px solid #10b98140; }
+    .schema-kitchen { background: #f59e0b20; color: #fbbf24; border: 1px solid #f59e0b40; }
+    .schema-finance { background: #ec489920; color: #f472b6; border: 1px solid #ec489940; }
+    .schema-comms { background: #6366f120; color: #818cf8; border: 1px solid #6366f140; }
+
+    /* Smooth anchor offset */
+    html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+  </style>
+</head>
+<body class="bg-[#0B0F19] text-gray-200 font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+
+  <!-- TOP HEADER BAR -->
+  <header class="sticky top-0 z-50 glass-panel border-b border-gray-800 transition-colors">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <!-- Brand & Project Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold text-white tracking-tight">KidPro Backend</h1>
+            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">v1.0.0 Ready</span>
+          </div>
+          <p class="text-xs text-gray-400">Kiến trúc Hệ thống Quản lý Mầm non Đa Schema (Spring Boot 3 + PostgreSQL)</p>
+        </div>
+      </div>
+
+      <!-- Quick Search Bar & Actions -->
+      <div class="flex items-center gap-3 flex-1 max-w-md justify-end">
+        <div class="relative w-full max-w-xs">
+          <input 
+            type="text" 
+            id="quickSearchInput" 
+            placeholder="Tìm kiếm API, entity, schema, task..." 
+            class="w-full bg-gray-900/90 border border-gray-700/80 rounded-lg pl-9 pr-3 py-1.5 text-xs text-gray-200 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+            onkeyup="filterAllContent()"
+          />
+          <svg class="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </div>
+
+        <!-- Light/Dark Mode Toggle -->
+        <button 
+          id="themeToggleBtn" 
+          onclick="toggleTheme()" 
+          class="p-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 transition" 
+          title="Chuyển đổi giao diện Sáng / Tối"
+        >
+          <svg id="themeMoonIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+          <svg id="themeSunIcon" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+        </button>
+
+        <a 
+          href="http://localhost:8080/swagger-ui.html" 
+          target="_blank" 
+          class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition"
+        >
+          <span>Swagger UI</span>
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- QUICK STATS BAR -->
+  <div class="bg-gray-900/60 border-b border-gray-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-center">
+        <div class="p-2 rounded-lg bg-gray-800/40 border border-gray-800">
+          <div class="text-xl font-bold text-indigo-400">7 Schemas</div>
+          <div class="text-[11px] text-gray-400 uppercase tracking-wider font-medium">PostgreSQL Multi-Domain</div>
+        </div>
+        <div class="p-2 rounded-lg bg-gray-800/40 border border-gray-800">
+          <div class="text-xl font-bold text-cyan-400">34 Entities</div>
+          <div class="text-[11px] text-gray-400 uppercase tracking-wider font-medium">JPA Table Mappings</div>
+        </div>
+        <div class="p-2 rounded-lg bg-gray-800/40 border border-gray-800">
+          <div class="text-xl font-bold text-emerald-400">33 Controllers</div>
+          <div class="text-[11px] text-gray-400 uppercase tracking-wider font-medium">Web Admin & Mobile BFF</div>
+        </div>
+        <div class="p-2 rounded-lg bg-gray-800/40 border border-gray-800">
+          <div class="text-xl font-bold text-purple-400">85+ Endpoints</div>
+          <div class="text-[11px] text-gray-400 uppercase tracking-wider font-medium">Strict RBAC Enforced</div>
+        </div>
+        <div class="p-2 rounded-lg bg-gray-800/40 border border-gray-800">
+          <div class="text-xl font-bold text-emerald-400">24 / 24 Tasks</div>
+          <div class="text-[11px] text-emerald-400/80 uppercase tracking-wider font-medium">100% Hoàn Thành</div>
+        </div>
+        <div class="p-2 rounded-lg bg-gray-800/40 border border-gray-800">
+          <div class="text-xl font-bold text-rose-400">0 Clubs</div>
+          <div class="text-[11px] text-rose-400/80 uppercase tracking-wider font-medium">Module Đã Scrapped</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN WRAPPER WITH SIDEBAR & CONTENT -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="flex flex-col lg:flex-row gap-8">
+      
+      <!-- STICKY SIDEBAR NAVIGATION -->
+      <aside class="lg:w-64 flex-shrink-0">
+        <div class="sticky top-24 space-y-6">
+          <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 shadow-lg">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Mục Lục Tài Liệu</h3>
+            <nav class="space-y-1 text-sm">
+              <a href="#summary" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition">
+                <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+                <span>1. Tổng Quan & Kiến Trúc</span>
+              </a>
+              <a href="#schema-diagram" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition">
+                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <span>2. Sơ Đồ 7 Schemas (Mermaid)</span>
+              </a>
+              <a href="#directory-layout" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>3. Cấu Trúc Mã Nguồn (DDD)</span>
+              </a>
+              
+              <!-- Sub-schemas -->
+              <div class="pt-2">
+                <div class="px-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Chi Tiết 7 Modules</div>
+                <div class="pl-2 space-y-0.5 mt-1">
+                  <a href="#mod-core" class="flex items-center justify-between px-3 py-1.5 rounded-md text-xs text-blue-400 hover:bg-gray-800/80 transition">
+                    <span>core</span>
+                    <span class="text-[10px] bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">5 tables</span>
+                  </a>
+                  <a href="#mod-academic" class="flex items-center justify-between px-3 py-1.5 rounded-md text-xs text-purple-400 hover:bg-gray-800/80 transition">
+                    <span>academic</span>
+                    <span class="text-[10px] bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/20">5 tables</span>
+                  </a>
+                  <a href="#mod-attendance" class="flex items-center justify-between px-3 py-1.5 rounded-md text-xs text-cyan-400 hover:bg-gray-800/80 transition">
+                    <span>attendance</span>
+                    <span class="text-[10px] bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">3 tables</span>
+                  </a>
+                  <a href="#mod-health" class="flex items-center justify-between px-3 py-1.5 rounded-md text-xs text-emerald-400 hover:bg-gray-800/80 transition">
+                    <span>health</span>
+                    <span class="text-[10px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">7 tables</span>
+                  </a>
+                  <a href="#mod-kitchen" class="flex items-center justify-between px-3 py-1.5 rounded-md text-xs text-amber-400 hover:bg-gray-800/80 transition">
+                    <span>kitchen</span>
+                    <span class="text-[10px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">3 tables</span>
+                  </a>
+                  <a href="#mod-finance" class="flex items-center justify-between px-3 py-1.5 rounded-md text-xs text-pink-400 hover:bg-gray-800/80 transition">
+                    <span>finance</span>
+                    <span class="text-[10px] bg-pink-500/10 px-1.5 py-0.5 rounded border border-pink-500/20">8 tables</span>
+                  </a>
+                  <a href="#mod-comms" class="flex items-center justify-between px-3 py-1.5 rounded-md text-xs text-indigo-400 hover:bg-gray-800/80 transition">
+                    <span>comms</span>
+                    <span class="text-[10px] bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">5 tables</span>
+                  </a>
+                </div>
+              </div>
+
+              <a href="#tasks-matrix" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>4. Tiến Độ 24 Tasks (Status)</span>
+              </a>
+              <a href="#session-logs" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition">
+                <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
+                <span>5. Lịch Sử Phiên (Sessions)</span>
+              </a>
+              <a href="#quickstart" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition">
+                <span class="w-2 h-2 rounded-full bg-pink-400"></span>
+                <span>6. Cài Đặt & Chạy Ứng Dụng</span>
+              </a>
+            </nav>
+          </div>
+
+          <!-- Architecture Highlight Pill -->
+          <div class="p-4 rounded-xl bg-gradient-to-br from-indigo-950/40 to-purple-950/40 border border-indigo-800/50">
+            <div class="flex items-center gap-2 text-indigo-300 text-xs font-semibold mb-1">
+              <svg class="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+              </svg>
+              <span>Ghi Chú Kiến Trúc</span>
+            </div>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              Mỗi JPA Entity khai báo định danh schema tường minh qua <code class="text-indigo-300 bg-indigo-950 px-1 py-0.5 rounded font-mono">@Table(schema="...")</code>. Không sử dụng Hibernate auto-ddl cho production.
+            </p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT COLUMN -->
+      <main class="flex-1 space-y-12 min-w-0">
+
+        <!-- =================================================================== -->
+        <!-- SECTION 1: EXECUTIVE SUMMARY & ARCHITECTURE -->
+        <!-- =================================================================== -->
+        <section id="summary" class="scroll-mt-24 space-y-6">
+          <div class="border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2 text-indigo-400 text-xs font-semibold tracking-wider uppercase mb-1">
+              <span>Section 01</span>
+              <span>•</span>
+              <span>Tổng Quan Hệ Thống</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Executive Summary & Kiến Trúc Tổng Thể</h2>
+            <p class="text-sm text-gray-400 mt-1">Nền tảng Quản lý Mầm non Thông minh KidPro (Smart Preschool Operations Platform)</p>
+          </div>
+
+          <!-- Cards Summary -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-5 rounded-xl bg-gray-900 border border-gray-800 shadow-md">
+              <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center mb-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+              </div>
+              <h3 class="text-base font-semibold text-white">Mục Tiêu Nghiệp Vụ</h3>
+              <p class="text-xs text-gray-400 mt-2 leading-relaxed">
+                Chuẩn hóa toàn diện quy trình vận hành nhà trường: điểm danh AI kết hợp đối chiếu người đón, cảnh báo dị ứng thực phẩm theo thời gian thực cho bếp ăn, dặn thuốc & lưu trữ minh chứng y tế, quản lý học phí tự động VietQR và liên lạc 1-1 giữa Nhà trường - Phụ huynh.
+              </p>
+            </div>
+
+            <div class="p-5 rounded-xl bg-gray-900 border border-gray-800 shadow-md">
+              <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center mb-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+              </div>
+              <h3 class="text-base font-semibold text-white">Multi-Schema Isolation</h3>
+              <p class="text-xs text-gray-400 mt-2 leading-relaxed">
+                Tách biệt logic cơ sở dữ liệu thành <strong>7 PostgreSQL Schemas</strong>: <span class="text-blue-300">core</span>, <span class="text-purple-300">academic</span>, <span class="text-cyan-300">attendance</span>, <span class="text-emerald-300">health</span>, <span class="text-amber-300">kitchen</span>, <span class="text-pink-300">finance</span>, <span class="text-indigo-300">comms</span>. Bảo vệ tính toàn vẹn dữ liệu, kiểm soát truy cập phân tầng và dễ dàng chuyển dịch sang Microservices trong tương lai.
+              </p>
+            </div>
+
+            <div class="p-5 rounded-xl bg-gray-900 border border-gray-800 shadow-md">
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+              </div>
+              <h3 class="text-base font-semibold text-white">Công Nghệ Cốt Lõi</h3>
+              <ul class="text-xs text-gray-400 mt-2 space-y-1">
+                <li>• <strong>Backend:</strong> Java 17, Spring Boot 3.3.x, Spring Data JPA</li>
+                <li>• <strong>Database:</strong> PostgreSQL 15+ (uuid-ossp, pgcrypto, jsonb)</li>
+                <li>• <strong>Security:</strong> Spring Security 6, JWT Stateless, Method RBAC</li>
+                <li>• <strong>Integrations:</strong> VietQR / SePay Webhook, FCM Cloud Messaging</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Alert for Scrapped Module -->
+          <div class="p-4 rounded-xl bg-rose-950/30 border border-rose-800/50 flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+              </svg>
+            </div>
+            <div class="text-xs text-rose-200 leading-relaxed">
+              <strong class="font-semibold text-rose-300">Lưu ý quan trọng về Module đã Hủy bỏ (Scrapped):</strong> Phân hệ <em>Câu lạc bộ Ngoại khóa (Extracurricular Clubs - skill_clubs, student_club_registrations)</em> đã được **loại bỏ vĩnh viễn** khỏi phạm vi dự án và kịch bản cơ sở dữ liệu `NEWDB.md`. Toàn bộ code liên quan (Entity, DTO, Service, Controller) đã được xóa bỏ sạch sẽ trong Session 2.
+            </div>
+          </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- SECTION 2: MERMAID ARCHITECTURE DIAGRAM -->
+        <!-- =================================================================== -->
+        <section id="schema-diagram" class="scroll-mt-24 space-y-6">
+          <div class="border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2 text-cyan-400 text-xs font-semibold tracking-wider uppercase mb-1">
+              <span>Section 02</span>
+              <span>•</span>
+              <span>Kiến Trúc Dữ Liệu</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Sơ Đồ Tương Tác 7 Schemas (Multi-Domain Topology)</h2>
+            <p class="text-sm text-gray-400 mt-1">Biểu diễn luồng dữ liệu nghiệp vụ và các khóa ngoại liên Schema (Cross-Schema Foreign Keys)</p>
+          </div>
+
+          <!-- Mermaid Diagram Container -->
+          <div class="p-6 rounded-xl bg-gray-900 border border-gray-800 shadow-xl overflow-x-auto text-center">
+            <pre class="mermaid text-left font-mono text-xs">
+flowchart TB
+    subgraph S_CORE["🏛️ SCHEMA: core"]
+        core_users["users<br/>(Tài khoản, Vai trò, FCM Token)"]
+        core_classes["classes<br/>(Lớp học, Độ tuổi)"]
+        core_academic_years["academic_years<br/>(Niên khóa)"]
+        core_audit_logs["audit_logs<br/>(Kiểm toán hệ thống)"]
+        core_files["files<br/>(Tệp đính kèm)"]
+    end
+
+    subgraph S_ACADEMIC["🎓 SCHEMA: academic"]
+        acad_students["students<br/>(Trẻ, allergy_tags, vector AI)"]
+        acad_guardians["student_guardians<br/>(CCCD, AI vector đón cố định)"]
+        acad_emergency["emergency_pickup_authorizations<br/>(Đón khẩn cấp 1 ngày, AI vector)"]
+        acad_timetables["timetables<br/>(Thời khóa biểu tuần)"]
+        acad_transfers["class_transfer_requests<br/>(Chuyển lớp, Bảo lưu)"]
+    end
+
+    subgraph S_ATTENDANCE["⏱️ SCHEMA: attendance"]
+        att_attendances["attendances<br/>(Điểm danh, Giờ đón, Phạt muộn)"]
+        att_leave["leave_requests<br/>(Đơn xin nghỉ trước 08:00)"]
+        att_facelogs["face_recognition_logs<br/>(Log AI Camera, alert_resolved_at)"]
+    end
+
+    subgraph S_HEALTH["🩺 SCHEMA: health"]
+        health_meds["medications<br/>(Dặn thuốc, Ảnh minh chứng 14:00)"]
+        health_metrics["health_metrics<br/>(Chiều cao, Cân nặng, BMI WHO)"]
+        health_evals["development_evaluations<br/>(Đánh giá 5 mặt Thông tư 51)"]
+        health_journal["classroom_journal_posts<br/>(Nhật ký hoạt động lớp)"]
+        health_meals["meal_records & nap_records<br/>(Mức ăn & Ngủ trưa)"]
+    end
+
+    subgraph S_KITCHEN["🍲 SCHEMA: kitchen"]
+        kit_menus["weekly_menus<br/>(Thực đơn tuần, allergy_tags)"]
+        kit_snapshots["meal_headcount_snapshots<br/>(Chốt 08:30 AM: Cơm, Cháo, Tránh dị ứng)"]
+        kit_samples["food_sample_retention_logs<br/>(Lưu mẫu thức ăn 24h)"]
+    end
+
+    subgraph S_FINANCE["💳 SCHEMA: finance"]
+        fin_configs["fee_configs<br/>(Học phí, daily_refund_rate)"]
+        fin_late["late_pickup_fee_rules<br/>(Khung phạt đón muộn)"]
+        fin_discounts["discount_rules & student_discounts"]
+        fin_invoices["invoices & invoice_items<br/>(Hóa đơn động, VietQR ref_code)"]
+        fin_trans["transactions<br/>(Webhook, raw_payload, Idempotency)"]
+        fin_disputes["payment_disputes<br/>(Khiếu nại & mục ADJUSTMENT)"]
+    end
+
+    subgraph S_COMMS["💬 SCHEMA: comms"]
+        comms_notif["notifications<br/>(FCM Push & In-app Alerts)"]
+        comms_anno["announcements & announcement_views"]
+        comms_chat["message_threads & messages<br/>(Chat 1-1 Giáo viên - Phụ huynh)"]
+    end
+
+    %% Cross-schema Relationships
+    core_users -.->|Parent/Teacher ID| acad_students
+    core_classes -.->|Class ID| acad_students
+    acad_students ==>|Tham chiếu điểm danh| att_attendances
+    acad_students ==>|Tham chiếu sức khỏe| health_meds
+    acad_students ==>|Allergy Tags đối chiếu| kit_snapshots
+    kit_menus -.->|Lọc dị ứng| kit_snapshots
+    att_attendances ==>|Số ngày nghỉ hợp lệ tính hoàn ăn| fin_invoices
+    att_attendances ==>|Số phút muộn tính phạt| fin_invoices
+    fin_configs -.->|Đơn giá hoàn tiền ăn/ngày| fin_invoices
+    core_users ==>|Người nhận & Người gửi| comms_chat
+    acad_students -.->|Hội thoại theo học sinh| comms_chat
+    att_facelogs -.->|Trigger cảnh báo người lạ| comms_notif
+    health_meds -.->|Trigger xác nhận uống thuốc| comms_notif
+    fin_invoices -.->|Trigger thông báo học phí| comms_notif
+            </pre>
+          </div>
+
+          <!-- Interactive Schema Fast Links -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            <a href="#mod-core" class="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center hover:bg-blue-500/20 transition">
+              <span class="block text-xs font-bold text-blue-400">core</span>
+              <span class="text-[10px] text-gray-400">Nền tảng & User</span>
+            </a>
+            <a href="#mod-academic" class="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 text-center hover:bg-purple-500/20 transition">
+              <span class="block text-xs font-bold text-purple-400">academic</span>
+              <span class="text-[10px] text-gray-400">Học sinh & Người đón</span>
+            </a>
+            <a href="#mod-attendance" class="p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center hover:bg-cyan-500/20 transition">
+              <span class="block text-xs font-bold text-cyan-400">attendance</span>
+              <span class="text-[10px] text-gray-400">Điểm danh & AI Log</span>
+            </a>
+            <a href="#mod-health" class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center hover:bg-emerald-500/20 transition">
+              <span class="block text-xs font-bold text-emerald-400">health</span>
+              <span class="text-[10px] text-gray-400">Sức khỏe & Dặn thuốc</span>
+            </a>
+            <a href="#mod-kitchen" class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center hover:bg-amber-500/20 transition">
+              <span class="block text-xs font-bold text-amber-400">kitchen</span>
+              <span class="text-[10px] text-gray-400">Bếp ăn & Chốt suất</span>
+            </a>
+            <a href="#mod-finance" class="p-3 rounded-lg bg-pink-500/10 border border-pink-500/20 text-center hover:bg-pink-500/20 transition">
+              <span class="block text-xs font-bold text-pink-400">finance</span>
+              <span class="text-[10px] text-gray-400">Học phí & VietQR</span>
+            </a>
+            <a href="#mod-comms" class="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-center hover:bg-indigo-500/20 transition">
+              <span class="block text-xs font-bold text-indigo-400">comms</span>
+              <span class="text-[10px] text-gray-400">FCM Push & Chat 1-1</span>
+            </a>
+          </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- SECTION 3: DIRECTORY MAP & PACKAGE LAYOUT -->
+        <!-- =================================================================== -->
+        <section id="directory-layout" class="scroll-mt-24 space-y-6">
+          <div class="border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2 text-emerald-400 text-xs font-semibold tracking-wider uppercase mb-1">
+              <span>Section 03</span>
+              <span>•</span>
+              <span>Cấu Trúc Mã Nguồn</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Cấu Trúc Thư Mục & Quy Ước Package Layout (DDD)</h2>
+            <p class="text-sm text-gray-400 mt-1">Kiến trúc Domain-Driven Design kết hợp Actor / BFF Separation (Web Admin & Mobile App)</p>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Directory Tree Visualization -->
+            <div class="p-5 rounded-xl bg-gray-900 border border-gray-800 shadow-md">
+              <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-3">
+                <span class="text-xs font-bold text-gray-300 font-mono">📁 src/main/java/com/kidpro</span>
+                <span class="text-[10px] bg-indigo-900/50 text-indigo-300 px-2 py-0.5 rounded border border-indigo-700/50">Package-by-Feature</span>
+              </div>
+              <pre class="font-mono text-xs text-gray-300 leading-relaxed overflow-x-auto space-y-1">
+com.kidpro
+├── 📁 <span class="text-indigo-400 font-bold">domain</span>
+│   ├── 📁 <span class="text-blue-400">auth</span>        <span class="text-gray-500"># User, AuditLog, Auth API</span>
+│   ├── 📁 <span class="text-purple-400">classroom</span>   <span class="text-gray-500"># Student, Guardian, EmergencyPickup, Timetable, Transfer</span>
+│   ├── 📁 <span class="text-cyan-400">attendance</span>  <span class="text-gray-500"># Attendance, LeaveRequest, FaceRecognitionLog, Mobile BFF</span>
+│   ├── 📁 <span class="text-emerald-400">health</span>      <span class="text-gray-500"># Medication, HealthMetric, Evaluation, DailyCare</span>
+│   ├── 📁 <span class="text-amber-400">kitchen</span>     <span class="text-gray-500"># Menu, MealHeadcount, FoodSample, Scheduler</span>
+│   ├── 📁 <span class="text-pink-400">finance</span>     <span class="text-gray-500"># FeeConfig, Invoicing, BillingEngine, Webhook, Dispute</span>
+│   └── 📁 <span class="text-indigo-400">comms</span>       <span class="text-gray-500"># Announcement, Notification, 1-1 Chat</span>
+├── 📁 <span class="text-emerald-400 font-bold">infrastructure</span>
+│   ├── 📁 fcm         <span class="text-gray-500"># FcmPushService (Push Abstraction & Mock Log)</span>
+│   ├── 📁 payment     <span class="text-gray-500"># VietQR / SePay Gateway Client</span>
+│   └── 📁 storage     <span class="text-gray-500"># S3 / MinIO Storage Integration</span>
+└── 📁 <span class="text-gray-300 font-bold">shared</span>
+    ├── 📁 base        <span class="text-gray-500"># FileEntity, BaseAuditEntity</span>
+    ├── 📁 config      <span class="text-gray-500"># CorsConfig, OpenApiConfig</span>
+    ├── 📁 enums       <span class="text-gray-500"># 18+ Business Enums</span>
+    ├── 📁 exception   <span class="text-gray-500"># BusinessException, GlobalExceptionHandler</span>
+    └── 📁 security    <span class="text-gray-500"># SecurityConfig, UserDetails, JWT Filter</span></pre>
+            </div>
+
+            <!-- Architectural Conventions Explanation -->
+            <div class="space-y-4">
+              <div class="p-4 rounded-xl bg-gray-900 border border-gray-800">
+                <h4 class="text-sm font-semibold text-white flex items-center gap-2 mb-2">
+                  <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+                  Quy ước Layer trong từng Domain
+                </h4>
+                <ul class="text-xs text-gray-300 space-y-1.5 leading-relaxed">
+                  <li>• <code class="text-indigo-300 font-mono">entity/</code>: JPA Entities với định danh <code class="text-gray-400 font-mono">@Table(schema="...")</code>. Bắt buộc có <code class="text-gray-400 font-mono">@ToString.Exclude</code> trên các trường quan hệ 1-N / N-1 để tránh đệ quy Lombok.</li>
+                  <li>• <code class="text-indigo-300 font-mono">repository/</code>: Spring Data JPA Repositories kế thừa JpaRepository.</li>
+                  <li>• <code class="text-indigo-300 font-mono">service/</code> & <code class="text-indigo-300 font-mono">service/impl/</code>: Tách Interface và Implementation. Áp dụng <code class="text-gray-400 font-mono">@Transactional</code> cho các thao tác ghi.</li>
+                  <li>• <code class="text-indigo-300 font-mono">dto/request/</code> & <code class="text-indigo-300 font-mono">dto/response/</code>: DTOs độc lập, áp dụng chặt chẽ Jakarta Bean Validation (@NotNull, @NotBlank, @Min, @PastOrPresent).</li>
+                </ul>
+              </div>
+
+              <div class="p-4 rounded-xl bg-gray-900 border border-gray-800">
+                <h4 class="text-sm font-semibold text-white flex items-center gap-2 mb-2">
+                  <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                  Mô hình Controller: Actor / BFF Separation
+                </h4>
+                <p class="text-xs text-gray-300 leading-relaxed mb-2">
+                  Hệ thống phân tách rõ rệt Controller theo ngữ cảnh người dùng và thiết bị:
+                </p>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                  <div class="p-2 rounded bg-gray-800/60 border border-gray-700">
+                    <span class="font-semibold text-blue-300 block">🖥️ Web Admin & Staff</span>
+                    <span class="text-gray-400 text-[11px]">/api/academic, /api/health, /api/kitchen, /api/finance/billing,...</span>
+                  </div>
+                  <div class="p-2 rounded bg-gray-800/60 border border-gray-700">
+                    <span class="font-semibold text-emerald-300 block">📱 Mobile BFF</span>
+                    <span class="text-gray-400 text-[11px]">/api/teachers (Giáo viên), /api/parents (Phụ huynh), /api/chat, /api/notifications</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- SECTION 4: DEEP DIVE: 7 SCHEMAS -->
+        <!-- =================================================================== -->
+        <section id="modules-deep-dive" class="scroll-mt-24 space-y-8">
+          <div class="border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2 text-purple-400 text-xs font-semibold tracking-wider uppercase mb-1">
+              <span>Section 04</span>
+              <span>•</span>
+              <span>Đặc Tả Chi Tiết 7 Phân Hệ</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Chi Tiết Từng Module (7 Schemas) – "Code Cái Gì & Ở Đâu"</h2>
+            <p class="text-sm text-gray-400 mt-1">Danh mục hoàn chỉnh về Entities, Repositories, Services, Controllers, Endpoints và Logic nghiệp vụ cốt lõi</p>
+          </div>
+
+          <!-- Quick Filter Tabs for Modules -->
+          <div class="flex flex-wrap gap-2 pb-2">
+            <button onclick="filterSchema('all')" class="filter-btn active px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white transition">Tất Cả (7)</button>
+            <button onclick="filterSchema('core')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition">core</button>
+            <button onclick="filterSchema('academic')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition">academic</button>
+            <button onclick="filterSchema('attendance')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition">attendance</button>
+            <button onclick="filterSchema('health')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition">health</button>
+            <button onclick="filterSchema('kitchen')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition">kitchen</button>
+            <button onclick="filterSchema('finance')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition">finance</button>
+            <button onclick="filterSchema('comms')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition">comms</button>
+          </div>
+
+          <!-- ==================== MODULE 1: CORE ==================== -->
+          <div id="mod-core" class="module-card schema-core-block p-6 rounded-2xl bg-gray-900 border border-blue-500/30 space-y-5 shadow-lg">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800">
+              <div class="flex items-center gap-3">
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase schema-core">Schema: core</span>
+                <h3 class="text-xl font-bold text-white">Quản Trị Cốt Lõi, Tài Khoản & Lớp Học</h3>
+              </div>
+              <span class="text-xs text-gray-400 font-mono">Tables: users, classes, academic_years, audit_logs, files</span>
+            </div>
+
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Mục đích nghiệp vụ:</strong> Quản trị danh mục nền tảng của trường học: niên khóa học thuật, tài khoản người dùng và vai trò phân quyền (RBAC), danh mục lớp học phân theo độ tuổi, tệp đính kèm đa hình và nhật ký kiểm toán bất biến (Audit Trail).
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1">
+                <div class="text-indigo-400 font-bold mb-1 font-sans">📦 Entities & Mapping (@Table)</div>
+                <div>• <code class="text-white">User.java</code> ➔ <span class="text-blue-300">@Table(schema="core", name="users")</span></div>
+                <div>• <code class="text-white">ClassEntity.java</code> ➔ <span class="text-blue-300">@Table(schema="core", name="classes")</span></div>
+                <div>• <code class="text-white">AcademicYear.java</code> ➔ <span class="text-blue-300">@Table(schema="core", name="academic_years")</span></div>
+                <div>• <code class="text-white">AuditLog.java</code> ➔ <span class="text-blue-300">@Table(schema="core", name="audit_logs")</span></div>
+                <div>• <code class="text-white">FileEntity.java</code> ➔ <span class="text-blue-300">@Table(schema="core", name="files")</span></div>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1 font-sans">
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">AuthService</span>, <span class="text-yellow-300">AuditLogService</span>, <span class="text-yellow-300">UserService</span></div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">ClassService</span>, <span class="text-yellow-300">AcademicYearService</span></div>
+                <div class="font-mono text-[11px] text-gray-400">• UserRepository, AuditLogRepository, ClassRepository, AcademicYearRepository</div>
+              </div>
+            </div>
+
+            <!-- Endpoints Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border border-gray-800 rounded-lg overflow-hidden">
+                <thead class="bg-gray-800/60 text-gray-300 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th class="p-2.5">Method</th>
+                    <th class="p-2.5">Endpoint Path</th>
+                    <th class="p-2.5">Quyền hạn (RBAC)</th>
+                    <th class="p-2.5">Chức năng & Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800 font-mono text-gray-300">
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/auth/login</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Public</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Đăng nhập tài khoản, xác thực mật khẩu BCrypt, trả về JWT Token & Roles</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/auth/register</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Public</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Đăng ký tài khoản người dùng mới (mặc định PENDING_VERIFICATION)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/auth/refresh-token</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Public</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Làm mới phiên làm việc khi Access Token hết hạn</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/classes</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy danh sách tất cả lớp học (hỗ trợ lọc theo academicYearId, dropdown form)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/classes/{id}</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xem chi tiết lớp học (kèm tên GVCN, niên khóa và sĩ số học sinh)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/classes</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, GIAO_VU, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Tạo lớp học mới, cấu hình phòng học, độ tuổi và gán GVCN</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/classes/{id}</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, GIAO_VU, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Cập nhật thông tin lớp học (đổi GVCN, sửa sức chứa, phòng học)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-delete px-2 py-0.5 rounded text-[10px] font-bold">DELETE</span></td>
+                    <td class="p-2.5 text-white">/api/classes/{id}</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xóa lớp học (chặn xóa nếu lớp đang có học sinh theo học)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/academic-years</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy danh sách tất cả các niên khóa học</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/academic-years/active</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy thông tin niên khóa hiện hành đang kích hoạt (ACTIVE)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/academic-years/{id}</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy chi tiết niên khóa theo ID</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/academic-years</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, GIAO_VU, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Thiết lập niên khóa mới (chỉ tiêu tuyển sinh, ngày bắt đầu - kết thúc)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/academic-years/{id}</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, GIAO_VU, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Cập nhật niên khóa hoặc chuyển trạng thái (PLANNING, ACTIVE, CLOSED)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-delete px-2 py-0.5 rounded text-[10px] font-bold">DELETE</span></td>
+                    <td class="p-2.5 text-white">/api/academic-years/{id}</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xóa niên khóa học</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/users/me</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy thông tin tài khoản và quyền hạn của người dùng đang đăng nhập</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/users/me</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Cập nhật họ tên, số điện thoại cá nhân</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/admin/users</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Tạo tài khoản người dùng mới (phân quyền Role, mã hóa BCrypt password)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/admin/users</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy danh sách người dùng (hỗ trợ lọc theo Role, Status và tìm kiếm theo tên, email, SĐT)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/admin/users/{id}</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xem chi tiết thông tin tài khoản người dùng theo ID</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/admin/users/{id}/status</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Phê duyệt tài khoản PENDING_VERIFICATION hoặc khóa/mở tài khoản (ACTIVE, LOCKED)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-delete px-2 py-0.5 rounded text-[10px] font-bold">DELETE</span></td>
+                    <td class="p-2.5 text-white">/api/admin/users/{id}</td>
+                    <td class="p-2.5 text-gray-400 font-sans">SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xóa tài khoản người dùng (chặn xóa SYSTEM_ADMIN)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Features Highlights -->
+            <div class="p-3.5 rounded-lg bg-blue-950/20 border border-blue-900/40 text-xs text-gray-300 space-y-1">
+              <span class="font-bold text-blue-300">✨ Logic & Tính năng cốt lõi:</span>
+              <ul class="list-disc list-inside space-y-0.5 text-gray-400 text-[11px]">
+                <li>Lưu trữ trường <code class="text-blue-300 font-mono">fcm_token</code> (VARCHAR 512) trong <code class="text-blue-300 font-mono">core.users</code> để kích hoạt Firebase Cloud Messaging.</li>
+                <li>Dịch vụ <code class="text-blue-300 font-mono">AuditLogService</code> tự động lưu trữ hành vi người dùng, bảng tác động và record ID (không throw exception làm gián đoạn nghiệp vụ chính).</li>
+                <li>Bảng <code class="text-blue-300 font-mono">core.classes</code> phân loại theo nhóm tuổi (<code class="text-gray-300">age_group</code>: NURSERY, KINDERGARTEN, PRE_K) và gắn giáo viên chủ nhiệm.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- ==================== MODULE 2: ACADEMIC ==================== -->
+          <div id="mod-academic" class="module-card schema-academic-block p-6 rounded-2xl bg-gray-900 border border-purple-500/30 space-y-5 shadow-lg">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800">
+              <div class="flex items-center gap-3">
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase schema-academic">Schema: academic</span>
+                <h3 class="text-xl font-bold text-white">Học Sinh, Người Giám Hộ, Đón Trẻ AI & Thời Khóa Biểu</h3>
+              </div>
+              <span class="text-xs text-gray-400 font-mono">Tables: students, student_guardians, emergency_pickup_authorizations, timetables, class_transfer_requests</span>
+            </div>
+
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Mục đích nghiệp vụ:</strong> Quản lý toàn diện vòng đời học sinh: hồ sơ cá nhân, nhãn cảnh báo dị ứng dinh dưỡng, quy trình xác minh CCCD người giám hộ cố định, ủy quyền đón khẩn cấp 1 ngày hỗ trợ vector AI (512-dim JSONB), thời khóa biểu và xử lý đơn xin chuyển lớp.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1">
+                <div class="text-indigo-400 font-bold mb-1 font-sans">📦 Entities & Mapping (@Table)</div>
+                <div>• <code class="text-white">Student.java</code> ➔ <span class="text-purple-300">@Table(schema="academic", name="students")</span></div>
+                <div>• <code class="text-white">StudentGuardian.java</code> ➔ <span class="text-purple-300">@Table(schema="academic", name="student_guardians")</span></div>
+                <div>• <code class="text-white">EmergencyPickupAuthorization.java</code> ➔ <span class="text-purple-300">@Table(schema="academic", name="emergency_pickup_authorizations")</span></div>
+                <div>• <code class="text-white">Timetable.java</code> ➔ <span class="text-purple-300">@Table(schema="academic", name="timetables")</span></div>
+                <div>• <code class="text-white">ClassTransferRequest.java</code> ➔ <span class="text-purple-300">@Table(schema="academic", name="class_transfer_requests")</span></div>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1 font-sans">
+                <div class="text-emerald-400 font-bold mb-1">⚙️ Services & Repositories</div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">StudentService</span>, <span class="text-yellow-300">StudentGuardianService</span>, <span class="text-yellow-300">EmergencyPickupService</span></div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">TimetableService</span>, <span class="text-yellow-300">ClassTransferRequestService</span></div>
+                <div class="font-mono text-[11px] text-gray-400">• StudentRepository, StudentGuardianRepository, EmergencyPickupAuthorizationRepository,...</div>
+              </div>
+            </div>
+
+            <!-- Endpoints Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border border-gray-800 rounded-lg overflow-hidden">
+                <thead class="bg-gray-800/60 text-gray-300 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th class="p-2.5">Method</th>
+                    <th class="p-2.5">Endpoint Path</th>
+                    <th class="p-2.5">Quyền hạn (RBAC)</th>
+                    <th class="p-2.5">Chức năng & Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800 font-mono text-gray-300">
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/academic/students</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VU, BGH, ADMIN, GIAO_VIEN, BEP</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy danh sách học sinh (lọc theo classId, status, từ khóa tên)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/academic/students/by-allergy</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VU, BGH, ADMIN, GIAO_VIEN, BEP</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lọc danh sách học sinh có cảnh báo dị ứng thực phẩm theo tag</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-patch px-2 py-0.5 rounded text-[10px] font-bold">PATCH</span></td>
+                    <td class="p-2.5 text-white">/api/academic/students/{id}/allergy-tags</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VU, BGH, ADMIN, GIAO_VIEN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Cập nhật nhanh thẻ dị ứng (<code class="text-purple-300">allergy_tags</code>) để Bếp ăn tính suất an toàn</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/academic/guardians/{id}/verify</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VU, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xác minh CCCD/CMND người giám hộ cố định (VERIFIED / REJECTED)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/academic/guardians/{id}/face-embedding</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VU, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Cập nhật vector AI nhận diện khuôn mặt (512 chiều JSONB) cho người giám hộ</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/academic/emergency-pickups/today</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, GIAO_VU, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Bảo vệ/Giáo viên tra cứu danh sách người được ủy quyền đón khẩn cấp trong ngày</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/academic/emergency-pickups/{id}/use</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, GIAO_VU, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xác nhận hoàn tất việc đón trẻ khẩn cấp, chuyển trạng thái sang USED</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/parents/emergency-pickups</td>
+                    <td class="p-2.5 text-gray-400 font-sans">PHU_HUYNH</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Phụ huynh tạo ủy quyền đón đột xuất (kèm ảnh và vector AI nhận diện)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/parents/students/{studentId}/guardians</td>
+                    <td class="p-2.5 text-gray-400 font-sans">PHU_HUYNH</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Phụ huynh đăng ký người giám hộ đón trẻ cố định để Giáo vụ xét duyệt CCCD</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/academic/transfer-requests/{id}/review</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, GIAO_VU</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Duyệt chuyển lớp (tự động cập nhật class_id của Student khi APPROVED)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/academic/timetables</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VU, BGH, ADMIN, GIAO_VIEN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xem thời khóa biểu theo lớp học (validate startTime &lt; endTime)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Features Highlights -->
+            <div class="p-3.5 rounded-lg bg-purple-950/20 border border-purple-900/40 text-xs text-gray-300 space-y-1">
+              <span class="font-bold text-purple-300">✨ Logic & Tính năng cốt lõi:</span>
+              <ul class="list-disc list-inside space-y-0.5 text-gray-400 text-[11px]">
+                <li>Ủy quyền đón khẩn cấp (<code class="text-purple-300 font-mono">EmergencyPickupAuthorization</code>) có hạn sử dụng đúng 1 ngày (<code class="text-gray-300">valid_date = today</code>), tích hợp <code class="text-purple-300 font-mono">face_embedding</code> (JSONB) và ảnh chân dung để bảo vệ cổng trường đối chiếu AI.</li>
+                <li>Học sinh có trường <code class="text-purple-300 font-mono">allergy_tags</code> (ví dụ: "peanuts,seafood") ánh xạ trực tiếp sang phân hệ Bếp (<code class="text-purple-300 font-mono">kitchen.weekly_menus</code>) để tự động xuất khẩu phần ăn an toàn.</li>
+                <li>Xác minh CCCD người giám hộ (<code class="text-purple-300 font-mono">StudentGuardian</code>) được kiểm duyệt bởi Giáo vụ trước khi kích hoạt tính năng nhận diện AI.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- ==================== MODULE 3: ATTENDANCE ==================== -->
+          <div id="mod-attendance" class="module-card schema-attendance-block p-6 rounded-2xl bg-gray-900 border border-cyan-500/30 space-y-5 shadow-lg">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800">
+              <div class="flex items-center gap-3">
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase schema-attendance">Schema: attendance</span>
+                <h3 class="text-xl font-bold text-white">Điểm Danh, Xin Nghỉ Phép & Cảnh Báo Người Lạ AI</h3>
+              </div>
+              <span class="text-xs text-gray-400 font-mono">Tables: attendances, leave_requests, face_recognition_logs</span>
+            </div>
+
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Mục đích nghiệp vụ:</strong> Quản lý quy trình vào/ra trường của học sinh: điểm danh hàng loạt theo lớp, xử lý đơn xin nghỉ phép có hạn chót 08:00 AM, ghi nhận log nhận diện AI camera tại cổng và quản lý quy trình can thiệp/đóng cảnh báo người lạ kèm thời gian xử lý (<code class="text-cyan-300">alert_resolved_at</code>).
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1">
+                <div class="text-indigo-400 font-bold mb-1 font-sans">📦 Entities & Mapping (@Table)</div>
+                <div>• <code class="text-white">Attendance.java</code> ➔ <span class="text-cyan-300">@Table(schema="attendance", name="attendances")</span></div>
+                <div>• <code class="text-white">LeaveRequest.java</code> ➔ <span class="text-cyan-300">@Table(schema="attendance", name="leave_requests")</span></div>
+                <div>• <code class="text-white">FaceRecognitionLog.java</code> ➔ <span class="text-cyan-300">@Table(schema="attendance", name="face_recognition_logs")</span></div>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1 font-sans">
+                <div class="text-emerald-400 font-bold mb-1">⚙️ Services & Repositories</div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">AttendanceService</span> & <span class="text-gray-400">AttendanceServiceImpl</span></div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">FaceRecognitionLogService</span> & <span class="text-gray-400">FaceRecognitionLogServiceImpl</span></div>
+                <div class="font-mono text-[11px] text-gray-400">• AttendanceRepository, LeaveRequestRepository, FaceRecognitionLogRepository</div>
+              </div>
+            </div>
+
+            <!-- Endpoints Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border border-gray-800 rounded-lg overflow-hidden">
+                <thead class="bg-gray-800/60 text-gray-300 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th class="p-2.5">Method</th>
+                    <th class="p-2.5">Endpoint Path</th>
+                    <th class="p-2.5">Quyền hạn (RBAC)</th>
+                    <th class="p-2.5">Chức năng & Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800 font-mono text-gray-300">
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/attendance/face-logs</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, GIAO_VU, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">AI Camera ghi log nhận diện khuôn mặt; tự trigger FCM alert nếu là người lạ (<code class="text-cyan-300">isMatch=false</code>)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/attendance/face-logs/unresolved-alerts</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, GIAO_VU, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy danh sách các cảnh báo người lạ chưa được xử lý tại cổng trường</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/attendance/face-logs/{id}/resolve-alert</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, GIAO_VU, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Bảo vệ/Giáo viên xác nhận đã xử lý cảnh báo, ghi nhận <code class="text-cyan-300">alert_resolved_at</code> và ghi chú</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/teachers/attendance/batch</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Giáo viên nộp danh sách điểm danh hàng loạt cho lớp; tự trigger FCM Check-in đến phụ huynh</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/parents/leave-requests</td>
+                    <td class="p-2.5 text-gray-400 font-sans">PHU_HUYNH</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Phụ huynh gửi đơn xin nghỉ phép (chặn nộp nếu sau 08:00 AM của ngày xin nghỉ)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Features Highlights -->
+            <div class="p-3.5 rounded-lg bg-cyan-950/20 border border-cyan-900/40 text-xs text-gray-300 space-y-1">
+              <span class="font-bold text-cyan-300">✨ Logic & Tính năng cốt lõi:</span>
+              <ul class="list-disc list-inside space-y-0.5 text-gray-400 text-[11px]">
+                <li>Quy tắc nghỉ phép nghiêm ngặt: Phụ huynh nộp trước <strong>08:00 AM</strong>. Đơn hợp lệ được duyệt sẽ chuyển điểm danh thành <code class="text-cyan-300 font-mono">ABSENT_PERMITTED</code> phục vụ hoàn phí ăn.</li>
+                <li>Điểm danh đón muộn (<code class="text-cyan-300 font-mono">late_pickup_minutes</code>) được tính toán tự động dựa trên mốc thời gian tan trường quy định.</li>
+                <li>Cảnh báo người lạ (<code class="text-cyan-300 font-mono">FaceRecognitionLog</code>) có mốc thời gian phản hồi đo lường SLA an ninh: <code class="text-cyan-300 font-mono">alert_resolved_at</code>.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- ==================== MODULE 4: HEALTH ==================== -->
+          <div id="mod-health" class="module-card schema-health-block p-6 rounded-2xl bg-gray-900 border border-emerald-500/30 space-y-5 shadow-lg">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800">
+              <div class="flex items-center gap-3">
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase schema-health">Schema: health</span>
+                <h3 class="text-xl font-bold text-white">Sức Khỏe, Dặn Thuốc, Đánh Giá Phát Triển & Nhật Ký Lớp</h3>
+              </div>
+              <span class="text-xs text-gray-400 font-mono">Tables: medications, health_metrics, health_incidents, development_evaluations, nap_records, meal_records, classroom_journal_posts</span>
+            </div>
+
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Mục đích nghiệp vụ:</strong> Quản lý sức khỏe học đường toàn diện: tự động tính chỉ số BMI theo chuẩn WHO, lưu vết dặn thuốc và xác nhận cho uống thuốc kèm ảnh minh chứng lúc 14:00, đánh giá sự phát triển 5 lĩnh vực theo Thông tư 51/BGDĐT, nhật ký ăn/ngủ hàng ngày và bảng tin hoạt động lớp học.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1">
+                <div class="text-indigo-400 font-bold mb-1 font-sans">📦 Entities & Mapping (@Table)</div>
+                <div>• <code class="text-white">Medication.java</code> ➔ <span class="text-emerald-300">@Table(schema="health", name="medications")</span></div>
+                <div>• <code class="text-white">HealthMetric.java</code> ➔ <span class="text-emerald-300">@Table(schema="health", name="health_metrics")</span></div>
+                <div>• <code class="text-white">HealthIncident.java</code> ➔ <span class="text-emerald-300">@Table(schema="health", name="health_incidents")</span></div>
+                <div>• <code class="text-white">DevelopmentEvaluation.java</code> ➔ <span class="text-emerald-300">@Table(schema="health", name="development_evaluations")</span></div>
+                <div>• <code class="text-white">NapRecord.java</code> & <code class="text-white">MealRecord.java</code> ➔ <span class="text-emerald-300">@Table(schema="health", name="nap_records / meal_records")</span></div>
+                <div>• <code class="text-white">ClassroomJournalPost.java</code> ➔ <span class="text-emerald-300">@Table(schema="health", name="classroom_journal_posts")</span></div>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1 font-sans">
+                <div class="text-emerald-400 font-bold mb-1">⚙️ Services & Repositories</div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">MedicationService</span>, <span class="text-yellow-300">HealthMetricService</span>, <span class="text-yellow-300">DevelopmentEvaluationService</span></div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">NapRecordService</span>, <span class="text-yellow-300">MealRecordService</span>, <span class="text-yellow-300">ClassroomJournalPostService</span></div>
+                <div class="font-mono text-[11px] text-gray-400">• MedicationRepository, HealthMetricRepository, HealthIncidentRepository,...</div>
+              </div>
+            </div>
+
+            <!-- Endpoints Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border border-gray-800 rounded-lg overflow-hidden">
+                <thead class="bg-gray-800/60 text-gray-300 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th class="p-2.5">Method</th>
+                    <th class="p-2.5">Endpoint Path</th>
+                    <th class="p-2.5">Quyền hạn (RBAC)</th>
+                    <th class="p-2.5">Chức năng & Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800 font-mono text-gray-300">
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/health/medications</td>
+                    <td class="p-2.5 text-gray-400 font-sans">PHU_HUYNH, GIAO_VIEN, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Phụ huynh gửi đơn dặn thuốc (tên thuốc, liều lượng, giờ uống, đơn thuốc)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/health/medications/{id}/administer</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Giáo viên xác nhận cho uống thuốc lúc 14:00 kèm upload ảnh bằng chứng (<code class="text-emerald-300">proofPhotoUrl</code>); tự trigger FCM</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/health/metrics</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Nhập chiều cao/cân nặng; Backend tự tính toán BMI & chuẩn hóa BmiStatus (UNDERWEIGHT, NORMAL, OVERWEIGHT, OBESE)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/health/evaluations</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Đánh giá học sinh theo 5 lĩnh vực Thông tư 51 (PHYSICAL, COGNITIVE, LANGUAGE, SOCIO_EMOTIONAL, AESTHETIC)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/health/nap-records</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Ghi nhận giấc ngủ trưa (validate <code class="text-emerald-300">napStart &lt;= napEnd</code>)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/health/meal-records</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Theo dõi mức độ ăn theo bữa (MealConsumptionLevel: FINISHED, HALF, SKIPPED)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/health/journal-posts</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Đăng bài nhật ký hoạt động lớp kèm hình ảnh và nội dung tương tác</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Features Highlights -->
+            <div class="p-3.5 rounded-lg bg-emerald-950/20 border border-emerald-900/40 text-xs text-gray-300 space-y-1">
+              <span class="font-bold text-emerald-300">✨ Logic & Tính năng cốt lõi:</span>
+              <ul class="list-disc list-inside space-y-0.5 text-gray-400 text-[11px]">
+                <li>Công thức chuẩn WHO BMI: <span class="text-white font-mono">$BMI = weightKg / (heightCm / 100)^2$</span> tự động phân loại ngưỡng &lt;14.0 (UNDERWEIGHT), 14.0-18.0 (NORMAL), 18.0-20.0 (OVERWEIGHT), &gt;20.0 (OBESE).</li>
+                <li>Quy trình dặn thuốc: Sau khi giáo viên bấm "Đã cho uống thuốc" và upload ảnh chụp lúc 14:00, hệ thống tự động bắn FCM Push Notification đến điện thoại phụ huynh kèm ảnh minh chứng.</li>
+                <li>Mẫu đánh giá Thông tư 51 tự động liên kết với Niên khóa hiện hành (<code class="text-emerald-300 font-mono">academic_years</code>).</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- ==================== MODULE 5: KITCHEN ==================== -->
+          <div id="mod-kitchen" class="module-card schema-kitchen-block p-6 rounded-2xl bg-gray-900 border border-amber-500/30 space-y-5 shadow-lg">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800">
+              <div class="flex items-center gap-3">
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase schema-kitchen">Schema: kitchen</span>
+                <h3 class="text-xl font-bold text-white">Vận Hành Bếp Ăn, Chốt Suất 08:30 AM & Lưu Mẫu 24H</h3>
+              </div>
+              <span class="text-xs text-gray-400 font-mono">Tables: weekly_menus, meal_headcount_snapshots, food_sample_retention_logs</span>
+            </div>
+
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Mục đích nghiệp vụ:</strong> Quản lý dinh dưỡng và an toàn vệ sinh thực phẩm (ATVSTP): lập thực đơn tuần kèm calo và cảnh báo dị ứng, Cron job tự động chốt đóng băng suất ăn lúc 08:30 AM (tách riêng suất cơm, cháo, ăn tránh dị ứng) và nhật ký lưu/hủy mẫu thực phẩm nghiệm thu 24 giờ.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1">
+                <div class="text-indigo-400 font-bold mb-1 font-sans">📦 Entities & Mapping (@Table)</div>
+                <div>• <code class="text-white">WeeklyMenu.java</code> ➔ <span class="text-amber-300">@Table(schema="kitchen", name="weekly_menus")</span></div>
+                <div>• <code class="text-white">MealHeadcountSnapshot.java</code> ➔ <span class="text-amber-300">@Table(schema="kitchen", name="meal_headcount_snapshots")</span></div>
+                <div>• <code class="text-white">FoodSampleRetentionLog.java</code> ➔ <span class="text-amber-300">@Table(schema="kitchen", name="food_sample_retention_logs")</span></div>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1 font-sans">
+                <div class="text-emerald-400 font-bold mb-1">⚙️ Services, Jobs & Repositories</div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">WeeklyMenuService</span>, <span class="text-yellow-300">MealHeadcountService</span>, <span class="text-yellow-300">FoodSampleRetentionService</span>, <span class="text-yellow-300">KitchenService</span></div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-cyan-300">KitchenScheduler</span> <span class="text-gray-400">(@Scheduled 08:30 AM lock & Hourly sample expiry check)</span></div>
+                <div class="font-mono text-[11px] text-gray-400">• WeeklyMenuRepository, MealHeadcountSnapshotRepository, FoodSampleRetentionLogRepository</div>
+              </div>
+            </div>
+
+            <!-- Endpoints Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border border-gray-800 rounded-lg overflow-hidden">
+                <thead class="bg-gray-800/60 text-gray-300 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th class="p-2.5">Method</th>
+                    <th class="p-2.5">Endpoint Path</th>
+                    <th class="p-2.5">Quyền hạn (RBAC)</th>
+                    <th class="p-2.5">Chức năng & Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800 font-mono text-gray-300">
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/kitchen/meal-headcounts</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BEP, BGH, GIAO_VU, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xem báo cáo tổng hợp snapshot suất ăn đã chốt (Cơm thường, Cháo, Tránh dị ứng)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/kitchen/meal-headcounts/lock</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BEP, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Kích hoạt chốt đóng băng suất ăn thủ công ngay lập tức</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/kitchen/food-samples</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BEP, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Ghi nhật ký lưu mẫu thức ăn từng bữa kèm ảnh chụp lưu nghiệm 24h</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/kitchen/food-samples/{id}/dispose</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BEP, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Xác nhận hủy mẫu thực phẩm an toàn sau khi đủ 24 giờ lưu nghiệm</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/kitchen/food-samples/overdue</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BEP, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Cảnh báo các mẫu thức ăn vượt quá 24h chưa thực hiện quy trình hủy</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/kitchen/menus</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy thực đơn tuần (kèm calories, nutrition_notes và allergy_tags)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/kitchen/daily-summary</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BEP, BGH, GIAO_VU, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Báo cáo bếp hàng ngày tổng hợp sĩ số có mặt và phân tách từng lớp học</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Features Highlights -->
+            <div class="p-3.5 rounded-lg bg-amber-950/20 border border-amber-900/40 text-xs text-gray-300 space-y-1">
+              <span class="font-bold text-amber-300">✨ Logic & Tính năng cốt lõi:</span>
+              <ul class="list-disc list-inside space-y-0.5 text-gray-400 text-[11px]">
+                <li>Cron Job <code class="text-amber-300 font-mono">@Scheduled(cron = "0 30 8 * * ?")</code>: Tự động khóa chốt snapshot lúc <strong>08:30 AM</strong> hàng ngày. Đối chiếu thẻ <code class="text-amber-300 font-mono">students.allergy_tags</code> với <code class="text-amber-300 font-mono">weekly_menus.allergy_tags</code> để tách riêng suất ăn an toàn dị ứng.</li>
+                <li>Lớp nhà trẻ (<code class="text-amber-300 font-mono">age_group = NURSERY</code>) được hệ thống tự động phân loại suất ăn dạng cháo (<code class="text-amber-300 font-mono">porridge_count</code>).</li>
+                <li>Lưu mẫu 24h: Cron Job hàng giờ kiểm tra các mẫu vượt quá 24h và tự động cập nhật trạng thái cảnh báo <code class="text-amber-300 font-mono">EXPIRED</code> nếu chưa được hủy.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- ==================== MODULE 6: FINANCE ==================== -->
+          <div id="mod-finance" class="module-card schema-finance-block p-6 rounded-2xl bg-gray-900 border border-pink-500/30 space-y-5 shadow-lg">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800">
+              <div class="flex items-center gap-3">
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase schema-finance">Schema: finance</span>
+                <h3 class="text-xl font-bold text-white">Học Phí, Quyết Toán Động, VietQR & Đối Soát Webhook</h3>
+              </div>
+              <span class="text-xs text-gray-400 font-mono">Tables: fee_configs, late_pickup_fee_rules, discount_rules, student_discounts, invoices, invoice_items, transactions, payment_disputes</span>
+            </div>
+
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Mục đích nghiệp vụ:</strong> Quản trị tài chính nhà trường chính xác: cấu hình học phí theo độ tuổi, công cụ quyết toán học phí động cuối tháng (tự động khấu trừ hoàn tiền ăn theo ngày nghỉ phép và cộng dồn phạt đón muộn), sinh hóa đơn kèm mã VietQR duy nhất, xử lý Webhook ngân hàng với tính Idempotency tuyệt đối và quy trình giải quyết khiếu nại sai lệch tiền.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1">
+                <div class="text-indigo-400 font-bold mb-1 font-sans">📦 Entities & Mapping (@Table)</div>
+                <div>• <code class="text-white">FeeConfig.java</code> ➔ <span class="text-pink-300">@Table(schema="finance", name="fee_configs")</span></div>
+                <div>• <code class="text-white">LatePickupFeeRule.java</code> ➔ <span class="text-pink-300">@Table(schema="finance", name="late_pickup_fee_rules")</span></div>
+                <div>• <code class="text-white">DiscountRule.java</code> & <code class="text-white">StudentDiscount.java</code> ➔ <span class="text-pink-300">@Table(schema="finance")</span></div>
+                <div>• <code class="text-white">Invoice.java</code> & <code class="text-white">InvoiceItem.java</code> ➔ <span class="text-pink-300">@Table(schema="finance")</span></div>
+                <div>• <code class="text-white">Transaction.java</code> & <code class="text-white">PaymentDispute.java</code> ➔ <span class="text-pink-300">@Table(schema="finance")</span></div>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1 font-sans">
+                <div class="text-emerald-400 font-bold mb-1">⚙️ Services, Jobs & Repositories</div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">BillingService</span>, <span class="text-yellow-300">InvoiceService</span>, <span class="text-yellow-300">PaymentService</span>, <span class="text-yellow-300">PaymentDisputeService</span></div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-cyan-300">BillingScheduler</span> <span class="text-gray-400">(@Scheduled 01:00 AM ngày đầu tháng)</span></div>
+                <div class="font-mono text-[11px] text-gray-400">• FeeConfigRepository, InvoiceRepository, TransactionRepository, PaymentDisputeRepository,...</div>
+              </div>
+            </div>
+
+            <!-- Endpoints Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border border-gray-800 rounded-lg overflow-hidden">
+                <thead class="bg-gray-800/60 text-gray-300 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th class="p-2.5">Method</th>
+                    <th class="p-2.5">Endpoint Path</th>
+                    <th class="p-2.5">Quyền hạn (RBAC)</th>
+                    <th class="p-2.5">Chức năng & Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800 font-mono text-gray-300">
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/finance/billing/generate</td>
+                    <td class="p-2.5 text-gray-400 font-sans">KE_TOAN, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Kích hoạt engine quyết toán học phí toàn trường cho kỳ tháng năm (MM-YYYY)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/payments/webhook</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Public (IPN Webhook)</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Nhận biến động số dư SePay/VietQR: kiểm tra <code class="text-pink-300">bankTransId</code> Idempotency, lưu <code class="text-pink-300">raw_payload</code> JSONB và gạch nợ tự động</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/finance/invoices/{id}/vietqr</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy mã QR chuẩn NAPAS 247 và link deep-link mở ứng dụng ngân hàng</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/finance/invoices/ref/{referenceCode}</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Tra cứu hóa đơn bằng mã nội dung chuyển khoản ngân hàng</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/parents/invoices/{invoiceId}/disputes</td>
+                    <td class="p-2.5 text-gray-400 font-sans">PHU_HUYNH</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Phụ huynh gửi khiếu nại sai lệch tiền; hóa đơn chuyển sang trạng thái DISPUTED</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/admin/finance/disputes/{id}/resolve</td>
+                    <td class="p-2.5 text-gray-400 font-sans">KE_TOAN, BGH, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Kế toán duyệt khiếu nại: tự động sinh dòng <code class="text-pink-300">ADJUSTMENT</code> giảm trừ tiền và tính lại hóa đơn</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/admin/late-pickup-rules</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, KE_TOAN, ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Cấu hình khung phạt đón muộn (minMinutes, maxMinutes, penaltyAmount)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Features Highlights -->
+            <div class="p-3.5 rounded-lg bg-pink-950/20 border border-pink-900/40 text-xs text-gray-300 space-y-1">
+              <span class="font-bold text-pink-300">✨ Logic & Tính năng cốt lõi:</span>
+              <ul class="list-disc list-inside space-y-0.5 text-gray-400 text-[11px]">
+                <li>Công thức quyết toán cuối tháng: <span class="text-white font-mono">Hóa đơn = Học phí cố định - (Số ngày ABSENT_PERMITTED * dailyRefundRate) + Phạt đón muộn - Giảm trừ</span>.</li>
+                <li>Mã VietQR độc nhất: Mỗi hóa đơn sinh mã <code class="text-pink-300 font-mono">payment_reference_code</code> định dạng duy nhất (ví dụ: <code class="text-gray-300">INV202610A7B9C1</code>). Webhook dùng Regex tự động trích xuất mã để gạch nợ.</li>
+                <li>Bảo mật tài chính Idempotency: Kiểm tra trùng lặp <code class="text-pink-300 font-mono">bank_trans_id</code> trước khi lưu; lưu nguyên trạng JSONB <code class="text-pink-300 font-mono">raw_payload</code> của bên thứ 3 phục vụ kiểm toán bất biến.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- ==================== MODULE 7: COMMS ==================== -->
+          <div id="mod-comms" class="module-card schema-comms-block p-6 rounded-2xl bg-gray-900 border border-indigo-500/30 space-y-5 shadow-lg">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-800">
+              <div class="flex items-center gap-3">
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase schema-comms">Schema: comms</span>
+                <h3 class="text-xl font-bold text-white">Truyền Thông, Thông Báo Đẩy FCM & Chat 1-1</h3>
+              </div>
+              <span class="text-xs text-gray-400 font-mono">Tables: notifications, announcements, announcement_views, message_threads, messages</span>
+            </div>
+
+            <p class="text-xs text-gray-300 leading-relaxed">
+              <strong>Mục đích nghiệp vụ:</strong> Cầu nối thông tin tức thời giữa Nhà trường và Gia đình: hệ thống thông báo đẩy Firebase Cloud Messaging (FCM) kích hoạt theo các sự kiện trọng yếu, bảng thông báo chung toàn trường theo dõi lượt đọc, và kênh nhắn tin trực tiếp 1-1 riêng tư giữa Giáo viên chủ nhiệm và Phụ huynh từng học sinh.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1">
+                <div class="text-indigo-400 font-bold mb-1 font-sans">📦 Entities & Mapping (@Table)</div>
+                <div>• <code class="text-white">Notification.java</code> ➔ <span class="text-indigo-300">@Table(schema="comms", name="notifications")</span></div>
+                <div>• <code class="text-white">Announcement.java</code> ➔ <span class="text-indigo-300">@Table(schema="comms", name="announcements")</span></div>
+                <div>• <code class="text-white">AnnouncementView.java</code> ➔ <span class="text-indigo-300">@Table(schema="comms", name="announcement_views")</span></div>
+                <div>• <code class="text-white">MessageThread.java</code> ➔ <span class="text-indigo-300">@Table(schema="comms", name="message_threads")</span></div>
+                <div>• <code class="text-white">Message.java</code> ➔ <span class="text-indigo-300">@Table(schema="comms", name="messages")</span></div>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800 space-y-1 font-sans">
+                <div class="text-emerald-400 font-bold mb-1">⚙️ Services & Repositories</div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-yellow-300">NotificationService</span>, <span class="text-yellow-300">ChatService</span>, <span class="text-yellow-300">AnnouncementService</span></div>
+                <div class="font-mono text-[11px] text-gray-300">• <span class="text-cyan-300">FcmPushService</span> <span class="text-gray-400">(Trừu tượng hóa FCM với fallback Mock Logging an toàn)</span></div>
+                <div class="font-mono text-[11px] text-gray-400">• NotificationRepository, MessageThreadRepository, MessageRepository,...</div>
+              </div>
+            </div>
+
+            <!-- Endpoints Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border border-gray-800 rounded-lg overflow-hidden">
+                <thead class="bg-gray-800/60 text-gray-300 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th class="p-2.5">Method</th>
+                    <th class="p-2.5">Endpoint Path</th>
+                    <th class="p-2.5">Quyền hạn (RBAC)</th>
+                    <th class="p-2.5">Chức năng & Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800 font-mono text-gray-300">
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/notifications</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy danh sách thông báo cá nhân (hỗ trợ phân trang và lọc chưa đọc)</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-put px-2 py-0.5 rounded text-[10px] font-bold">PUT</span></td>
+                    <td class="p-2.5 text-white">/api/notifications/fcm-token</td>
+                    <td class="p-2.5 text-gray-400 font-sans">Authenticated</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Đăng ký / cập nhật Firebase Cloud Messaging Device Token của thiết bị</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-get px-2 py-0.5 rounded text-[10px] font-bold">GET</span></td>
+                    <td class="p-2.5 text-white">/api/chat/threads</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, PHU_HUYNH</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Lấy danh sách các cuộc hội thoại kèm số tin chưa đọc và tin nhắn mới nhất</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/chat/threads</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, PHU_HUYNH</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Mở hoặc tạo mới cuộc hội thoại 1-1 giữa Giáo viên và Phụ huynh theo học sinh</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/chat/threads/{id}/messages</td>
+                    <td class="p-2.5 text-gray-400 font-sans">GIAO_VIEN, PHU_HUYNH</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Gửi tin nhắn văn bản / tệp đính kèm và tự động gửi push notification cho người nhận</td>
+                  </tr>
+                  <tr class="hover:bg-gray-800/40">
+                    <td class="p-2.5"><span class="badge-post px-2 py-0.5 rounded text-[10px] font-bold">POST</span></td>
+                    <td class="p-2.5 text-white">/api/comms/announcements</td>
+                    <td class="p-2.5 text-gray-400 font-sans">BGH, SYSTEM_ADMIN</td>
+                    <td class="p-2.5 text-gray-300 font-sans">Đăng thông báo toàn trường (Priority: NORMAL, URGENT)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Features Highlights -->
+            <div class="p-3.5 rounded-lg bg-indigo-950/20 border border-indigo-900/40 text-xs text-gray-300 space-y-1">
+              <span class="font-bold text-indigo-300">✨ Logic & Tính năng cốt lõi:</span>
+              <ul class="list-disc list-inside space-y-0.5 text-gray-400 text-[11px]">
+                <li>6 Triggers sự kiện tự động bắn FCM: Check-in điểm danh, Check-out tan học, Cảnh báo người lạ AI, Xác nhận uống thuốc kèm ảnh lúc 14:00, Phát hành hóa đơn/Quá hạn học phí, Tin nhắn chat mới.</li>
+                <li>Phân quyền chặt chẽ Chat 1-1: Phụ huynh chỉ được chat với giáo viên phụ trách lớp của con mình; Giáo viên chỉ được nhắn tin với phụ huynh của học sinh trong lớp mình quản lý.</li>
+                <li>Hạ tầng <code class="text-indigo-300 font-mono">FcmPushService</code>: Hỗ trợ cấu hình <code class="text-indigo-300 font-mono">app.fcm.enabled</code> và cơ chế mock log <code class="text-gray-300">[FCM MOCK PUSH]</code> không gây crash ứng dụng khi chạy local / dev.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- SECTION 5: TASKS PROGRESS & SESSION LOGS -->
+        <!-- =================================================================== -->
+        <section id="tasks-matrix" class="scroll-mt-24 space-y-6">
+          <div class="border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2 text-emerald-400 text-xs font-semibold tracking-wider uppercase mb-1">
+              <span>Section 05</span>
+              <span>•</span>
+              <span>Trạng Thái Tiến Độ</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Trạng Thái 24 Tasks (missing_tasks_after_db_update.md)</h2>
+            <p class="text-sm text-gray-400 mt-1">Toàn bộ 24 đầu việc kỹ thuật đã được nghiệm thu và hoàn thiện 100%</p>
+          </div>
+
+          <!-- Tasks Table -->
+          <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 shadow-md overflow-x-auto">
+            <table class="w-full text-left text-xs border border-gray-800 rounded-lg overflow-hidden">
+              <thead class="bg-gray-800/80 text-gray-300 font-semibold uppercase text-[10px]">
+                <tr>
+                  <th class="p-2.5 w-16 text-center">Task</th>
+                  <th class="p-2.5">Tên Nghiệp Vụ & Phạm Vi Triển Khai</th>
+                  <th class="p-2.5">Schema Liên Quan</th>
+                  <th class="p-2.5 text-center">Trạng Thái</th>
+                  <th class="p-2.5">Deliverables Cốt Lõi</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-800 font-mono text-gray-300">
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#1</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Enforce Schema Declarations on Implemented Entities</td>
+                  <td class="p-2.5"><span class="schema-core px-1.5 py-0.5 rounded text-[10px]">core</span> <span class="schema-finance px-1.5 py-0.5 rounded text-[10px]">finance</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Định danh tường minh @Table(schema="...") trên FeeConfig, DiscountRule, LatePickup, Menu, AuditLog</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#2</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Fee Config & Discount Management</td>
+                  <td class="p-2.5"><span class="schema-finance px-1.5 py-0.5 rounded text-[10px]">finance</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Bổ sung cột daily_refund_rate, CRUD DTOs, Service, Controller, Audit logging</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#3</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Late Pickup Fee Rules CRUD</td>
+                  <td class="p-2.5"><span class="schema-finance px-1.5 py-0.5 rounded text-[10px]">finance</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Entity LatePickupFeeRule, DTO, Service, Controller /api/admin/late-pickup-rules</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#4</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Weekly Menu Management</td>
+                  <td class="p-2.5"><span class="schema-kitchen px-1.5 py-0.5 rounded text-[10px]">kitchen</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Thực đơn tuần có calories, auto-Monday fallback, allergy_tags</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-rose-400 font-bold">#5</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Scrap Extracurricular Clubs Module</td>
+                  <td class="p-2.5 text-gray-500">N/A</td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/40">SCRAPPED</span></td>
+                  <td class="p-2.5 font-sans text-rose-400 text-[11px]">Xóa hoàn toàn SkillClub, StudentClubRegistration và các endpoints liên quan</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#6</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Student Profile & Allergy Tags Update</td>
+                  <td class="p-2.5"><span class="schema-academic px-1.5 py-0.5 rounded text-[10px]">academic</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">allergy_tags (VARCHAR), StudentService, lọc dị ứng cho bếp ăn</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#7</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Emergency Pickup Authorization with AI</td>
+                  <td class="p-2.5"><span class="schema-academic px-1.5 py-0.5 rounded text-[10px]">academic</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">photo_url, face_embedding (JSONB), kiểm tra hạn trong ngày, xác nhận đón USED</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#8</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Face Recognition Logs Alert Resolution Timestamp</td>
+                  <td class="p-2.5"><span class="schema-attendance px-1.5 py-0.5 rounded text-[10px]">attendance</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">alert_resolved_at, ResolveStrangerAlertDto, FaceRecognitionLogController</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#9</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Invoice Generation with Payment Reference Code</td>
+                  <td class="p-2.5"><span class="schema-finance px-1.5 py-0.5 rounded text-[10px]">finance</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">payment_reference_code duy nhất, sinh mã QR NAPAS 247 và link ngân hàng</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#10</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Transaction Webhook with Raw JSONB Payload</td>
+                  <td class="p-2.5"><span class="schema-finance px-1.5 py-0.5 rounded text-[10px]">finance</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">raw_payload JSONB, strict Idempotency qua bank_trans_id, auto debt clearance</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#11</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Guardian Verification Flow</td>
+                  <td class="p-2.5"><span class="schema-academic px-1.5 py-0.5 rounded text-[10px]">academic</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Quy trình duyệt CCCD người giám hộ bởi Giáo vụ, cập nhật face embedding</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#12</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Health Metrics & Incident Reporting</td>
+                  <td class="p-2.5"><span class="schema-health px-1.5 py-0.5 rounded text-[10px]">health</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Tự tính BMI WHO, BmiStatus enum, HealthMetricController, HealthIncident entity</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#13</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Medication Administration Proof</td>
+                  <td class="p-2.5"><span class="schema-health px-1.5 py-0.5 rounded text-[10px]">health</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Đơn dặn thuốc, xác nhận uống thuốc kèm proof_photo_url lúc 14:00 + FCM trigger</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#14</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Development Evaluation (Circular 51)</td>
+                  <td class="p-2.5"><span class="schema-health px-1.5 py-0.5 rounded text-[10px]">health</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Đánh giá phát triển theo 5 lĩnh vực Thông tư 51/BGDĐT</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#15</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Daily Nap & Meal Records</td>
+                  <td class="p-2.5"><span class="schema-health px-1.5 py-0.5 rounded text-[10px]">health</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Theo dõi ngủ trưa và mức độ ăn theo 3 bữa (MealConsumptionLevel)</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#16</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Classroom Journal Posts</td>
+                  <td class="p-2.5"><span class="schema-health px-1.5 py-0.5 rounded text-[10px]">health</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">CRUD bảng tin hoạt động lớp học, Controller /api/health/journal-posts</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#17</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Kitchen 08:30 AM Meal Headcount Lock Cron Job</td>
+                  <td class="p-2.5"><span class="schema-kitchen px-1.5 py-0.5 rounded text-[10px]">kitchen</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Cron job 08:30 AM đóng băng suất ăn, lọc suất ăn dị ứng và suất cháo</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#18</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Food Sample Retention 24h Logger</td>
+                  <td class="p-2.5"><span class="schema-kitchen px-1.5 py-0.5 rounded text-[10px]">kitchen</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Quản lý lưu mẫu thức ăn 24h, cảnh báo quá hạn overdue và quy trình hủy</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#19</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Timetables Management</td>
+                  <td class="p-2.5"><span class="schema-academic px-1.5 py-0.5 rounded text-[10px]">academic</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">CRUD thời khóa biểu theo thứ trong tuần, validate khoảng giờ</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#20</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Class Transfer Requests Workflow</td>
+                  <td class="p-2.5"><span class="schema-academic px-1.5 py-0.5 rounded text-[10px]">academic</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Quy trình phụ huynh gửi đơn, giáo vụ duyệt và auto chuyển class_id học sinh</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#21</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Month-end Dynamic Billing Engine</td>
+                  <td class="p-2.5"><span class="schema-finance px-1.5 py-0.5 rounded text-[10px]">finance</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Quyết toán học phí động: hoàn tiền ăn + phạt đón muộn + miễn giảm + Cron 01:00 AM</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#22</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Payment Dispute Handling</td>
+                  <td class="p-2.5"><span class="schema-finance px-1.5 py-0.5 rounded text-[10px]">finance</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Khiếu nại hóa đơn, kế toán giải quyết sinh mục ADJUSTMENT và tính lại tiền</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#23</td>
+                  <td class="p-2.5 font-sans font-medium text-white">FCM Notifications & Push Triggers</td>
+                  <td class="p-2.5"><span class="schema-comms px-1.5 py-0.5 rounded text-[10px]">comms</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Hạ tầng FcmPushService, 6 event triggers tự động gửi thông báo thời gian thực</td>
+                </tr>
+                <tr class="hover:bg-gray-800/40">
+                  <td class="p-2.5 text-center text-indigo-400 font-bold">#24</td>
+                  <td class="p-2.5 font-sans font-medium text-white">Teacher-Parent 1-1 Chat & Messages</td>
+                  <td class="p-2.5"><span class="schema-comms px-1.5 py-0.5 rounded text-[10px]">comms</span></td>
+                  <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">COMPLETED</span></td>
+                  <td class="p-2.5 font-sans text-gray-400 text-[11px]">Chat 1-1 giữa Giáo viên và Phụ huynh theo học sinh, phân quyền nghiêm ngặt</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- SECTION 6: SESSIONS SUMMARY -->
+        <!-- =================================================================== -->
+        <section id="session-logs" class="scroll-mt-24 space-y-6">
+          <div class="border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2 text-yellow-400 text-xs font-semibold tracking-wider uppercase mb-1">
+              <span>Section 06</span>
+              <span>•</span>
+              <span>Nhật Ký Phiên Làm Việc</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Lịch Sử Các Phiên Làm Việc (completed_tasks.md)</h2>
+            <p class="text-sm text-gray-400 mt-1">Ghi nhận tiến trình triển khai từ khởi tạo tới hoàn tất toàn bộ backend</p>
+          </div>
+
+          <div class="space-y-4">
+            <!-- Session 9 -->
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 hover:border-gray-700 transition">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-indigo-400">Session 9 (2026-10-08)</span>
+                <span class="px-2 py-0.5 rounded text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Cụm 4: Communications & Realtime</span>
+              </div>
+              <p class="text-xs text-gray-300 leading-relaxed">
+                Hoàn thành Task 23 & 24: Thiết lập thực thể Notification, MessageThread, Message, FcmPushService (Mock fallback), 6 Triggers đẩy tin tự động và module Chat 1-1 giữa Giáo viên và Phụ huynh.
+              </p>
+            </div>
+
+            <!-- Session 8 -->
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 hover:border-gray-700 transition">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-pink-400">Session 8 (2026-10-08)</span>
+                <span class="px-2 py-0.5 rounded text-[10px] bg-pink-500/20 text-pink-300 border border-pink-500/30">Cụm 3: Finance Engine & Webhook</span>
+              </div>
+              <p class="text-xs text-gray-300 leading-relaxed">
+                Hoàn thành Task 9, 10, 21, 22: Triển khai Invoice với VietQR reference code, Webhook nhận thanh toán với raw JSONB và idempotency, Engine quyết toán học phí động cuối tháng và giải quyết khiếu nại Dispute.
+              </p>
+            </div>
+
+            <!-- Session 7 -->
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 hover:border-gray-700 transition">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-amber-400">Session 7 (2026-10-08)</span>
+                <span class="px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">Cụm 2: Kitchen & Health Safety</span>
+              </div>
+              <p class="text-xs text-gray-300 leading-relaxed">
+                Hoàn thành Task 13, 17, 18: Cron Job 08:30 AM chốt suất ăn (cơm, cháo, lọc dị ứng), lưu mẫu thức ăn nghiệm thu 24h và quy trình dặn/uống thuốc kèm minh chứng ảnh lúc 14:00.
+              </p>
+            </div>
+
+            <!-- Session 6 -->
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 hover:border-gray-700 transition">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-purple-400">Session 6 (2026-10-08)</span>
+                <span class="px-2 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30">Cụm 1: Academic & Biometric Tracking</span>
+              </div>
+              <p class="text-xs text-gray-300 leading-relaxed">
+                Hoàn thành Task 6, 7, 8, 11: Cập nhật allergy_tags, ủy quyền đón khẩn cấp hỗ trợ vector AI JSONB, quy trình duyệt CCCD người giám hộ và log nhận diện AI kèm alert_resolved_at.
+              </p>
+            </div>
+
+            <!-- Session 5, 4, 3, 2, 1 Summaries -->
+            <div class="p-4 rounded-xl bg-gray-900/60 border border-gray-800/80">
+              <div class="text-xs font-bold text-gray-400 mb-1">Các phiên làm việc trước đó:</div>
+              <ul class="text-xs text-gray-400 space-y-1">
+                <li>• <strong>Session 5:</strong> Triển khai toàn diện yêu cầu từ <code class="text-gray-300">API_REQUIREMENTS.md</code> (Calorie thực đơn, làm giàu tên học sinh theo lớp, quy trình chuyển lớp).</li>
+                <li>• <strong>Session 3 (Phần 2):</strong> Tái cấu trúc toàn diện kiến trúc dự án sang Package-by-Feature (DDD), phân tách Web & Mobile controllers trên 176 files.</li>
+                <li>• <strong>Session 3 (Phần 1):</strong> Triển khai 4 module Health độc lập phục vụ Form Giáo viên (BMI WHO, Đánh giá TT 51, Ăn/Ngủ, Nhật ký lớp).</li>
+                <li>• <strong>Session 2:</strong> Chuyển dịch Multi-Schema JPA, xóa vĩnh viễn module Câu lạc bộ ngoại khóa (Clubs), tạo LatePickupFeeRule.</li>
+                <li>• <strong>Session 1:</strong> Triển khai nhóm CRUD cơ bản (FeeConfig, DiscountRule, WeeklyMenu, AuditLog).</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- SECTION 7: QUICKSTART & RUNBOOK -->
+        <!-- =================================================================== -->
+        <section id="quickstart" class="scroll-mt-24 space-y-6">
+          <div class="border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2 text-pink-400 text-xs font-semibold tracking-wider uppercase mb-1">
+              <span>Section 07</span>
+              <span>•</span>
+              <span>Hướng Dẫn Chạy & Kiểm Thử</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Quickstart & Developer Runbook</h2>
+            <p class="text-sm text-gray-400 mt-1">Hướng dẫn thiết lập môi trường, cơ sở dữ liệu và vận hành hệ thống</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Step 1: DB & Environment -->
+            <div class="p-5 rounded-xl bg-gray-900 border border-gray-800 shadow-md space-y-3">
+              <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs">1</span>
+                <span>Cấu Hình Môi Trường & Cơ Sở Dữ Liệu</span>
+              </h3>
+              <p class="text-xs text-gray-300 leading-relaxed">
+                Chạy tập lệnh SQL từ file <code class="text-indigo-300 font-mono">NEWDB.md</code> trên PostgreSQL để khởi tạo extension <code class="text-indigo-300 font-mono">uuid-ossp</code>, <code class="text-indigo-300 font-mono">pgcrypto</code> và 7 schemas:
+              </p>
+              <pre class="font-mono text-xs p-3 rounded-lg bg-gray-950 text-gray-300 border border-gray-800 overflow-x-auto">
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE SCHEMA IF NOT EXISTS core;
+CREATE SCHEMA IF NOT EXISTS academic;
+CREATE SCHEMA IF NOT EXISTS attendance;
+CREATE SCHEMA IF NOT EXISTS health;
+CREATE SCHEMA IF NOT EXISTS kitchen;
+CREATE SCHEMA IF NOT EXISTS finance;
+CREATE SCHEMA IF NOT EXISTS comms;</pre>
+              <p class="text-[11px] text-gray-400">
+                Tạo file <code class="text-gray-300 font-mono">.env</code> hoặc cấu hình biến môi trường trong <code class="text-gray-300 font-mono">application.yml</code>:
+              </p>
+              <pre class="font-mono text-[11px] p-2.5 rounded bg-gray-950 text-emerald-400 border border-gray-800 overflow-x-auto">
+DB_URL=jdbc:postgresql://localhost:5432/kidpro_db
+DB_USERNAME=postgres
+DB_PASSWORD=your_password
+JWT_SECRET=kidproSuperSecretKeyForJwtAuthenticationSecurityTokenMustBe256BitsLong
+PORT=8080</pre>
+            </div>
+
+            <!-- Step 2: Build & Run -->
+            <div class="p-5 rounded-xl bg-gray-900 border border-gray-800 shadow-md space-y-3">
+              <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">2</span>
+                <span>Khởi Động & Kiểm Thử Ứng Dụng</span>
+              </h3>
+              <p class="text-xs text-gray-300 leading-relaxed">
+                Biên dịch mã nguồn và khởi động Spring Boot bằng Maven Wrapper:
+              </p>
+              <div class="space-y-2">
+                <div class="text-[11px] text-gray-400">Trên Windows PowerShell / CMD:</div>
+                <pre class="font-mono text-xs p-2.5 rounded bg-gray-950 text-indigo-300 border border-gray-800">.\mvnw.cmd clean spring-boot:run</pre>
+                <div class="text-[11px] text-gray-400">Trên Linux / macOS:</div>
+                <pre class="font-mono text-xs p-2.5 rounded bg-gray-950 text-indigo-300 border border-gray-800">./mvnw clean spring-boot:run</pre>
+              </div>
+
+              <div class="p-3 rounded-lg bg-indigo-950/20 border border-indigo-900/40 text-xs text-gray-300 mt-3 space-y-1.5">
+                <div class="font-bold text-indigo-300">Tài liệu API Trực quan:</div>
+                <div>• Swagger UI: <a href="http://localhost:8080/swagger-ui.html" target="_blank" class="text-cyan-400 underline font-mono">http://localhost:8080/swagger-ui.html</a></div>
+                <div>• OpenAPI Spec JSON: <a href="http://localhost:8080/v3/api-docs" target="_blank" class="text-cyan-400 underline font-mono">http://localhost:8080/v3/api-docs</a></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Documentation Cross References -->
+          <div class="p-4 rounded-xl bg-gray-900 border border-gray-800">
+            <h4 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-2">Danh Sách Tài Liệu Dự Án Kèm Theo</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800">
+                <span class="text-white font-semibold font-mono block">NEWDB.md</span>
+                <span class="text-gray-400 text-[11px]">Kịch bản DDL SQL khởi tạo 7 Schemas & 34 bảng</span>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800">
+                <span class="text-white font-semibold font-mono block">CLAUDE.md</span>
+                <span class="text-gray-400 text-[11px]">Quy chuẩn code, quy tắc Lombok & Transaction</span>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800">
+                <span class="text-white font-semibold font-mono block">missing_tasks_after_db_update.md</span>
+                <span class="text-gray-400 text-[11px]">Danh mục 24 tasks chi tiết đã hoàn thành</span>
+              </div>
+              <div class="p-3 rounded-lg bg-gray-950/60 border border-gray-800">
+                <span class="text-white font-semibold font-mono block">completed_tasks.md</span>
+                <span class="text-gray-400 text-[11px]">Lịch sử và nhật ký triển khai 9 Sessions</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="mt-16 border-t border-gray-800 bg-gray-950/80 py-8 text-center text-xs text-gray-500">
+    <div class="max-w-7xl mx-auto px-4 space-y-2">
+      <div class="flex items-center justify-center gap-2 text-gray-400 font-semibold">
+        <span>KidPro Backend Engineering</span>
+        <span>•</span>
+        <span>Spring Boot 3 Multi-Schema Architecture</span>
+      </div>
+      <p>Tài liệu hóa kỹ thuật được tổng hợp tự động bởi Tech Lead & Lead Developer. Phiên bản hệ thống: 1.0.0-RELEASE.</p>
+    </div>
+  </footer>
+
+  <!-- JAVASCRIPT LOGIC: Search, Filters & Theme Toggle -->
+  <script>
+    // Initialize Mermaid with dark theme
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        darkMode: true,
+        background: '#111827',
+        primaryColor: '#4f46e5',
+        primaryTextColor: '#ffffff',
+        primaryBorderColor: '#6366f1',
+        lineColor: '#60a5fa',
+        secondaryColor: '#0e7490',
+        tertiaryColor: '#065f46'
+      }
+    });
+
+    // Theme Toggle Function
+    function toggleTheme() {
+      const htmlEl = document.documentElement;
+      const moonIcon = document.getElementById('themeMoonIcon');
+      const sunIcon = document.getElementById('themeSunIcon');
+      
+      if (htmlEl.classList.contains('dark')) {
+        htmlEl.classList.remove('dark');
+        htmlEl.classList.add('light');
+        moonIcon.classList.add('hidden');
+        sunIcon.classList.remove('hidden');
+        localStorage.setItem('kidpro_theme', 'light');
+      } else {
+        htmlEl.classList.remove('light');
+        htmlEl.classList.add('dark');
+        sunIcon.classList.add('hidden');
+        moonIcon.classList.remove('hidden');
+        localStorage.setItem('kidpro_theme', 'dark');
+      }
+    }
+
+    // Check saved theme
+    if (localStorage.getItem('kidpro_theme') === 'light') {
+      toggleTheme();
+    }
+
+    // Filter Modules by Schema Tab
+    function filterSchema(schemaName) {
+      // Update tab buttons
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-600', 'text-white', 'active');
+        btn.classList.add('bg-gray-800', 'text-gray-300');
+      });
+      event.target.classList.remove('bg-gray-800', 'text-gray-300');
+      event.target.classList.add('bg-indigo-600', 'text-white', 'active');
+
+      const cards = document.querySelectorAll('.module-card');
+      cards.forEach(card => {
+        if (schemaName === 'all' || card.id === `mod-${schemaName}`) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    // Quick Search across Endpoints, Tables, and Tasks
+    function filterAllContent() {
+      const input = document.getElementById('quickSearchInput');
+      const query = input.value.toLowerCase().trim();
+
+      // Filter table rows across all tables
+      const rows = document.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        if (text.includes(query) || query === '') {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      // Filter module cards if query matches module name or content
+      if (query !== '') {
+        const moduleCards = document.querySelectorAll('.module-card');
+        moduleCards.forEach(card => {
+          const text = card.textContent.toLowerCase();
+          if (text.includes(query)) {
+            card.style.display = 'block';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      } else {
+        document.querySelectorAll('.module-card').forEach(card => card.style.display = 'block');
+      }
+    }
+  </script>
+</body>
+</html>

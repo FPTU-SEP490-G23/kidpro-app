@@ -1,0 +1,57 @@
+3. Hướng Dẫn Từng Bước Chạy DEMO Thực Tế
+
+Bước 1: Khởi động AI Server trên Laptop
+
+Mở Terminal tại D:\kidpro_dt\ai_backend:
+cd D:\kidpro_dt\ai_backend
+
+# 1. Tạo và kích hoạt môi trường ảo Python
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# 2. Cài đặt thư viện
+pip install -r requirements.txt
+
+# 3. Khởi chạy FastAPI server lắng nghe toàn mạng LAN (0.0.0.0)
+python main.py
+
+▎ Server sẽ chạy tại: http://localhost:8000. Bạn có thể mở trực tiếp file ai_backend/web_demo.html trên trình duyệt để
+3. Hướng Dẫn Từng Bước Chạy DEMO Thực Tế
+
+Bước 1: Khởi động AI Server trên Laptop
+
+Mở Terminal tại D:\kidpro_dt\ai_backend:
+cd D:\kidpro_dt\ai_backend
+
+# 1. Tạo và kích hoạt môi trường ảo Python
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# 2. Cài đặt thư viện
+pip install -r requirements.txt
+
+# 3. Khởi chạy FastAPI server lắng nghe toàn mạng LAN (0.0.0.0)
+python main.py
+
+▎ Server sẽ chạy tại: http://localhost:8000. Bạ kiểm tra webcam và đăng ký học sinh mẫu ngay lập tức.
+
+Bước 2: Lấy IP LAN của Laptop
+
+Mở PowerShell mới, gõ:
+ipconfig
+Tìm dòng IPv4 Address của card Wi-Fi (ví dụ: 192.168.1.15).
+
+Bước 3: Chạy Ứng Dụng Điểm Danh Trên Điện Thoại
+
+Đảm bảo điện thoại và laptop kết nối chung một mạng Wi-Fi:
+
+- Với Flutter (kidpro_mobile):
+  a. Chạy app: flutter run.
+  b. Vào tài khoản Giáo viên -> Mục Điểm danh sáng -> Bấm icon Camera góc trên bên phải.
+  c. Bấm icon Settings góc trên để nhập IP Laptop (ví dụ: http://192.168.1.15:8000).
+  d. Hướng camera vào khuôn mặt học sinh và bấm "Chụp & Điểm danh khuôn mặt":
+     - Khuôn mặt hợp lệ: Viền chuyển Xanh lá, hiển thị Card Họ tên, Lớp, Thời gian và % độ khớp (ví dụ 88.4%).
+     - Người lạ: Viền chuyển Đỏ cảnh báo, hiển thị nút "Thử lại" và "Fallback Thủ công".
+- Với Native Android (android_client_demo):
+  - Mở thư mục android_client_demo bằng Android Studio và cài đặt lên điện thoại.
+  - Bấm nút "IP Server" để trỏ tới http://192.168.1.15:8000/.
