@@ -1,9 +1,8 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
-import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 
 class FaceAttendanceCameraScreen extends StatefulWidget {
@@ -16,12 +15,14 @@ class FaceAttendanceCameraScreen extends StatefulWidget {
 class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     with SingleTickerProviderStateMixin {
   // Configurable AI server URL (change to your laptop LAN IP, e.g. http://192.168.1.15:8000)
-  String _serverBaseUrl = 'http://10.0.2.2:8000';
+  String _serverBaseUrl = 'http://192.168.1.15:8000';
   final _urlCtrl = TextEditingController();
 
   late AnimationController _animCtrl;
   bool _isProcessing = false;
   Map<String, dynamic>? _lastResult;
+  Uint8List? _capturedImageBytes;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -47,9 +48,10 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
         title: const Text('Cấu hình IP AI Server (Laptop)'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Nhập địa chỉ IP LAN của laptop đang chạy FastAPI (ví dụ: http://192.168.1.50:8000 hoặc http://10.0.2.2:8000 trên Emulator):',
+              'Nhập IP LAN của Laptop đang chạy main.py (đảm bảo điện thoại và laptop kết nối chung Wi-Fi):',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 12),
@@ -57,8 +59,23 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
               controller: _urlCtrl,
               decoration: const InputDecoration(
                 labelText: 'AI Backend Base URL',
+                hintText: 'http://192.168.1.xxx:8000',
                 border: OutlineInputBorder(),
               ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              children: [
+                ActionChip(
+                  label: const Text('10.0.2.2 (Emulator)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _urlCtrl.text = 'http://10.0.2.2:8000',
+                ),
+                ActionChip(
+                  label: const Text('Kiểm tra kết nối', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _pingServer(_urlCtrl.text.trim()),
+                ),
+              ],
             ),
           ],
         ),
@@ -82,28 +99,61 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     );
   }
 
-  Future<void> _performFaceCheckin() async {
+  Future<void> _pingServer(String url) async {
+    try {
+      final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 4)));
+      final res = await dio.get(url);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Kết nối thành công! Đã đăng ký: ${res.data["registered_students_count"] ?? 0} học sinh'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Không thể kết nối tới $url. Hãy kiểm tra Wi-Fi và Firewall.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Chụp ảnh hoặc chọn ảnh từ thư viện để điểm danh
+  Future<void> _captureAndCheckin({ImageSource source = ImageSource.camera}) async {
     if (_isProcessing) return;
 
-    setState(() {
-      _isProcessing = true;
-      _lastResult = null;
-    });
-
     try {
-      // 1. Tạo hoặc nén ảnh mẫu 640px JPEG (Trên thiết bị thật: chụp từ camera controller)
-      // Tạo một ảnh JPEG 1x1 giả lập hoặc đọc từ camera
-      final sampleJpgBytes = _createSampleJpegBytes();
+      final XFile? photo = await _picker.pickImage(
+        source: source,
+        maxWidth: 640,
+        maxHeight: 640,
+        imageQuality: 85,
+      );
 
-      // 2. Gọi HTTP POST multipart/form-data tới FastAPI
+      if (photo == null) return;
+
+      final bytes = await photo.readAsBytes();
+
+      setState(() {
+        _isProcessing = true;
+        _capturedImageBytes = bytes;
+        _lastResult = null;
+      });
+
+      // Gửi ảnh thực tế lên FastAPI AI Engine
       final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
       ));
 
       final formData = FormData.fromMap({
         'file': MultipartFile.fromBytes(
-          sampleJpgBytes,
+          bytes,
           filename: 'face_checkin.jpg',
         ),
       });
@@ -124,7 +174,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       setState(() => _isProcessing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Lỗi kết nối AI Server: ${e.message ?? "Timeout"}'),
+          content: Text('Lỗi kết nối AI Server ($_serverBaseUrl): ${e.message ?? "Timeout"}'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -136,24 +186,139 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     }
   }
 
-  // Tạo mock JPEG byte stream 640x480 để test API trực tiếp
-  Uint8List _createSampleJpegBytes() {
-    // Header JPEG tối giản
-    return Uint8List.fromList([
-      0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-      0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-      0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
-      0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
-      0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
-      0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
-      0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
-      0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01,
-      0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00,
-      0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-      0x09, 0x0A, 0x0B, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F,
-      0x00, 0x7F, 0x00, 0xFF, 0xD9
-    ]);
+  /// Hộp thoại thêm / đăng ký khuôn mặt trực tiếp từ điện thoại
+  void _showRegisterFaceDialog() {
+    final idCtrl = TextEditingController(text: 'HS001');
+    final nameCtrl = TextEditingController(text: 'Tên của bạn');
+    final classCtrl = TextEditingController(text: 'Mầm 1');
+    Uint8List? regPhotoBytes;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.face_retouching_natural, color: AppColors.primary),
+              SizedBox(width: 8),
+              Text('Đăng ký khuôn mặt mới', style: TextStyle(fontSize: 17)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: idCtrl,
+                  decoration: const InputDecoration(labelText: 'Mã học sinh (ID)', isDense: true),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Họ và tên', isDense: true),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: classCtrl,
+                  decoration: const InputDecoration(labelText: 'Lớp học', isDense: true),
+                ),
+                const SizedBox(height: 14),
+
+                // Xem trước ảnh chụp
+                GestureDetector(
+                  onTap: () async {
+                    final XFile? photo = await _picker.pickImage(
+                      source: ImageSource.camera,
+                      maxWidth: 640,
+                      maxHeight: 640,
+                      imageQuality: 85,
+                    );
+                    if (photo != null) {
+                      final bytes = await photo.readAsBytes();
+                      setDialogState(() => regPhotoBytes = bytes);
+                    }
+                  },
+                  child: Container(
+                    height: 120,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade900,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade700),
+                    ),
+                    child: regPhotoBytes != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.memory(regPhotoBytes!, fit: BoxFit.cover),
+                          )
+                        : const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.camera_alt, color: Colors.white70, size: 36),
+                              SizedBox(height: 6),
+                              Text('Bấm để chụp ảnh chân dung bạn', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Hủy'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (regPhotoBytes == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Vui lòng chụp ảnh chân dung trước!')),
+                  );
+                  return;
+                }
+
+                Navigator.pop(ctx);
+                setState(() => _isProcessing = true);
+
+                try {
+                  final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
+                  final formData = FormData.fromMap({
+                    'student_id': idCtrl.text.trim(),
+                    'name': nameCtrl.text.trim(),
+                    'class_name': classCtrl.text.trim(),
+                    'file': MultipartFile.fromBytes(regPhotoBytes!, filename: 'register.jpg'),
+                  });
+
+                  final res = await dio.post('$_serverBaseUrl/api/v1/register', data: formData);
+                  setState(() => _isProcessing = false);
+
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Đăng ký thành công: ${res.data["name"]} (Vector 512 chiều)'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  setState(() => _isProcessing = false);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Lỗi đăng ký: $e'),
+                        backgroundColor: AppColors.error,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Lưu vào AI Server'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -174,6 +339,87 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
         title: const Text('AI Face Attendance', style: TextStyle(fontSize: 16)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.person_add_alt_1),
+            tooltip: 'Đăng ký khuôn mặt mới',
+            onPressed: _showRegisterFaceDialog,
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.science_outlined),
+            tooltip: 'Giả lập kết quả AI (Test giao diện)',
+            onSelected: (val) {
+              if (val == 'gallery') {
+                _captureAndCheckin(source: ImageSource.gallery);
+              } else if (val == 'present') {
+                setState(() {
+                  _lastResult = {
+                    'status': 'PRESENT',
+                    'student_id': 'HS001',
+                    'name': 'Bé Nguyễn Minh An',
+                    'class_name': 'Mầm 1',
+                    'confidence_score': 0.885,
+                    'checkin_time': '07:45:12 - Hôm nay',
+                  };
+                });
+              } else if (val == 'unknown') {
+                setState(() {
+                  _lastResult = {
+                    'status': 'UNKNOWN',
+                    'confidence_score': 0.412,
+                    'message': 'Không nhận diện được khuôn mặt (Độ khớp thấp hơn ngưỡng 0.65)',
+                  };
+                });
+              } else if (val == 'clear') {
+                setState(() {
+                  _lastResult = null;
+                  _capturedImageBytes = null;
+                });
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'gallery',
+                child: Row(
+                  children: [
+                    Icon(Icons.photo_library, size: 18),
+                    SizedBox(width: 8),
+                    Text('Chọn ảnh từ Thư viện'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'present',
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 18),
+                    SizedBox(width: 8),
+                    Text('Giả lập: Bé Minh An (88.5%)'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'unknown',
+                child: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.red, size: 18),
+                    SizedBox(width: 8),
+                    Text('Giả lập: Người lạ (Cảnh báo đỏ)'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'clear',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, size: 18),
+                    SizedBox(width: 8),
+                    Text('Xóa kết quả quét'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          IconButton(
             icon: const Icon(Icons.settings_ethernet),
             tooltip: 'Cài đặt IP Server',
             onPressed: _showIpConfigDialog,
@@ -182,7 +428,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       ),
       body: Stack(
         children: [
-          // Camera Viewport Simulation
+          // Camera Viewport Simulation / Captured Image Preview
           Center(
             child: Container(
               margin: const EdgeInsets.all(24),
@@ -196,193 +442,207 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                   width: isPresent || isUnknown ? 3.5 : 1.5,
                 ),
               ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Face Guide Oval
-                  Container(
-                    width: 220,
-                    height: 300,
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: borderColor.withOpacity(0.8),
-                        width: 2,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Hiển thị ảnh vừa chụp nếu có
+                    if (_capturedImageBytes != null)
+                      Positioned.fill(
+                        child: Image.memory(
+                          _capturedImageBytes!,
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                      borderRadius: BorderRadius.circular(110),
-                    ),
-                  ),
 
-                  // Scanning Line Animation
-                  if (_isProcessing)
-                    AnimatedBuilder(
-                      animation: _animCtrl,
-                      builder: (context, child) {
-                        return Positioned(
-                          top: 90 + (_animCtrl.value * 280),
-                          child: Container(
-                            width: 240,
-                            height: 2,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withOpacity(0.8),
-                                  blurRadius: 10,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-
-                  // Overlay text
-                  Positioned(
-                    top: 24,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    // Face Guide Oval
+                    Container(
+                      width: 220,
+                      height: 300,
                       decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        _isProcessing
-                            ? 'Đang đối chiếu vector AI InsightFace...'
-                            : 'Căn chỉnh khuôn mặt vào giữa khung',
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        border: Border.all(
+                          color: borderColor.withOpacity(0.8),
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(110),
                       ),
                     ),
-                  ),
 
-                  // Result Sheet (PRESENT)
-                  if (isPresent)
-                    Positioned(
-                      bottom: 16,
-                      left: 16,
-                      right: 16,
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.success),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.check_circle, color: AppColors.success, size: 22),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'ĐIỂM DANH THÀNH CÔNG',
-                                  style: TextStyle(
-                                    color: AppColors.success,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                    // Scanning Line Animation
+                    if (_isProcessing)
+                      AnimatedBuilder(
+                        animation: _animCtrl,
+                        builder: (context, child) {
+                          return Positioned(
+                            top: 90 + (_animCtrl.value * 280),
+                            child: Container(
+                              width: 240,
+                              height: 2,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primary.withOpacity(0.8),
+                                    blurRadius: 10,
+                                    spreadRadius: 2,
                                   ),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  'Khớp: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
-                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                            const Divider(color: Colors.white24, height: 16),
-                            Text(
-                              'Học sinh: ${_lastResult!["name"]}',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                            Text(
-                              'Lớp: ${_lastResult!["class_name"]} • Mã: ${_lastResult!["student_id"]}',
-                              style: const TextStyle(color: Colors.white70, fontSize: 13),
-                            ),
-                            Text(
-                              'Thời gian: ${_lastResult!["checkin_time"] ?? ""}',
-                              style: const TextStyle(color: Colors.white60, fontSize: 11),
-                            ),
-                          ],
+                          );
+                        },
+                      ),
+
+                    // Overlay text
+                    Positioned(
+                      top: 24,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          _isProcessing
+                              ? 'Đang đối chiếu vector AI InsightFace...'
+                              : (_capturedImageBytes != null
+                                  ? 'Ảnh đã chụp • Bấm chụp lại bên dưới'
+                                  : 'Căn chỉnh khuôn mặt vào giữa khung'),
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
                         ),
                       ),
                     ),
 
-                  // Result Sheet (UNKNOWN)
-                  if (isUnknown)
-                    Positioned(
-                      bottom: 16,
-                      left: 16,
-                      right: 16,
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.strangerAlert),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.warning, color: AppColors.strangerAlert, size: 22),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'CẢNH BÁO: KHÔNG NHẬN DIỆN',
-                                  style: TextStyle(
-                                    color: AppColors.strangerAlert,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  'Điểm: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
-                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _lastResult!['message'] ?? 'Khuôn mặt chưa được đăng ký trong danh sách',
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton(
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      side: const BorderSide(color: Colors.white38),
+                    // Result Sheet (PRESENT)
+                    if (isPresent)
+                      Positioned(
+                        bottom: 16,
+                        left: 16,
+                        right: 16,
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.success),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.check_circle, color: AppColors.success, size: 22),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'ĐIỂM DANH THÀNH CÔNG',
+                                    style: TextStyle(
+                                      color: AppColors.success,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
                                     ),
-                                    onPressed: _performFaceCheckin,
-                                    child: const Text('Thử lại'),
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.warning,
-                                      foregroundColor: Colors.black,
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                    },
-                                    child: const Text('Fallback Thủ công', style: TextStyle(fontSize: 12)),
+                                  const Spacer(),
+                                  Text(
+                                    'Khớp: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
+                                    style: const TextStyle(color: Colors.white70, fontSize: 12),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                              const Divider(color: Colors.white24, height: 16),
+                              Text(
+                                'Học sinh: ${_lastResult!["name"]}',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                              ),
+                              Text(
+                                'Lớp: ${_lastResult!["class_name"]} • Mã: ${_lastResult!["student_id"]}',
+                                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                              ),
+                              Text(
+                                'Thời gian: ${_lastResult!["checkin_time"] ?? ""}',
+                                style: const TextStyle(color: Colors.white60, fontSize: 11),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                ],
+
+                    // Result Sheet (UNKNOWN)
+                    if (isUnknown)
+                      Positioned(
+                        bottom: 16,
+                        left: 16,
+                        right: 16,
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.strangerAlert),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.warning, color: AppColors.strangerAlert, size: 22),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'CẢNH BÁO: KHÔNG NHẬN DIỆN',
+                                    style: TextStyle(
+                                      color: AppColors.strangerAlert,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    'Điểm: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
+                                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _lastResult!['message'] ?? 'Khuôn mặt chưa được đăng ký trong danh sách',
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        side: const BorderSide(color: Colors.white38),
+                                      ),
+                                      onPressed: () => _captureAndCheckin(source: ImageSource.camera),
+                                      child: const Text('Thử lại'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.warning,
+                                        foregroundColor: Colors.black,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                      },
+                                      child: const Text('Fallback Thủ công', style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -401,7 +661,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   elevation: 6,
                 ),
-                onPressed: _isProcessing ? null : _performFaceCheckin,
+                onPressed: _isProcessing ? null : () => _captureAndCheckin(source: ImageSource.camera),
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 20,

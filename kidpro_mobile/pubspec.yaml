@@ -27,6 +27,9 @@ dependencies:
   # Image caching
   cached_network_image: ^3.4.1
 
+  # Image Picker (Camera & Gallery)
+  image_picker: ^1.1.2
+
   # QR Code
   qr_flutter: ^4.1.0
 

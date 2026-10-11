@@ -150,6 +150,49 @@ class _LoginScreenState extends State<LoginScreen> {
                               style: TextStyle(fontSize: 16)),
                     ),
                   ),
+
+                  const SizedBox(height: 24),
+                  const Row(
+                    children: [
+                      Expanded(child: Divider()),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          'HOẶC TEST NHANH (KHÔNG CẦN TÀI KHOẢN)',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ),
+                      Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Bypass Teacher Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.school, color: AppColors.primary),
+                      label: const Text('Vào vai trò Giáo viên (Test AI Điểm danh)'),
+                      onPressed: () {
+                        context.read<AuthProvider>().setMockRole(isTeacher: true);
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Bypass Parent Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.family_restroom, color: Colors.deepPurple),
+                      label: const Text('Vào vai trò Phụ huynh'),
+                      onPressed: () {
+                        context.read<AuthProvider>().setMockRole(isTeacher: false);
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),

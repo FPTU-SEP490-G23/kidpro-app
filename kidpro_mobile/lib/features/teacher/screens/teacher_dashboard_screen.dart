@@ -107,8 +107,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           const SizedBox(height: 12),
 
           _TeacherActionCard(
+            title: 'Camera AI Điểm danh (Test)',
+            subtitle: 'Quét nhận diện khuôn mặt kết nối AI Server',
+            icon: Icons.camera_front,
+            color: Colors.deepPurple,
+            onTap: () => context.go('/teacher/face-attendance'),
+          ),
+          const SizedBox(height: 12),
+
+          _TeacherActionCard(
             title: 'Điểm danh buổi sáng',
-            subtitle: 'AI Face Recognition hoặc thủ công 1-chạm',
+            subtitle: 'Danh sách lớp & lưu trạng thái',
             icon: Icons.how_to_reg,
             color: AppColors.primary,
             onTap: () => context.go('/teacher/attendance'),

@@ -31,3 +31,14 @@
      - Flutter Screen: `FaceAttendanceCameraScreen` trong `kidpro_mobile` kèm cấu hình IP LAN linh hoạt, hiệu ứng quét AI, viền Xanh lá / Đỏ cảnh báo, Fallback điểm danh thủ công.
      - Native Android Kotlin (`android_client_demo/`): CameraX 720p, nén JPEG 80% (640px), Retrofit/OkHttp timeout 10s, `usesCleartextTraffic="true"`.
      - Viết tài liệu `ai_backend/README.md` hướng dẫn chi tiết từng bước chạy demo trên mạng Wi-Fi nội bộ.
+
+## 2026-10-11: Cấu hình Bỏ qua Đăng nhập (Bypass Auth) để Test Offline & AI Điểm danh
+- **Task:** Tối ưu luồng truy cập Mobile Client không cần tài khoản DB.
+- **Mô tả:**
+  1. `app_router.dart`: Chuyển `initialLocation` sang `/teacher`, mở quyền truy cập trực tiếp các route mà không bắt buộc đăng nhập khi chưa kết nối database.
+  2. `auth_provider.dart`: Thiết lập tài khoản giả lập mặc định (`GIAO_VIEN`), tự động fallback đăng nhập khi backend DB offline.
+  3. `login_screen.dart`: Bổ sung 2 nút tắt "Vào vai trò Giáo viên" và "Vào vai trò Phụ huynh".
+  4. `teacher_dashboard_screen.dart`: Bổ sung card truy cập trực tiếp "Camera AI Điểm danh (Test)".
+  5. `teacher_provider.dart`: Cung cấp danh sách học sinh mẫu khi offline.
+  6. `face_attendance_camera_screen.dart`: Bổ sung `image_picker` chụp camera thật từ điện thoại, dialog đăng ký khuôn mặt mới trực tiếp từ mobile, kiểm tra kết nối ping server và điểm danh gửi ảnh thực tế lên FastAPI AI Engine.
+

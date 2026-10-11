@@ -20,13 +20,13 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 GoRouter appRouter(AuthProvider auth) => GoRouter(
       navigatorKey: _rootNavigatorKey,
-      initialLocation: '/login',
+      initialLocation: '/teacher',
       refreshListenable: auth,
       redirect: (context, state) {
+        // Cho phép truy cập trực tiếp các route mà không bắt buộc đăng nhập (test mode)
         final loggedIn = auth.status == AuthStatus.authenticated;
         final isLoginRoute = state.matchedLocation == '/login';
 
-        if (!loggedIn && !isLoginRoute) return '/login';
         if (loggedIn && isLoginRoute) {
           return auth.isParent ? '/parent' : '/teacher';
         }
