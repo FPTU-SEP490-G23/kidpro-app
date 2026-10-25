@@ -10,6 +10,10 @@ import 'package:kidpro_mobile/features/parent/screens/leave_request_screen.dart'
 import 'package:kidpro_mobile/features/parent/screens/medication_request_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/chat_list_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/chat_detail_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/emergency_pickup_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/authorized_guardians_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/allergy_profile_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/biometric_purge_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/teacher_dashboard_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/attendance_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/face_attendance_camera_screen.dart';
@@ -60,6 +64,18 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
                 path: 'chat/:threadId',
                 builder: (_, state) => ChatDetailScreen(
                     threadId: state.pathParameters['threadId']!)),
+            GoRoute(
+                path: 'emergency-pickup',
+                builder: (_, __) => const EmergencyPickupScreen()),
+            GoRoute(
+                path: 'guardians',
+                builder: (_, __) => const AuthorizedGuardiansScreen()),
+            GoRoute(
+                path: 'allergies',
+                builder: (_, __) => const AllergyProfileScreen()),
+            GoRoute(
+                path: 'biometric-purge',
+                builder: (_, __) => const BiometricPurgeScreen()),
           ],
         ),
 
