@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
@@ -17,6 +19,7 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _formKey = GlobalKey<FormState>();
+  final ImagePicker _picker = ImagePicker();
 
   final _medicineNameCtrl = TextEditingController();
   final _dosageCtrl = TextEditingController();
@@ -42,12 +45,47 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
     super.dispose();
   }
 
-  void _simulatePickImage() {
-    setState(() {
-      _prescriptionImage = 'https://picsum.photos/400/300';
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Đã chọn ảnh đơn thuốc minh chứng')),
+  Future<void> _pickPrescriptionImage() async {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Chụp ảnh đơn thuốc bằng camera'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final photo = await _picker.pickImage(
+                  source: ImageSource.camera,
+                  maxWidth: 1000,
+                  maxHeight: 1000,
+                  imageQuality: 85,
+                );
+                if (photo != null) {
+                  setState(() => _prescriptionImage = photo.path);
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Chọn ảnh từ thư viện'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final photo = await _picker.pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 1000,
+                  maxHeight: 1000,
+                  imageQuality: 85,
+                );
+                if (photo != null) {
+                  setState(() => _prescriptionImage = photo.path);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -202,7 +240,7 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 8),
             InkWell(
-              onTap: _simulatePickImage,
+              onTap: _pickPrescriptionImage,
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 height: 140,
@@ -218,8 +256,11 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.network(_prescriptionImage!,
-                                fit: BoxFit.cover, width: double.infinity),
+                            child: _prescriptionImage!.startsWith('http')
+                                ? Image.network(_prescriptionImage!,
+                                    fit: BoxFit.cover, width: double.infinity)
+                                : Image.file(File(_prescriptionImage!),
+                                    fit: BoxFit.cover, width: double.infinity),
                           ),
                           Positioned(
                             top: 8,

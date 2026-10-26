@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
@@ -11,6 +13,8 @@ class MedicationAdminScreen extends StatefulWidget {
 }
 
 class _MedicationAdminScreenState extends State<MedicationAdminScreen> {
+  final ImagePicker _picker = ImagePicker();
+
   @override
   void initState() {
     super.initState();
@@ -20,7 +24,7 @@ class _MedicationAdminScreenState extends State<MedicationAdminScreen> {
   }
 
   void _showAdministerDialog(String medicationId, String studentName) {
-    String? capturedPhoto;
+    String? capturedPhotoPath;
     final noteCtrl = TextEditingController();
 
     showDialog(
@@ -39,10 +43,18 @@ class _MedicationAdminScreenState extends State<MedicationAdminScreen> {
                 ),
                 const SizedBox(height: 12),
                 InkWell(
-                  onTap: () {
-                    setDialogState(() {
-                      capturedPhoto = 'https://picsum.photos/400/300';
-                    });
+                  onTap: () async {
+                    final XFile? photo = await _picker.pickImage(
+                      source: ImageSource.camera,
+                      maxWidth: 800,
+                      maxHeight: 800,
+                      imageQuality: 85,
+                    );
+                    if (photo != null) {
+                      setDialogState(() {
+                        capturedPhotoPath = photo.path;
+                      });
+                    }
                   },
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
@@ -53,10 +65,12 @@ class _MedicationAdminScreenState extends State<MedicationAdminScreen> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
-                    child: capturedPhoto != null
+                    child: capturedPhotoPath != null
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(10),
-                            child: Image.network(capturedPhoto!, fit: BoxFit.cover),
+                            child: capturedPhotoPath!.startsWith('http')
+                                ? Image.network(capturedPhotoPath!, fit: BoxFit.cover)
+                                : Image.file(File(capturedPhotoPath!), fit: BoxFit.cover),
                           )
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -91,7 +105,7 @@ class _MedicationAdminScreenState extends State<MedicationAdminScreen> {
                 foregroundColor: Colors.white,
               ),
               onPressed: () async {
-                if (capturedPhoto == null) {
+                if (capturedPhotoPath == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Vui lòng chụp ảnh minh chứng thực tế trước khi xác nhận!'),
@@ -101,15 +115,15 @@ class _MedicationAdminScreenState extends State<MedicationAdminScreen> {
                   return;
                 }
                 Navigator.pop(ctx);
-                final success = await context.read<TeacherProvider>().administerMedication(
+                final resultMsg = await context.read<TeacherProvider>().administerMedication(
                       medicationId,
-                      capturedPhoto!,
+                      capturedPhotoPath!,
                       noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : null,
                     );
-                if (mounted && success) {
+                if (mounted && resultMsg != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã xác nhận cho bé uống thuốc thành công!'),
+                    SnackBar(
+                      content: Text(resultMsg),
                       backgroundColor: AppColors.success,
                     ),
                   );
@@ -164,7 +178,7 @@ class _MedicationAdminScreenState extends State<MedicationAdminScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.between,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
                                   task.studentName,

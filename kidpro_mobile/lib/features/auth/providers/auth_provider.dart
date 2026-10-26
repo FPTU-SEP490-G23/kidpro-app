@@ -10,14 +10,8 @@ enum AuthStatus { unknown, authenticated, unauthenticated }
 class AuthProvider extends ChangeNotifier {
   final Dio _dio = ApiClient().dio;
 
-  AuthStatus _status = AuthStatus.authenticated;
-  UserProfile? _user = const UserProfile(
-    id: 'mock-teacher-1',
-    email: 'giaovien@kidpro.edu.vn',
-    fullName: 'Cô Thu Hương',
-    role: 'GIAO_VIEN',
-    status: 'ACTIVE',
-  );
+  AuthStatus _status = AuthStatus.unauthenticated;
+  UserProfile? _user;
   String? _error;
   bool _loading = false;
 
@@ -25,39 +19,24 @@ class AuthProvider extends ChangeNotifier {
   UserProfile? get user => _user;
   String? get error => _error;
   bool get loading => _loading;
-  bool get isParent => _user?.role == 'PHU_HUYNH';
-  bool get isTeacher => _user?.role == 'GIAO_VIEN';
+  
+  bool get isParent {
+    final r = _user?.role.toUpperCase() ?? '';
+    return r == 'PARENT' || r == 'PHU_HUYNH' || r == 'ROLE_PARENT';
+  }
 
-  /// Thiết lập tài khoản giả lập để test nhanh không cần DB
-  void setMockRole({required bool isTeacher}) {
-    _status = AuthStatus.authenticated;
-    _error = null;
-    _user = isTeacher
-        ? const UserProfile(
-            id: 'mock-teacher-1',
-            email: 'giaovien@kidpro.edu.vn',
-            fullName: 'Cô Thu Hương',
-            role: 'GIAO_VIEN',
-            status: 'ACTIVE',
-          )
-        : const UserProfile(
-            id: 'mock-parent-1',
-            email: 'phuhuynh@kidpro.edu.vn',
-            fullName: 'Nguyễn Văn Ba',
-            role: 'PHU_HUYNH',
-            status: 'ACTIVE',
-          );
-    notifyListeners();
+  bool get isTeacher {
+    final r = _user?.role.toUpperCase() ?? '';
+    return r == 'TEACHER' || r == 'GIAO_VIEN' || r == 'ROLE_TEACHER';
   }
 
   /// Try to restore session from stored token.
   Future<void> tryAutoLogin() async {
     final token = await SecureStorageHelper.getAccessToken();
     if (token == null) {
-      // Mặc định duy trì tài khoản giả lập để test offline không cần login
-      if (_user == null) {
-        setMockRole(isTeacher: true);
-      }
+      _status = AuthStatus.unauthenticated;
+      _user = null;
+      notifyListeners();
       return;
     }
     try {
@@ -65,8 +44,20 @@ class AuthProvider extends ChangeNotifier {
       _user = UserProfile.fromJson(res.data);
       _status = AuthStatus.authenticated;
     } catch (_) {
-      _status = AuthStatus.unauthenticated;
-      await SecureStorageHelper.clearAll();
+      final savedRole = await SecureStorageHelper.getRole();
+      final savedUserId = await SecureStorageHelper.getUserId();
+      if (savedRole != null && savedUserId != null) {
+        _user = UserProfile(
+          id: savedUserId,
+          email: '',
+          role: savedRole,
+          status: 'ACTIVE',
+        );
+        _status = AuthStatus.authenticated;
+      } else {
+        _status = AuthStatus.unauthenticated;
+        await SecureStorageHelper.clearAll();
+      }
     }
     notifyListeners();
   }
@@ -88,18 +79,51 @@ class AuthProvider extends ChangeNotifier {
       await SecureStorageHelper.saveRole(loginResp.role);
       await SecureStorageHelper.saveUserId(loginResp.userId);
 
-      // Fetch full user profile
-      final profileRes = await _dio.get(ApiEndpoints.userMe);
-      _user = UserProfile.fromJson(profileRes.data);
+      // Lưu trữ user profile từ LoginResponse của backend Spring Boot
+      _user = UserProfile(
+        id: loginResp.userId,
+        email: loginResp.email,
+        role: loginResp.role,
+        fullName: loginResp.fullName,
+        status: 'ACTIVE',
+      );
+
+      // Cập nhật thêm nếu endpoint /api/auth/me trả về dữ liệu chi tiết
+      try {
+        final profileRes = await _dio.get(ApiEndpoints.userMe);
+        _user = UserProfile.fromJson(profileRes.data);
+      } catch (_) {
+        // Giữ _user đã trích xuất từ loginResp
+      }
+
       _status = AuthStatus.authenticated;
       _loading = false;
       notifyListeners();
       return true;
     } on DioException catch (e) {
       _loading = false;
-      // Nếu backend chưa chạy, tự động đăng nhập giả lập để tiếp tục test
-      setMockRole(isTeacher: !email.toLowerCase().contains('phuhuynh'));
-      return true;
+      String msg = 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.';
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 401 || statusCode == 400 || statusCode == 403) {
+        msg = 'Tài khoản hoặc mật khẩu không chính xác';
+        final data = e.response?.data;
+        if (data is Map && data['message'] != null) {
+          msg = '${data['message']}';
+        }
+      } else if (e.response?.data is Map && e.response?.data['message'] != null) {
+        msg = '${e.response?.data['message']}';
+      }
+      _error = msg;
+      _status = AuthStatus.unauthenticated;
+      _user = null;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _loading = false;
+      _error = 'Đã có lỗi xảy ra: $e';
+      _status = AuthStatus.unauthenticated;
+      notifyListeners();
+      return false;
     }
   }
 

@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
-import 'package:kidpro_mobile/features/parent/models/parent_models.dart';
 import 'package:kidpro_mobile/features/parent/providers/parent_provider.dart';
 
 class InvoicesScreen extends StatefulWidget {
@@ -21,7 +20,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Default to loading for current student
-      context.read<ParentProvider>().loadInvoices('');
+      context.read<ParentProvider>().loadInvoices();
     });
   }
 
@@ -80,7 +79,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   ),
                 )
               : RefreshIndicator(
-                  onRefresh: () => parentProv.loadInvoices(''),
+                  onRefresh: () => parentProv.loadInvoices(),
                   child: ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: parentProv.invoices.length,
@@ -98,7 +97,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.between,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     invoice.periodLabel.isNotEmpty
@@ -126,7 +125,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                               ),
                               const SizedBox(height: 12),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.between,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text('Tổng tiền:', style: TextStyle(color: Colors.grey)),
                                   Text(
@@ -137,7 +136,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                               ),
                               const SizedBox(height: 6),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.between,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text('Cần thanh toán:', style: TextStyle(color: Colors.grey)),
                                   Text(
