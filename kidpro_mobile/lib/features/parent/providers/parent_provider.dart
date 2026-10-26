@@ -181,9 +181,16 @@ class ParentProvider extends ChangeNotifier {
     try {
       final res = await _dio.get(ApiEndpoints.parentLeaveRequests,
           queryParameters: {'studentId': targetId});
-      _leaveRequests = (res.data as List)
-          .map((e) => LeaveRequest.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final rawData = res.data is Map<String, dynamic> && res.data['data'] != null
+          ? res.data['data']
+          : res.data;
+      if (rawData is List) {
+        _leaveRequests = rawData
+            .map((e) => LeaveRequest.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } else {
+        _leaveRequests = [];
+      }
       _error = null;
     } on DioException catch (e) {
       logError('loadLeaveRequests', e);
