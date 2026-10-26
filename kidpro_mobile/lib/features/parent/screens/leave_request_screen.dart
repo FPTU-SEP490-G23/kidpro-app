@@ -57,6 +57,17 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen>
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final prov = context.read<ParentProvider>();
+    if (prov.selectedStudentId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng chọn học sinh trước khi nộp đơn xin nghỉ.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     // Check cutoff: if start date is today and past 08:00 AM
     final now = DateTime.now();
     final isToday = _startDate.year == now.year &&
@@ -87,7 +98,6 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen>
     }
 
     setState(() => _submitting = true);
-    final prov = context.read<ParentProvider>();
     final success = await prov.submitLeaveRequest(
       LeaveRequest(
         studentId: prov.selectedStudentId,
