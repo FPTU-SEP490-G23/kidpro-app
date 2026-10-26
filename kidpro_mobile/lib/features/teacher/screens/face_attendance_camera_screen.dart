@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -12,10 +13,11 @@ import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
 
 enum LivenessStep {
-  noFace,
-  waitingBlink,
-  eyesClosed,
-  passed,
+  searchingFace, // Bước 1: Đang tìm khuôn mặt
+  faceDetected,  // Bước 2: Đã thấy mặt, kiểm tra mở mắt
+  waitingBlink,  // Bước 3: Mắt đã mở, đang đợi bé chớp mắt
+  eyesClosed,    // Bước 3b: Đang ghi nhận nhịp nhắm mắt
+  passed,        // Bước 4: Chớp mắt thành công -> Xác thực người thật!
 }
 
 class FaceAttendanceCameraScreen extends StatefulWidget {
@@ -41,9 +43,9 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   late FaceDetector _faceDetector;
   bool _isDetecting = false;
 
-  // Liveness Detection State
-  LivenessStep _livenessStep = LivenessStep.noFace;
-  String _statusMessage = 'Vui lòng nhìn vào camera';
+  // Liveness Detection State (4 bước tương tác trực quan)
+  LivenessStep _livenessStep = LivenessStep.searchingFace;
+  String _statusMessage = 'Vui lòng đưa mặt vào giữa khung camera';
   DateTime? _blinkStartTime;
   double? _leftEyeOpen;
   double? _rightEyeOpen;
@@ -55,6 +57,13 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   Uint8List? _capturedImageBytes;
   final ImagePicker _picker = ImagePicker();
 
+  static final Map<DeviceOrientation, int> _orientations = {
+    DeviceOrientation.portraitUp: 0,
+    DeviceOrientation.landscapeLeft: 90,
+    DeviceOrientation.portraitDown: 180,
+    DeviceOrientation.landscapeRight: 270,
+  };
+
   @override
   void initState() {
     super.initState();
@@ -65,16 +74,16 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
 
-    // Khởi tạo ML Kit Face Detector với tính năng phân loại độ mở mắt (Classification)
+    // Khởi tạo ML Kit Face Detector: Bật phân loại mắt (Classification) & minFaceSize 0.15 để bắt mặt nhạy hơn
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
-        enableClassification: true, // Quan trọng: đo tỷ lệ mở của 2 mắt
+        enableClassification: true,
         performanceMode: FaceDetectorMode.fast,
-        minFaceSize: 0.20,
+        minFaceSize: 0.15,
       ),
     );
 
-    // Nạp danh sách học sinh
+    // Nạp danh sách học sinh và khởi tạo camera
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final prov = context.read<TeacherProvider>();
       if (prov.students.isEmpty) {
@@ -139,36 +148,42 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   Future<void> _setupCameraController(CameraDescription camera) async {
     await _stopAndDisposeCamera();
 
-    final controller = CameraController(
+    // Chuẩn format: NV21 cho Android và BGRA8888 cho iOS
+    ImageFormatGroup formatGroup = Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888;
+
+    CameraController controller = CameraController(
       camera,
       ResolutionPreset.medium,
       enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.yuv420,
+      imageFormatGroup: formatGroup,
     );
-
-    _cameraController = controller;
 
     try {
       await controller.initialize();
-      if (!mounted) return;
-
-      setState(() {
-        _isCameraInitialized = true;
-        _isCameraError = false;
-        _statusMessage = 'Bé vui lòng nhìn vào camera';
-      });
-
-      // Bắt đầu luồng phân tích hình ảnh theo thời gian thực (Live Stream)
-      await controller.startImageStream(_processCameraImage);
-    } catch (e) {
-      debugPrint('Error initializing camera controller: $e');
-      if (mounted) {
-        setState(() {
-          _isCameraInitialized = false;
-          _isCameraError = true;
-        });
-      }
+    } catch (_) {
+      // Fallback nếu máy không hỗ trợ NV21 trực tiếp
+      controller = CameraController(
+        camera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.yuv420,
+      );
+      await controller.initialize();
     }
+
+    _cameraController = controller;
+
+    if (!mounted) return;
+
+    setState(() {
+      _isCameraInitialized = true;
+      _isCameraError = false;
+      _livenessStep = LivenessStep.searchingFace;
+      _statusMessage = 'Bé vui lòng nhìn vào giữa khung camera';
+    });
+
+    // Bắt đầu luồng phân tích hình ảnh theo thời gian thực (Live Stream 30 FPS)
+    await controller.startImageStream(_processCameraImage);
   }
 
   /// Đổi giữa Camera Trước và Sau
@@ -177,7 +192,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     _selectedCameraIndex = (_selectedCameraIndex + 1) % _cameras.length;
     setState(() {
       _isCameraInitialized = false;
-      _livenessStep = LivenessStep.noFace;
+      _livenessStep = LivenessStep.searchingFace;
     });
     await _setupCameraController(_cameras[_selectedCameraIndex]);
   }
@@ -204,13 +219,89 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     }
   }
 
-  /// Thuật toán phát hiện chớp mắt tự nhiên (Liveness Check)
+  /// Chuyển đổi YUV420 3-planes sang NV21 1-plane chuẩn trên Android
+  Uint8List _yuv420ToNv21(CameraImage image) {
+    if (image.planes.length == 1) {
+      return image.planes.first.bytes;
+    }
+
+    final int width = image.width;
+    final int height = image.height;
+    final int ySize = width * height;
+    final int uvSize = width * height ~/ 2;
+    final Uint8List nv21 = Uint8List(ySize + uvSize);
+
+    // 1. Sao chép Plane Y
+    final Uint8List yPlane = image.planes[0].bytes;
+    nv21.setRange(0, ySize, yPlane);
+
+    // 2. Trộn U và V xen kẽ (V trước, U sau) cho chuẩn NV21
+    if (image.planes.length >= 3) {
+      final Uint8List uPlane = image.planes[1].bytes;
+      final Uint8List vPlane = image.planes[2].bytes;
+      final int uvRowStride = image.planes[1].bytesPerRow;
+      final int uvPixelStride = image.planes[1].bytesPerPixel ?? 2;
+
+      int uvIndex = ySize;
+      final int halfHeight = height ~/ 2;
+      final int halfWidth = width ~/ 2;
+
+      for (int row = 0; row < halfHeight; row++) {
+        for (int col = 0; col < halfWidth; col++) {
+          final int pIndex = row * uvRowStride + col * uvPixelStride;
+          if (pIndex < vPlane.length && pIndex < uPlane.length && uvIndex + 1 < nv21.length) {
+            nv21[uvIndex++] = vPlane[pIndex];
+            nv21[uvIndex++] = uPlane[pIndex];
+          }
+        }
+      }
+    }
+
+    return nv21;
+  }
+
+  /// Chuyển đổi CameraImage sang InputImage với bù góc quay cảm biến chính xác
+  InputImage? _inputImageFromCameraImage(CameraImage image) {
+    if (_cameraController == null) return null;
+    final camera = _cameras[_selectedCameraIndex];
+    final sensorOrientation = camera.sensorOrientation;
+
+    // Tính toán góc bù xoay theo hướng thiết bị và loại camera (Trước/Sau)
+    InputImageRotation? rotation;
+    if (Platform.isIOS) {
+      rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
+    } else if (Platform.isAndroid) {
+      var compensation = _orientations[_cameraController!.value.deviceOrientation] ?? 0;
+      if (camera.lensDirection == CameraLensDirection.front) {
+        compensation = (sensorOrientation + compensation) % 360;
+      } else {
+        compensation = (sensorOrientation - compensation + 360) % 360;
+      }
+      rotation = InputImageRotationValue.fromRawValue(compensation);
+    }
+    rotation ??= InputImageRotationValue.fromRawValue(sensorOrientation);
+    if (rotation == null) return null;
+
+    final bytes = _yuv420ToNv21(image);
+
+    return InputImage.fromBytes(
+      bytes: bytes,
+      metadata: InputImageMetadata(
+        size: Size(image.width.toDouble(), image.height.toDouble()),
+        rotation: rotation,
+        format: Platform.isAndroid ? InputImageFormat.nv21 : InputImageFormat.bgra8888,
+        bytesPerRow: image.planes.first.bytesPerRow,
+      ),
+    );
+  }
+
+  /// Thuật toán 4 bước kiểm tra người thật (Liveness Check)
   void _analyzeLiveness(List<Face> faces) {
     if (faces.isEmpty) {
-      if (_livenessStep != LivenessStep.noFace) {
+      if (_livenessStep != LivenessStep.searchingFace) {
         setState(() {
-          _livenessStep = LivenessStep.noFace;
-          _statusMessage = 'Vui lòng nhìn vào khung camera';
+          _livenessStep = LivenessStep.searchingFace;
+          _statusMessage = 'Vui lòng đưa mặt vào giữa khung camera';
           _leftEyeOpen = null;
           _rightEyeOpen = null;
         });
@@ -218,7 +309,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       return;
     }
 
-    // Chọn khuôn mặt chiếm diện tích lớn nhất (trọng tâm bé đứng trước camera)
+    // Chọn khuôn mặt lớn nhất (trung tâm bé trước camera)
     final face = faces.reduce((curr, next) =>
         (curr.boundingBox.width * curr.boundingBox.height) >
                 (next.boundingBox.width * next.boundingBox.height)
@@ -233,18 +324,33 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       _rightEyeOpen = right;
     });
 
-    if (left == null || right == null) return;
+    if (left == null || right == null) {
+      if (_livenessStep == LivenessStep.searchingFace) {
+        setState(() {
+          _livenessStep = LivenessStep.faceDetected;
+          _statusMessage = 'Đã thấy khuôn mặt, đang định vị mắt...';
+        });
+      }
+      return;
+    }
 
-    // Ngưỡng: Mắt mở (> 65%), Mắt nhắm (< 25%)
-    final bool areEyesOpen = left > 0.65 && right > 0.65;
-    final bool areEyesClosed = left < 0.25 && right < 0.25;
+    // Tỷ lệ mở mắt trung bình
+    final double avgEye = (left + right) / 2.0;
+    final bool areEyesOpen = avgEye > 0.55;
+    final bool areEyesClosed = avgEye < 0.35 || left < 0.30 || right < 0.30;
 
     switch (_livenessStep) {
-      case LivenessStep.noFace:
+      case LivenessStep.searchingFace:
+      case LivenessStep.faceDetected:
         if (areEyesOpen) {
           setState(() {
             _livenessStep = LivenessStep.waitingBlink;
             _statusMessage = 'Bé hãy chớp mắt nhẹ một cái nhé! 😉';
+          });
+        } else {
+          setState(() {
+            _livenessStep = LivenessStep.faceDetected;
+            _statusMessage = 'Bé vui lòng mở to mắt nhìn vào camera';
           });
         }
         break;
@@ -254,27 +360,25 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
           _blinkStartTime = DateTime.now();
           setState(() {
             _livenessStep = LivenessStep.eyesClosed;
-            _statusMessage = 'Đang nhận diện nhịp chớp mắt...';
+            _statusMessage = 'Đang nhận diện nhịp nhắm mắt...';
           });
         }
         break;
 
       case LivenessStep.eyesClosed:
         if (areEyesOpen) {
-          // Đo khoảng thời gian nhắm mắt (1 nhịp chớp tự nhiên: 100ms - 1500ms)
+          // Đo thời gian chớp mắt tự nhiên (80ms - 1600ms)
           final durationMs = _blinkStartTime != null
               ? DateTime.now().difference(_blinkStartTime!).inMilliseconds
               : 0;
 
-          if (durationMs >= 100 && durationMs <= 1500) {
-            // Xác nhận Liveness PASSED!
+          if (durationMs >= 80 && durationMs <= 1600) {
             setState(() {
               _livenessStep = LivenessStep.passed;
-              _statusMessage = '✅ Đã xác thực người thật! Đang nhận diện...';
+              _statusMessage = '✅ Đã xác thực người thật! Đang đối chiếu AI...';
             });
             _onLivenessPassed();
           } else {
-            // Nhắm mắt quá lâu hoặc giật lag -> Chờ nhịp chớp tiếp theo
             setState(() {
               _livenessStep = LivenessStep.waitingBlink;
               _statusMessage = 'Bé hãy chớp mắt tự nhiên nhé!';
@@ -288,14 +392,13 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     }
   }
 
-  /// Khi đã chớp mắt người thật -> Tự động chụp frame rõ nét và gửi lên AI Server
+  /// Khi đã chớp mắt người thật -> Tự động chụp và gửi lên AI Server
   Future<void> _onLivenessPassed() async {
     HapticFeedback.heavyImpact();
     setState(() => _isProcessing = true);
 
     try {
       if (_cameraController != null && _cameraController!.value.isInitialized) {
-        // Tạm dừng image stream trước khi chụp ảnh để tránh xung đột phần cứng
         if (_cameraController!.value.isStreamingImages) {
           await _cameraController!.stopImageStream();
         }
@@ -399,7 +502,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     setState(() {
       _lastResult = null;
       _capturedImageBytes = null;
-      _livenessStep = LivenessStep.noFace;
+      _livenessStep = LivenessStep.searchingFace;
       _statusMessage = 'Bé vui lòng nhìn vào camera';
       _isProcessing = false;
     });
@@ -413,36 +516,6 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     } catch (e) {
       debugPrint('Error restarting stream: $e');
     }
-  }
-
-  /// Chuyển đổi CameraImage sang InputImage cho Google ML Kit
-  InputImage? _inputImageFromCameraImage(CameraImage image) {
-    if (_cameraController == null) return null;
-    final camera = _cameras[_selectedCameraIndex];
-    final sensorOrientation = camera.sensorOrientation;
-
-    final rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
-    if (rotation == null) return null;
-
-    final format = InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
-
-    if (image.planes.isEmpty) return null;
-
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
-    }
-    final bytes = allBytes.done().buffer.asUint8List();
-
-    return InputImage.fromBytes(
-      bytes: bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: rotation,
-        format: format,
-        bytesPerRow: image.planes.first.bytesPerRow,
-      ),
-    );
   }
 
   /// Cài đặt IP Server
@@ -536,7 +609,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     }
   }
 
-  /// Đăng ký khuôn mặt mới
+  /// Đăng ký học sinh mới
   void _showRegisterFaceDialog() {
     final prov = context.read<TeacherProvider>();
     final students = prov.students;
@@ -692,15 +765,151 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     );
   }
 
+  /// Widget hiển thị 4 bước kiểm tra người thật tương tác trực quan
+  Widget _buildLivenessStepper() {
+    final bool step1Done = _livenessStep != LivenessStep.searchingFace;
+    final bool step2Done = _livenessStep == LivenessStep.waitingBlink ||
+        _livenessStep == LivenessStep.eyesClosed ||
+        _livenessStep == LivenessStep.passed;
+    final bool step3Done = _livenessStep == LivenessStep.eyesClosed || _livenessStep == LivenessStep.passed;
+    final bool step4Done = _livenessStep == LivenessStep.passed;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xEE111827),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStepItem(1, 'Tìm mặt', step1Done, _livenessStep == LivenessStep.searchingFace),
+              _buildStepArrow(),
+              _buildStepItem(2, 'Mở mắt', step2Done, _livenessStep == LivenessStep.faceDetected),
+              _buildStepArrow(),
+              _buildStepItem(3, 'Chớp mắt', step3Done, _livenessStep == LivenessStep.waitingBlink || _livenessStep == LivenessStep.eyesClosed),
+              _buildStepArrow(),
+              _buildStepItem(4, 'Xác thực', step4Done, _livenessStep == LivenessStep.passed),
+            ],
+          ),
+          if (_leftEyeOpen != null && _rightEyeOpen != null && _lastResult == null) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildEyeProbChip('Mắt Trái', _leftEyeOpen!),
+                const SizedBox(width: 10),
+                _buildEyeProbChip('Mắt Phải', _rightEyeOpen!),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepItem(int stepNumber, String title, bool isDone, bool isActive) {
+    Color color = Colors.white38;
+    if (isDone) {
+      color = AppColors.success;
+    } else if (isActive) {
+      color = Colors.lightBlueAccent;
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isDone
+                ? AppColors.success
+                : (isActive ? Colors.lightBlueAccent.withValues(alpha: 0.25) : Colors.white10),
+            border: Border.all(color: color, width: isActive ? 2 : 1),
+          ),
+          child: Center(
+            child: isDone
+                ? const Icon(Icons.check, size: 16, color: Colors.white)
+                : Text(
+                    '$stepNumber',
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          title,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: isActive || isDone ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepArrow() {
+    return const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.white24);
+  }
+
+  Widget _buildEyeProbChip(String label, double prob) {
+    final bool isOpen = prob > 0.55;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.black45,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isOpen ? Colors.greenAccent : Colors.orangeAccent,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isOpen ? Icons.remove_red_eye : Icons.remove_red_eye_outlined,
+            size: 13,
+            color: isOpen ? Colors.greenAccent : Colors.orangeAccent,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$label: ${(prob * 100).toInt()}%',
+            style: TextStyle(
+              color: isOpen ? Colors.greenAccent : Colors.orangeAccent,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = _lastResult?['status'];
     final isPresent = status == 'PRESENT';
     final isUnknown = status == 'UNKNOWN';
 
-    // Viền đổi màu theo trạng thái Liveness
-    Color borderColor = Colors.white54;
-    if (_livenessStep == LivenessStep.waitingBlink) {
+    // Viền khung tương tác đổi màu theo 4 bước
+    Color borderColor = Colors.white38;
+    if (_livenessStep == LivenessStep.faceDetected) {
+      borderColor = Colors.cyanAccent;
+    } else if (_livenessStep == LivenessStep.waitingBlink) {
       borderColor = Colors.lightBlueAccent;
     } else if (_livenessStep == LivenessStep.eyesClosed) {
       borderColor = Colors.amberAccent;
@@ -740,14 +949,15 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
           ),
         ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          // 1. Live Camera Viewport hoặc Preview
-          Center(
+          // 1. THANH 4 BƯỚC TƯƠNG TÁC TRỰC QUAN (Hiển thị rõ ràng trạng thái)
+          _buildLivenessStepper(),
+
+          // 2. LIVE CAMERA VIEWPORT & KHUNG OVAL TƯƠNG TÁC ĐỔI MÀU
+          Expanded(
             child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              height: 520,
-              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.grey.shade900,
                 borderRadius: BorderRadius.circular(24),
@@ -761,7 +971,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Hiển thị Camera Controller nếu sẵn sàng
+                    // Hiển thị Camera Live Stream
                     if (_isCameraInitialized && _cameraController != null && _capturedImageBytes == null)
                       SizedBox.expand(
                         child: FittedBox(
@@ -781,7 +991,6 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                         ),
                       )
                     else
-                      // Fallback UI nếu không có camera
                       Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -799,26 +1008,26 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                         ],
                       ),
 
-                    // Khung Oval định vị mặt bé
+                    // Khung Oval định vị mặt bé (Tự động đổi màu theo 4 bước)
                     Container(
                       width: 220,
-                      height: 290,
+                      height: 280,
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: borderColor.withValues(alpha: 0.85),
-                          width: 2.5,
+                          color: borderColor.withValues(alpha: 0.9),
+                          width: 3.0,
                         ),
                         borderRadius: BorderRadius.circular(110),
                       ),
                     ),
 
-                    // Hiệu ứng Quét Scanner
+                    // Hiệu ứng Quét Scanner khi đang xử lý
                     if (_isProcessing)
                       AnimatedBuilder(
                         animation: _animCtrl,
                         builder: (context, child) {
                           return Positioned(
-                            top: 100 + (_animCtrl.value * 260),
+                            top: 80 + (_animCtrl.value * 250),
                             child: Container(
                               width: 240,
                               height: 3,
@@ -837,90 +1046,48 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                         },
                       ),
 
-                    // Floating Header: Trạng thái chớp mắt & Tỷ lệ mở mắt
+                    // Hướng dẫn trạng thái dạng Badge động
                     Positioned(
-                      top: 16,
-                      left: 16,
-                      right: 16,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.black87,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: borderColor.withValues(alpha: 0.5)),
+                      top: 14,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: Colors.black87,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: borderColor.withValues(alpha: 0.7)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _livenessStep == LivenessStep.passed
+                                  ? Icons.verified
+                                  : (_livenessStep == LivenessStep.eyesClosed
+                                      ? Icons.remove_red_eye_outlined
+                                      : Icons.face),
+                              color: borderColor,
+                              size: 16,
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _livenessStep == LivenessStep.passed
-                                      ? Icons.verified
-                                      : (_livenessStep == LivenessStep.eyesClosed
-                                          ? Icons.remove_red_eye_outlined
-                                          : Icons.remove_red_eye),
-                                  color: borderColor,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    _statusMessage,
-                                    style: TextStyle(
-                                      color: borderColor,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Live Eye Open Probability Bars (Thước đo độ mở mắt trực tiếp)
-                          if (_leftEyeOpen != null && _rightEyeOpen != null && _lastResult == null) ...[
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Trái: ${(_leftEyeOpen! * 100).toInt()}%',
-                                    style: TextStyle(
-                                      color: _leftEyeOpen! > 0.65 ? Colors.greenAccent : Colors.orangeAccent,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Phải: ${(_rightEyeOpen! * 100).toInt()}%',
-                                    style: TextStyle(
-                                      color: _rightEyeOpen! > 0.65 ? Colors.greenAccent : Colors.orangeAccent,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
+                            const SizedBox(width: 8),
+                            Text(
+                              _statusMessage,
+                              style: TextStyle(
+                                color: borderColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
-                        ],
+                        ),
                       ),
                     ),
 
-                    // KẾT QUẢ THÀNH CÔNG (PRESENT)
+                    // RESULT SHEET (PRESENT - ĐIỂM DANH THÀNH CÔNG)
                     if (isPresent)
                       Positioned(
-                        bottom: 14,
-                        left: 14,
-                        right: 14,
+                        bottom: 12,
+                        left: 12,
+                        right: 12,
                         child: Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
@@ -987,7 +1154,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 10),
                               SizedBox(
                                 width: double.infinity,
                                 height: 38,
@@ -1007,12 +1174,12 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                         ),
                       ),
 
-                    // KẾT QUẢ CẢNH BÁO (UNKNOWN)
+                    // RESULT SHEET (UNKNOWN - KHÔNG NHẬN DIỆN ĐƯỢC)
                     if (isUnknown)
                       Positioned(
-                        bottom: 14,
-                        left: 14,
-                        right: 14,
+                        bottom: 12,
+                        left: 12,
+                        right: 12,
                         child: Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
@@ -1048,7 +1215,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                                 _lastResult!['message'] ?? 'Khuôn mặt chưa được đăng ký trong danh sách',
                                 style: const TextStyle(color: Colors.white70, fontSize: 12),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 10),
                               Row(
                                 children: [
                                   Expanded(
@@ -1084,20 +1251,18 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
             ),
           ),
 
-          // Nút chụp thủ công phía dưới (dự phòng nếu không dùng tự động chớp mắt)
+          // 3. NÚT CHỤP THỦ CÔNG DỰ PHÒNG Ở DƯỚI CÙNG
           if (_lastResult == null)
-            Positioned(
-              bottom: 24,
-              left: 24,
-              right: 24,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
               child: SizedBox(
-                height: 52,
+                width: double.infinity,
+                height: 48,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 6,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: _isProcessing ? null : () => _manualCaptureAndCheckin(source: ImageSource.camera),
                   icon: _isProcessing
