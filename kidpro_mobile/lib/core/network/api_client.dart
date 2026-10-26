@@ -11,7 +11,7 @@ class ApiClient {
     dio = Dio(BaseOptions(
       // ponytail: hardcoded localhost, swap via --dart-define=BASE_URL=... for staging/prod
       baseUrl: const String.fromEnvironment('BASE_URL',
-          defaultValue: 'http://10.0.2.2:8080'),
+          defaultValue: 'http://127.0.0.1:8080'),
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
