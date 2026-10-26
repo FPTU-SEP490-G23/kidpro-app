@@ -17,8 +17,8 @@ class FaceAttendanceCameraScreen extends StatefulWidget {
 
 class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     with SingleTickerProviderStateMixin {
-  // Configurable AI server URL (change to your laptop LAN IP, e.g. http://192.168.1.15:8000)
-  String _serverBaseUrl = 'http://192.168.1.15:8000';
+  // Configurable AI server URL (USB adb reverse or LAN IP)
+  String _serverBaseUrl = 'http://127.0.0.1:8000';
   final _urlCtrl = TextEditingController();
 
   late AnimationController _animCtrl;
@@ -61,7 +61,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Nhập IP LAN của Laptop đang chạy main.py (đảm bảo điện thoại và laptop kết nối chung Wi-Fi):',
+              'Chọn USB (cắm cáp) hoặc Wi-Fi LAN kết nối đến Python AI backend:',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 12),
@@ -69,7 +69,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
               controller: _urlCtrl,
               decoration: const InputDecoration(
                 labelText: 'AI Backend Base URL',
-                hintText: 'http://192.168.1.xxx:8000',
+                hintText: 'http://127.0.0.1:8000 hoặc http://192.168.10.125:8000',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -77,6 +77,14 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
             Wrap(
               spacing: 6,
               children: [
+                ActionChip(
+                  label: const Text('USB Cáp (127.0.0.1:8000)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _urlCtrl.text = 'http://127.0.0.1:8000',
+                ),
+                ActionChip(
+                  label: const Text('Wi-Fi LAN (192.168.10.125)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _urlCtrl.text = 'http://192.168.10.125:8000',
+                ),
                 ActionChip(
                   label: const Text('10.0.2.2 (Emulator)', style: TextStyle(fontSize: 11)),
                   onPressed: () => _urlCtrl.text = 'http://10.0.2.2:8000',

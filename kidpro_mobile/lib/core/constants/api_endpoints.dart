@@ -4,6 +4,7 @@ class ApiEndpoints {
 
   // Auth
   static const login = '/api/auth/login';
+  static const googleLogin = '/api/auth/google';
   static const register = '/api/auth/register';
   static const refreshToken = '/api/auth/refresh-token';
   static const userMe = '/api/auth/me';

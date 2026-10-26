@@ -36,6 +36,20 @@ class SecureStorageHelper {
   static Future<String?> getUserId() =>
       _storage.read(key: _userIdKey);
 
+  // Custom Base URL (IP/Host)
+  static const _baseUrlKey = 'custom_base_url';
+  static Future<void> saveCustomBaseUrl(String url) =>
+      _storage.write(key: _baseUrlKey, value: url);
+
+  static Future<String?> getCustomBaseUrl() =>
+      _storage.read(key: _baseUrlKey);
+
   // Clear all on logout
-  static Future<void> clearAll() => _storage.deleteAll();
+  static Future<void> clearAll() async {
+    final customUrl = await getCustomBaseUrl();
+    await _storage.deleteAll();
+    if (customUrl != null) {
+      await saveCustomBaseUrl(customUrl); // Preserve server IP across logouts
+    }
+  }
 }
