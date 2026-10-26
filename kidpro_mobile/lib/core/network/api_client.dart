@@ -12,7 +12,7 @@ class ApiClient {
   ApiClient._() {
     dio = Dio(BaseOptions(
       baseUrl: const String.fromEnvironment('BASE_URL',
-          defaultValue: 'http://127.0.0.1:8080'),
+          defaultValue: 'http://192.168.10.125:8080'),
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
