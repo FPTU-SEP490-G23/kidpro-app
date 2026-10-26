@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:kidpro_mobile/core/storage/secure_storage_helper.dart';
 import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
@@ -7,11 +8,16 @@ class ApiClient {
   static ApiClient? _instance;
   late final Dio dio;
 
+  static String get defaultBaseUrl {
+    const envUrl = String.fromEnvironment('BASE_URL');
+    if (envUrl.isNotEmpty) return envUrl;
+    if (kIsWeb) return 'http://localhost:8080';
+    return 'http://192.168.1.15:8080';
+  }
+
   ApiClient._() {
     dio = Dio(BaseOptions(
-      // ponytail: hardcoded localhost, swap via --dart-define=BASE_URL=... for staging/prod
-      baseUrl: const String.fromEnvironment('BASE_URL',
-          defaultValue: 'http://10.0.2.2:8080'),
+      baseUrl: defaultBaseUrl,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
@@ -20,6 +26,11 @@ class ApiClient {
   }
 
   factory ApiClient() => _instance ??= ApiClient._();
+
+  /// Cập nhật dynamically Base URL (ví dụ khi kết nối với IP máy thật)
+  void updateBaseUrl(String newUrl) {
+    dio.options.baseUrl = newUrl;
+  }
 }
 
 /// Injects JWT Bearer token into every request.
