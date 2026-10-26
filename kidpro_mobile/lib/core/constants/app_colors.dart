@@ -3,16 +3,17 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // Brand
-  static const primary = Color(0xFF6366F1);     // Indigo 500
-  static const primaryDark = Color(0xFF4F46E5);  // Indigo 600
-  static const accent = Color(0xFF818CF8);        // Indigo 400
+  // KidPro Brand Colors
+  static const primary = Color(0xFF275A4E);       // Forest Green
+  static const primaryDark = Color(0xFF1E4D40);   // Deep Green
+  static const accent = Color(0xFFE5A93C);        // Warm Gold
+  static const highlight = Color(0xFF78C2AD);     // Mint Green
 
   // Status
   static const success = Color(0xFF10B981);
   static const warning = Color(0xFFF59E0B);
   static const error = Color(0xFFEF4444);
-  static const info = Color(0xFF3B82F6);
+  static const info = Color(0xFF2563EB);
 
   // Attendance
   static const present = Color(0xFF10B981);
@@ -23,9 +24,9 @@ class AppColors {
   static const strangerAlert = Color(0xFFDC2626);
 
   // Background
-  static const scaffoldLight = Color(0xFFF8FAFC);
-  static const scaffoldDark = Color(0xFF0B0F19);
-  static const cardDark = Color(0xFF111827);
+  static const scaffoldLight = Color(0xFFF4F7F5);
+  static const scaffoldDark = Color(0xFF0F172A);
+  static const cardDark = Color(0xFF1E293B);
 }
 
 class AppTheme {

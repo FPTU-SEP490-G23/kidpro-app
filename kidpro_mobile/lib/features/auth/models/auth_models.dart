@@ -15,6 +15,7 @@ class LoginResponse {
   final String userId;
   final String email;
   final String role;
+  final String? fullName;
 
   const LoginResponse({
     required this.token,
@@ -22,14 +23,16 @@ class LoginResponse {
     required this.userId,
     required this.email,
     required this.role,
+    this.fullName,
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) => LoginResponse(
         token: json['token'] as String,
         type: json['type'] as String? ?? 'Bearer',
-        userId: json['userId'] as String,
-        email: json['email'] as String,
-        role: json['role'] as String,
+        userId: (json['userId'] ?? json['id'] ?? '') as String,
+        email: (json['email'] ?? '') as String,
+        role: (json['role'] ?? '') as String,
+        fullName: json['fullName'] as String?,
       );
 }
 
@@ -52,11 +55,11 @@ class UserProfile {
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
-        id: json['id'] as String,
-        email: json['email'] as String,
-        role: json['role'] as String,
+        id: (json['userId'] ?? json['id'] ?? '') as String,
+        email: (json['email'] ?? '') as String,
+        role: (json['role'] ?? '') as String,
         fullName: json['fullName'] as String?,
         phone: json['phone'] as String?,
-        status: json['status'] as String,
+        status: (json['status'] ?? 'ACTIVE') as String,
       );
 }

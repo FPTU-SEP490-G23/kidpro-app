@@ -18,7 +18,6 @@ class _BiometricPurgeScreenState extends State<BiometricPurgeScreen> {
 
   int _step = 1; // 1: Info & Request OTP, 2: Enter OTP, 3: Completed Certificate
   bool _submitting = false;
-  String? _demoOtp;
 
   @override
   void dispose() {
@@ -30,19 +29,18 @@ class _BiometricPurgeScreenState extends State<BiometricPurgeScreen> {
   Future<void> _handleRequestOtp() async {
     setState(() => _submitting = true);
     final prov = context.read<ParentProvider>();
-    final otp = await prov.requestPurgeOtp();
+    await prov.requestPurgeOtp();
     setState(() {
       _submitting = false;
-      _demoOtp = otp;
       _step = 2;
     });
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Mã OTP xác thực đã được gửi: $otp'),
+        const SnackBar(
+          content: Text('Mã OTP xác thực đã được gửi tới số điện thoại phụ huynh'),
           backgroundColor: AppColors.info,
-          duration: const Duration(seconds: 6),
+          duration: Duration(seconds: 4),
         ),
       );
     }
@@ -231,21 +229,6 @@ class _BiometricPurgeScreenState extends State<BiometricPurgeScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey.shade700, fontSize: 14, height: 1.4),
           ),
-          if (_demoOtp != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: Text(
-                'Mã OTP thử nghiệm: $_demoOtp',
-                style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
           const SizedBox(height: 24),
 
           TextFormField(

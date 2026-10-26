@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
+import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
+import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
 
 class FaceAttendanceCameraScreen extends StatefulWidget {
   const FaceAttendanceCameraScreen({super.key});
@@ -32,6 +35,13 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final prov = context.read<TeacherProvider>();
+      if (prov.students.isEmpty) {
+        prov.loadStudents(prov.currentClassId);
+      }
+    });
   }
 
   @override
@@ -188,9 +198,10 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
 
   /// Hộp thoại thêm / đăng ký khuôn mặt trực tiếp từ điện thoại
   void _showRegisterFaceDialog() {
-    final idCtrl = TextEditingController(text: 'HS001');
-    final nameCtrl = TextEditingController(text: 'Tên của bạn');
-    final classCtrl = TextEditingController(text: 'Mầm 1');
+    final prov = context.read<TeacherProvider>();
+    final students = prov.students;
+    TeacherStudent? selectedStudent = students.isNotEmpty ? students.first : null;
+    final classCtrl = TextEditingController(text: prov.currentClassName);
     Uint8List? regPhotoBytes;
 
     showDialog(
@@ -201,26 +212,40 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
             children: [
               Icon(Icons.face_retouching_natural, color: AppColors.primary),
               SizedBox(width: 8),
-              Text('Đăng ký khuôn mặt mới', style: TextStyle(fontSize: 17)),
+              Text('Đăng ký khuôn mặt AI', style: TextStyle(fontSize: 17)),
             ],
           ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
-                  controller: idCtrl,
-                  decoration: const InputDecoration(labelText: 'Mã học sinh (ID)', isDense: true),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Họ và tên', isDense: true),
-                ),
-                const SizedBox(height: 8),
+                if (students.isNotEmpty) ...[
+                  const Text('Chọn học sinh từ cơ sở dữ liệu:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<TeacherStudent>(
+                    initialValue: selectedStudent,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: students.map((s) => DropdownMenuItem(
+                      value: s,
+                      child: Text(
+                        '${s.fullName} (${s.studentCode ?? "Chưa có mã"})',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )).toList(),
+                    onChanged: (val) => setDialogState(() => selectedStudent = val),
+                  ),
+                ] else
+                  const Text('Chưa có danh sách học sinh. Vui lòng tải dữ liệu lớp học trước.', style: TextStyle(color: Colors.red)),
+                const SizedBox(height: 12),
                 TextField(
                   controller: classCtrl,
-                  decoration: const InputDecoration(labelText: 'Lớp học', isDense: true),
+                  readOnly: true,
+                  decoration: const InputDecoration(labelText: 'Lớp học phụ trách', isDense: true, border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 14),
 
@@ -256,7 +281,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                             children: [
                               Icon(Icons.camera_alt, color: Colors.white70, size: 36),
                               SizedBox(height: 6),
-                              Text('Bấm để chụp ảnh chân dung bạn', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              Text('Bấm để chụp ảnh chân dung thực tế', style: TextStyle(color: Colors.white70, fontSize: 12)),
                             ],
                           ),
                   ),
@@ -271,9 +296,15 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
             ),
             ElevatedButton(
               onPressed: () async {
+                if (selectedStudent == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Vui lòng chọn học sinh từ danh sách!')),
+                  );
+                  return;
+                }
                 if (regPhotoBytes == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Vui lòng chụp ảnh chân dung trước!')),
+                    const SnackBar(content: Text('Vui lòng chụp ảnh chân dung thực tế trước!')),
                   );
                   return;
                 }
@@ -284,9 +315,9 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                 try {
                   final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
                   final formData = FormData.fromMap({
-                    'student_id': idCtrl.text.trim(),
-                    'name': nameCtrl.text.trim(),
-                    'class_name': classCtrl.text.trim(),
+                    'student_id': selectedStudent!.id,
+                    'name': selectedStudent!.fullName,
+                    'class_name': prov.currentClassName,
                     'file': MultipartFile.fromBytes(regPhotoBytes!, filename: 'register.jpg'),
                   });
 
@@ -339,91 +370,31 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
         title: const Text('AI Face Attendance', style: TextStyle(fontSize: 16)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.photo_library),
+            tooltip: 'Chọn ảnh từ thư viện',
+            onPressed: () => _captureAndCheckin(source: ImageSource.gallery),
+          ),
+          IconButton(
             icon: const Icon(Icons.person_add_alt_1),
             tooltip: 'Đăng ký khuôn mặt mới',
             onPressed: _showRegisterFaceDialog,
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.science_outlined),
-            tooltip: 'Giả lập kết quả AI (Test giao diện)',
-            onSelected: (val) {
-              if (val == 'gallery') {
-                _captureAndCheckin(source: ImageSource.gallery);
-              } else if (val == 'present') {
-                setState(() {
-                  _lastResult = {
-                    'status': 'PRESENT',
-                    'student_id': 'HS001',
-                    'name': 'Bé Nguyễn Minh An',
-                    'class_name': 'Mầm 1',
-                    'confidence_score': 0.885,
-                    'checkin_time': '07:45:12 - Hôm nay',
-                  };
-                });
-              } else if (val == 'unknown') {
-                setState(() {
-                  _lastResult = {
-                    'status': 'UNKNOWN',
-                    'confidence_score': 0.412,
-                    'message': 'Không nhận diện được khuôn mặt (Độ khớp thấp hơn ngưỡng 0.65)',
-                  };
-                });
-              } else if (val == 'clear') {
+          IconButton(
+            icon: const Icon(Icons.settings_ethernet),
+            tooltip: 'Cài đặt IP Server AI',
+            onPressed: _showIpConfigDialog,
+          ),
+          if (_lastResult != null)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Xóa kết quả quét',
+              onPressed: () {
                 setState(() {
                   _lastResult = null;
                   _capturedImageBytes = null;
                 });
-              }
-            },
-            itemBuilder: (ctx) => [
-              const PopupMenuItem(
-                value: 'gallery',
-                child: Row(
-                  children: [
-                    Icon(Icons.photo_library, size: 18),
-                    SizedBox(width: 8),
-                    Text('Chọn ảnh từ Thư viện'),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'present',
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 18),
-                    SizedBox(width: 8),
-                    Text('Giả lập: Bé Minh An (88.5%)'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'unknown',
-                child: Row(
-                  children: [
-                    Icon(Icons.warning, color: Colors.red, size: 18),
-                    SizedBox(width: 8),
-                    Text('Giả lập: Người lạ (Cảnh báo đỏ)'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'clear',
-                child: Row(
-                  children: [
-                    Icon(Icons.refresh, size: 18),
-                    SizedBox(width: 8),
-                    Text('Xóa kết quả quét'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_ethernet),
-            tooltip: 'Cài đặt IP Server',
-            onPressed: _showIpConfigDialog,
-          ),
+              },
+            ),
         ],
       ),
       body: Stack(

@@ -59,7 +59,8 @@ class _EmergencyPickupScreenState extends State<EmergencyPickupScreen>
       validUntil: DateTime.now().add(const Duration(minutes: 60)),
     );
 
-    final result = await prov.createEmergencyPickup(newPickup, 'parent-current-user');
+    final result = await prov.createEmergencyPickup(
+        newPickup, prov.selectedParentId ?? '');
     setState(() {
       _submitting = false;
       _newlyCreated = result;
@@ -74,103 +75,116 @@ class _EmergencyPickupScreenState extends State<EmergencyPickupScreen>
   }
 
   void _showPickupSuccessDialog(EmergencyPickup pickup) {
+    final messenger = ScaffoldMessenger.of(context);
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
-            Icon(Icons.check_circle, color: AppColors.success, size: 28),
-            SizedBox(width: 10),
-            Text('Mã đón khẩn cấp', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 10)
-                ],
-              ),
-              child: QrImageView(
-                data: pickup.qrData ?? 'KIDPRO_PICKUP:${pickup.authorizationId}:${pickup.studentId}',
-                version: QrVersions.auto,
-                size: 180,
-                backgroundColor: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Mã OTP: ${pickup.otpCode ?? pickup.pinCode ?? "Chưa thiết lập"}',
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 4,
-                color: AppColors.primaryDark,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Người đón: ${pickup.pickupPersonName}',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-            Text(
-              'Số điện thoại: ${pickup.pickupPersonPhone}',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
                 children: const [
-                  Icon(Icons.timer_outlined, color: Colors.red, size: 16),
-                  SizedBox(width: 6),
-                  Text('Hiệu lực 60 phút (dùng 1 lần duy nhất)',
-                      style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Icon(Icons.check_circle, color: AppColors.success, size: 28),
+                  SizedBox(width: 10),
+                  Text('Mã đón khẩn cấp', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10)
+                  ],
+                ),
+                child: QrImageView(
+                  data: pickup.qrData ?? 'KIDPRO_PICKUP:${pickup.authorizationId}:${pickup.studentId}',
+                  version: QrVersions.auto,
+                  size: 180,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Mã OTP: ${pickup.otpCode ?? pickup.pinCode ?? "Chưa thiết lập"}',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 4,
+                  color: AppColors.primaryDark,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Người đón: ${pickup.pickupPersonName}',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              Text(
+                'Số điện thoại: ${pickup.pickupPersonPhone}',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.timer_outlined, color: Colors.red, size: 16),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text('Hiệu lực 60 phút (dùng 1 lần duy nhất)',
+                          style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _tabController.animateTo(1);
+                    },
+                    child: const Text('Xem danh sách'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(
+                        text: 'Mã đón bé ${pickup.studentName} tại KidPro: OTP: ${pickup.otpCode}. Hiệu lực 60 phút.',
+                      ));
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Đã sao chép thông tin mã đón vào bộ nhớ tạm!')),
+                      );
+                      Navigator.pop(ctx);
+                      _tabController.animateTo(1);
+                    },
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: const Text('Sao chép'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _tabController.animateTo(1);
-            },
-            child: const Text('Xem danh sách'),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(
-                text: 'Mã đón bé ${pickup.studentName} tại KidPro: OTP: ${pickup.otpCode}. Hiệu lực 60 phút.',
-              ));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Đã sao chép thông tin mã đón vào bộ nhớ tạm!')),
-              );
-              Navigator.pop(ctx);
-            },
-            icon: const Icon(Icons.copy, size: 18),
-            label: const Text('Sao chép gửi người đón'),
-          ),
-        ],
       ),
     );
   }

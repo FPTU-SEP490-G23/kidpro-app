@@ -50,7 +50,9 @@ class _AllergyProfileScreenState extends State<AllergyProfileScreen> {
         return Icons.restaurant_menu;
       case 'MEDICATION':
         return Icons.medication_liquid;
-      case 'ENVIRONMENTAL':
+      case 'WEATHER':
+        return Icons.cloud_outlined;
+      case 'OTHER':
       default:
         return Icons.nature_people;
     }
@@ -110,7 +112,8 @@ class _AllergyProfileScreenState extends State<AllergyProfileScreen> {
                     items: const [
                       DropdownMenuItem(value: 'FOOD', child: Text('Thực phẩm / Thức ăn')),
                       DropdownMenuItem(value: 'MEDICATION', child: Text('Thuốc / Kháng sinh')),
-                      DropdownMenuItem(value: 'ENVIRONMENTAL', child: Text('Môi trường / Côn trùng / Khác')),
+                      DropdownMenuItem(value: 'WEATHER', child: Text('Thời tiết / Môi trường')),
+                      DropdownMenuItem(value: 'OTHER', child: Text('Khác / Côn trùng')),
                     ],
                     onChanged: (v) => setModalState(() => selectedType = v!),
                   ),
@@ -171,6 +174,7 @@ class _AllergyProfileScreenState extends State<AllergyProfileScreen> {
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
                         final prov = context.read<ParentProvider>();
+                        final messenger = ScaffoldMessenger.of(context);
                         final allergy = AllergyAlert(
                           studentId: prov.selectedStudentId,
                           allergyType: selectedType,
@@ -180,14 +184,15 @@ class _AllergyProfileScreenState extends State<AllergyProfileScreen> {
                         );
                         Navigator.pop(ctx);
                         final success = await prov.createAllergy(allergy);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(success ? 'Đã ghi nhận dị ứng y tế thành công!' : 'Thất bại'),
-                              backgroundColor: success ? AppColors.success : AppColors.error,
-                            ),
-                          );
-                        }
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(success
+                                ? 'Đã ghi nhận dị ứng y tế thành công!'
+                                : (prov.error ?? 'Thất bại')),
+                            backgroundColor:
+                                success ? AppColors.success : AppColors.error,
+                          ),
+                        );
                       },
                       child: const Text('Lưu thông tin dị ứng',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),

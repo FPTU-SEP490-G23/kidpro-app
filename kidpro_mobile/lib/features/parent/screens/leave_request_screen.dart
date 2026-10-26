@@ -219,7 +219,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.between,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       _startDate.isAtSameMomentAs(_endDate)

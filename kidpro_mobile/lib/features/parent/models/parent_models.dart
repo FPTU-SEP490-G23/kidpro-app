@@ -1,4 +1,5 @@
 /// Parent-side models matching backend DTOs.
+library;
 
 class Invoice {
   final String id;
@@ -380,5 +381,315 @@ class ChatMessage {
         content: json['content'] as String,
         sentAt: DateTime.parse(json['sentAt'] as String),
         isRead: json['isRead'] as bool? ?? false,
+      );
+}
+
+class StudentSummary {
+  final String studentId;
+  final String studentCode;
+  final String fullName;
+  final String? dateOfBirth;
+  final String? gender;
+  final String? classId;
+  final String? className;
+  final String? avatarUrl;
+  final String? parentId;
+
+  const StudentSummary({
+    required this.studentId,
+    required this.studentCode,
+    required this.fullName,
+    this.dateOfBirth,
+    this.gender,
+    this.classId,
+    this.className,
+    this.avatarUrl,
+    this.parentId,
+  });
+
+  String get displayName => className != null ? '$fullName ($className)' : fullName;
+
+  factory StudentSummary.fromJson(Map<String, dynamic> json) => StudentSummary(
+        studentId: json['studentId']?.toString() ?? '',
+        studentCode: json['studentCode']?.toString() ?? '',
+        fullName: json['fullName'] as String? ?? '',
+        dateOfBirth: json['dateOfBirth']?.toString(),
+        gender: json['gender']?.toString(),
+        classId: json['classId']?.toString(),
+        className: json['className'] as String?,
+        avatarUrl: json['avatarUrl'] as String?,
+        parentId: json['parentId']?.toString(),
+      );
+}
+
+// ==========================================
+// SỔ ĐIỆN TỬ & NHẬT KÝ MẦM NON (6 LOẠI)
+// ==========================================
+
+class DailyActivityModel {
+  final int? activityId;
+  final String? studentId;
+  final String? date;
+  final String? breakfastConsumption;
+  final String? morningSnackConsumption;
+  final String? lunchConsumption;
+  final String? afternoonSnackConsumption;
+  final String? mealNote;
+  final String? sleepQuality;
+  final int? napDurationMinutes;
+  final String? napNote;
+  final String? generalNote;
+  final String? recordedByName;
+
+  const DailyActivityModel({
+    this.activityId,
+    this.studentId,
+    this.date,
+    this.breakfastConsumption,
+    this.morningSnackConsumption,
+    this.lunchConsumption,
+    this.afternoonSnackConsumption,
+    this.mealNote,
+    this.sleepQuality,
+    this.napDurationMinutes,
+    this.napNote,
+    this.generalNote,
+    this.recordedByName,
+  });
+
+  factory DailyActivityModel.fromJson(Map<String, dynamic> json) => DailyActivityModel(
+        activityId: json['activityId'] as int?,
+        studentId: json['studentId']?.toString(),
+        date: json['date']?.toString(),
+        breakfastConsumption: json['breakfastConsumption']?.toString(),
+        morningSnackConsumption: json['morningSnackConsumption']?.toString(),
+        lunchConsumption: json['lunchConsumption']?.toString(),
+        afternoonSnackConsumption: json['afternoonSnackConsumption']?.toString(),
+        mealNote: json['mealNote'] as String?,
+        sleepQuality: json['sleepQuality']?.toString(),
+        napDurationMinutes: json['napDurationMinutes'] as int? ?? 120,
+        napNote: json['napNote'] as String?,
+        generalNote: json['generalNote'] as String?,
+        recordedByName: json['recordedByName'] as String?,
+      );
+}
+
+class AttendanceRecordModel {
+  final int? attendanceId;
+  final String? studentId;
+  final String? date;
+  final String? checkInTime;
+  final String? checkOutTime;
+  final String status;
+  final String? notes;
+
+  const AttendanceRecordModel({
+    this.attendanceId,
+    this.studentId,
+    this.date,
+    this.checkInTime,
+    this.checkOutTime,
+    this.status = 'PRESENT',
+    this.notes,
+  });
+
+  factory AttendanceRecordModel.fromJson(Map<String, dynamic> json) => AttendanceRecordModel(
+        attendanceId: json['attendanceId'] as int?,
+        studentId: json['studentId']?.toString(),
+        date: json['date']?.toString(),
+        checkInTime: json['checkInTime']?.toString(),
+        checkOutTime: json['checkOutTime']?.toString(),
+        status: json['status']?.toString() ?? 'PRESENT',
+        notes: json['notes'] as String?,
+      );
+}
+
+class DevelopmentEvaluationModel {
+  final int? evaluationId;
+  final String? studentId;
+  final String? studentName;
+  final String? evaluationPeriod;
+  final String? physicalScore;
+  final String? cognitiveScore;
+  final String? languageScore;
+  final String? socialEmotionalScore;
+  final String? aestheticScore;
+  final String? teacherName;
+  final String? status;
+  final String? reviewNote;
+
+  const DevelopmentEvaluationModel({
+    this.evaluationId,
+    this.studentId,
+    this.studentName,
+    this.evaluationPeriod,
+    this.physicalScore,
+    this.cognitiveScore,
+    this.languageScore,
+    this.socialEmotionalScore,
+    this.aestheticScore,
+    this.teacherName,
+    this.status,
+    this.reviewNote,
+  });
+
+  factory DevelopmentEvaluationModel.fromJson(Map<String, dynamic> json) => DevelopmentEvaluationModel(
+        evaluationId: json['evaluationId'] as int?,
+        studentId: json['studentId']?.toString(),
+        studentName: json['studentName'] as String?,
+        evaluationPeriod: json['evaluationPeriod'] as String?,
+        physicalScore: json['physicalScore'] as String?,
+        cognitiveScore: json['cognitiveScore'] as String?,
+        languageScore: json['languageScore'] as String?,
+        socialEmotionalScore: json['socialEmotionalScore'] as String?,
+        aestheticScore: json['aestheticScore'] as String?,
+        teacherName: json['teacherName'] as String?,
+        status: json['status'] as String?,
+        reviewNote: json['reviewNote'] as String?,
+      );
+}
+
+class HealthGrowthMetricModel {
+  final int? metricId;
+  final String? studentId;
+  final String? measuredDate;
+  final double? heightCm;
+  final double? weightKg;
+  final double? bmi;
+  final String? zscoreCategory;
+  final String? note;
+
+  const HealthGrowthMetricModel({
+    this.metricId,
+    this.studentId,
+    this.measuredDate,
+    this.heightCm,
+    this.weightKg,
+    this.bmi,
+    this.zscoreCategory,
+    this.note,
+  });
+
+  factory HealthGrowthMetricModel.fromJson(Map<String, dynamic> json) => HealthGrowthMetricModel(
+        metricId: json['metricId'] as int?,
+        studentId: json['studentId']?.toString(),
+        measuredDate: json['measuredDate']?.toString(),
+        heightCm: (json['heightCm'] as num?)?.toDouble(),
+        weightKg: (json['weightKg'] as num?)?.toDouble(),
+        bmi: (json['bmi'] as num?)?.toDouble(),
+        zscoreCategory: json['zscoreCategory'] as String?,
+        note: json['note'] as String?,
+      );
+}
+
+class JournalPostModel {
+  final int? postId;
+  final String? title;
+  final String? content;
+  final String? classId;
+  final String? className;
+  final String? teacherName;
+  final List<String> imageUrls;
+  final String? createdAt;
+
+  const JournalPostModel({
+    this.postId,
+    this.title,
+    this.content,
+    this.classId,
+    this.className,
+    this.teacherName,
+    this.imageUrls = const [],
+    this.createdAt,
+  });
+
+  factory JournalPostModel.fromJson(Map<String, dynamic> json) {
+    List<String> images = [];
+    if (json['imageUrls'] is List) {
+      images = (json['imageUrls'] as List).map((e) => e.toString()).toList();
+    }
+    return JournalPostModel(
+      postId: json['postId'] as int? ?? json['id'] as int?,
+      title: json['title'] as String? ?? 'Hoạt động trải nghiệm',
+      content: json['content'] as String? ?? '',
+      classId: json['classId']?.toString(),
+      className: json['className'] as String?,
+      teacherName: json['teacherName'] as String?,
+      imageUrls: images,
+      createdAt: json['createdAt']?.toString(),
+    );
+  }
+}
+
+// ==========================================
+// TỔNG HỢP 11 LOẠI ĐƠN TỪ / PHIẾU YÊU CẦU
+// ==========================================
+
+class ParentUnifiedRequest {
+  final String id;
+  final String requestType; // LEAVE, TRANSFER, EMERGENCY_PICKUP, GUARDIAN, MEDICATION, ALLERGY, BUS, EXTRACURRICULAR, DISPUTE, OTHER, BIOMETRIC
+  final String typeLabel;
+  final String title;
+  final String? studentId;
+  final String? studentName;
+  final String status;
+  final String statusLabel;
+  final String? createdAt;
+  final Map<String, dynamic> metadata;
+
+  const ParentUnifiedRequest({
+    required this.id,
+    required this.requestType,
+    required this.typeLabel,
+    required this.title,
+    this.studentId,
+    this.studentName,
+    required this.status,
+    required this.statusLabel,
+    this.createdAt,
+    this.metadata = const {},
+  });
+
+  factory ParentUnifiedRequest.fromJson(Map<String, dynamic> json) => ParentUnifiedRequest(
+        id: json['id']?.toString() ?? '',
+        requestType: json['requestType'] as String? ?? 'OTHER',
+        typeLabel: json['typeLabel'] as String? ?? 'Đơn từ',
+        title: json['title'] as String? ?? '',
+        studentId: json['studentId']?.toString(),
+        studentName: json['studentName'] as String?,
+        status: json['status'] as String? ?? 'PENDING',
+        statusLabel: json['statusLabel'] as String? ?? 'Đang xử lý',
+        createdAt: json['createdAt']?.toString(),
+        metadata: (json['metadata'] as Map<String, dynamic>?) ?? {},
+      );
+}
+
+class AvailableOption {
+  final String id;
+  final String title;
+  final String? subtitle;
+
+  const AvailableOption({
+    required this.id,
+    required this.title,
+    this.subtitle,
+  });
+
+  factory AvailableOption.fromClassJson(Map<String, dynamic> json) => AvailableOption(
+        id: json['classId']?.toString() ?? '',
+        title: json['className'] as String? ?? '',
+        subtitle: json['roomNumber'] != null ? 'Phòng: ${json['roomNumber']}' : null,
+      );
+
+  factory AvailableOption.fromBusJson(Map<String, dynamic> json) => AvailableOption(
+        id: json['busId']?.toString() ?? '',
+        title: 'Tuyến xe: ${json['busNumber'] ?? ""}',
+        subtitle: '${json['routeDescription'] ?? ""} • Tài xế: ${json['driverName'] ?? ""} (${json['driverPhone'] ?? ""})',
+      );
+
+  factory AvailableOption.fromExtraJson(Map<String, dynamic> json) => AvailableOption(
+        id: json['classId']?.toString() ?? '',
+        title: json['className'] as String? ?? '',
+        subtitle: '${json['subject'] ?? ""} • Lịch: ${json['scheduleDescription'] ?? ""}',
       );
 }

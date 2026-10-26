@@ -7,17 +7,39 @@ import 'package:kidpro_mobile/features/parent/models/parent_models.dart';
 class ParentProvider extends ChangeNotifier {
   final Dio _dio = ApiClient().dio;
 
-  // Selected student context (defaults to demo student)
-  String _selectedStudentId = 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
-  String _selectedStudentName = 'Nguyễn Tuấn Kiệt (Lớp Mầm 1)';
+  // ── 0. DYNAMIC STUDENTS CONTEXT (FROM DATABASE) ──
+  List<StudentSummary> _students = [];
+  String _selectedStudentId = '';
+  String _selectedStudentName = '';
+  String? _selectedParentId;
 
+  List<StudentSummary> get students => _students;
   String get selectedStudentId => _selectedStudentId;
   String get selectedStudentName => _selectedStudentName;
+  String? get selectedParentId => _selectedParentId;
+  bool get hasStudents => _students.isNotEmpty;
 
-  void setSelectedStudent(String id, String name) {
+  StudentSummary? get selectedStudent {
+    if (_students.isEmpty) return null;
+    return _students.firstWhere(
+      (s) => s.studentId == _selectedStudentId,
+      orElse: () => _students.first,
+    );
+  }
+
+  void setSelectedStudent(String id, String name, [String? parentId]) {
     _selectedStudentId = id;
     _selectedStudentName = name;
+    _selectedParentId = parentId;
     notifyListeners();
+  }
+
+  void selectStudent(StudentSummary student) {
+    _selectedStudentId = student.studentId;
+    _selectedStudentName = student.displayName;
+    _selectedParentId = student.parentId;
+    notifyListeners();
+    loadStudentData(student.studentId);
   }
 
   bool _loading = false;
@@ -26,7 +48,70 @@ class ParentProvider extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
 
-  // ── 1. INVOICES & VIETQR ──
+  /// Loads all children associated with the currently authenticated parent account.
+  Future<void> loadMyStudents() async {
+    _loading = true;
+    notifyListeners();
+    try {
+      final res = await _dio.get(ApiEndpoints.parentStudents);
+      final list = res.data as List;
+      _students = list
+          .map((e) => StudentSummary.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      if (_students.isNotEmpty) {
+        final currentValid =
+            _students.any((s) => s.studentId == _selectedStudentId);
+        if (!currentValid) {
+          final first = _students.first;
+          _selectedStudentId = first.studentId;
+          _selectedStudentName = first.displayName;
+          _selectedParentId = first.parentId;
+        }
+        await loadStudentData(_selectedStudentId);
+      } else {
+        _selectedStudentId = '';
+        _selectedStudentName = 'Chưa có thông tin học sinh';
+        _selectedParentId = null;
+        _invoices = [];
+        _leaveRequests = [];
+        _emergencyPickups = [];
+        _guardians = [];
+        _medications = [];
+        _allergies = [];
+      }
+      _error = null;
+    } on DioException catch (e) {
+      logError('loadMyStudents', e);
+      _error = e.response?.data?['message']?.toString() ?? e.message;
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Automatically triggers real data loads for the chosen child across all modules.
+  Future<void> loadStudentData(String studentId) async {
+    if (studentId.isEmpty) return;
+    await Future.wait([
+      loadInvoices(studentId),
+      loadLeaveRequests(studentId),
+      loadEmergencyPickups(studentId),
+      loadGuardians(studentId),
+      loadMedications(studentId),
+      loadAllergies(studentId),
+      loadDailyActivities(studentId),
+      loadAttendances(studentId),
+      loadEvaluations(studentId),
+      loadGrowthHistory(studentId),
+      loadAllRequests(studentId),
+    ]);
+    if (selectedStudent?.classId != null && selectedStudent!.classId!.isNotEmpty) {
+      loadJournalPosts(selectedStudent!.classId!);
+    }
+  }
+
+  // ── 1. INVOICES & VIETQR (G8-UC-08, G8-UC-09) ──
   List<Invoice> _invoices = [];
   VietQrPayment? _currentQr;
 
@@ -34,9 +119,17 @@ class ParentProvider extends ChangeNotifier {
   VietQrPayment? get currentQr => _currentQr;
 
   Future<void> loadInvoices([String? studentId]) async {
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _invoices = [];
+      notifyListeners();
+      return;
+    }
+
     _loading = true;
     notifyListeners();
-    final targetId = studentId ?? _selectedStudentId;
     try {
       final res = await _dio.get(ApiEndpoints.parentInvoices,
           queryParameters: {'studentId': targetId});
@@ -46,32 +139,12 @@ class ParentProvider extends ChangeNotifier {
       _error = null;
     } on DioException catch (e) {
       logError('loadInvoices', e);
-      // Fallback mock invoices for seamless preview
-      _invoices = [
-        Invoice(
-          id: 'inv-oct-2026',
-          studentName: _selectedStudentName,
-          periodLabel: 'Học phí Tháng 10/2026',
-          totalAmount: 3850000,
-          paidAmount: 0,
-          status: 'UNPAID',
-          referenceCode: 'KIDPRO-202610-001',
-          paymentQrCode:
-              'https://img.vietqr.io/image/970422-KIDPRO8888-compact2.png?amount=3850000&addInfo=KIDPRO-202610-001&accountName=TRUONG%20MAM%20NON%20KIDPRO',
-        ),
-        Invoice(
-          id: 'inv-sep-2026',
-          studentName: _selectedStudentName,
-          periodLabel: 'Học phí Tháng 09/2026',
-          totalAmount: 3850000,
-          paidAmount: 3850000,
-          status: 'PAID',
-          referenceCode: 'KIDPRO-202609-001',
-        ),
-      ];
+      _invoices = [];
+      _error = e.response?.data?['message']?.toString() ?? e.message;
+    } finally {
+      _loading = false;
+      notifyListeners();
     }
-    _loading = false;
-    notifyListeners();
   }
 
   Future<void> loadVietQr(String invoiceId) async {
@@ -83,18 +156,12 @@ class ParentProvider extends ChangeNotifier {
       _error = null;
     } on DioException catch (e) {
       logError('loadVietQr', e);
-      _currentQr = VietQrPayment(
-        qrDataUrl:
-            'https://img.vietqr.io/image/970422-KIDPRO8888-compact2.png?amount=3850000&addInfo=KIDPRO-$invoiceId&accountName=TRUONG%20MAM%20NON%20KIDPRO',
-        bankName: 'MB Bank',
-        accountNumber: '999988887777',
-        accountName: 'TRUONG MAM NON QUOC TE KIDPRO',
-        amount: 3850000,
-        referenceCode: 'KIDPRO-$invoiceId',
-      );
+      _currentQr = null;
+      _error = e.response?.data?['message']?.toString() ?? e.message;
+    } finally {
+      _loading = false;
+      notifyListeners();
     }
-    _loading = false;
-    notifyListeners();
   }
 
   // ── 2. LEAVE REQUESTS (G10-UC-08) ──
@@ -102,27 +169,25 @@ class ParentProvider extends ChangeNotifier {
   List<LeaveRequest> get leaveRequests => _leaveRequests;
 
   Future<void> loadLeaveRequests([String? studentId]) async {
-    final targetId = studentId ?? _selectedStudentId;
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _leaveRequests = [];
+      notifyListeners();
+      return;
+    }
+
     try {
       final res = await _dio.get(ApiEndpoints.parentLeaveRequests,
           queryParameters: {'studentId': targetId});
       _leaveRequests = (res.data as List)
           .map((e) => LeaveRequest.fromJson(e as Map<String, dynamic>))
           .toList();
+      _error = null;
     } on DioException catch (e) {
       logError('loadLeaveRequests', e);
-      _leaveRequests = [
-        LeaveRequest(
-          id: 1,
-          studentId: targetId,
-          studentName: _selectedStudentName,
-          reason: 'Bé bị sốt nhẹ, gia đình cho nghỉ theo dõi tại nhà',
-          startDate: DateTime.now().add(const Duration(days: 1)),
-          endDate: DateTime.now().add(const Duration(days: 2)),
-          status: 'PENDING',
-          eligibleForMealRefund: true,
-        ),
-      ];
+      _leaveRequests = [];
     }
     notifyListeners();
   }
@@ -133,11 +198,10 @@ class ParentProvider extends ChangeNotifier {
       await loadLeaveRequests(req.studentId);
       return true;
     } on DioException catch (e) {
-      _error = e.response?.data?['message'] as String? ?? 'Gửi đơn thất bại';
-      // Local fallback in test mode
-      _leaveRequests.insert(0, req);
+      logError('submitLeaveRequest', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Gửi đơn thất bại';
       notifyListeners();
-      return true;
+      return false;
     }
   }
 
@@ -148,9 +212,8 @@ class ParentProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } on DioException catch (e) {
-      _leaveRequests.removeWhere((r) => r.id == id);
-      notifyListeners();
-      return true;
+      logError('cancelLeaveRequest', e);
+      return false;
     }
   }
 
@@ -159,28 +222,25 @@ class ParentProvider extends ChangeNotifier {
   List<EmergencyPickup> get emergencyPickups => _emergencyPickups;
 
   Future<void> loadEmergencyPickups([String? studentId]) async {
-    final targetId = studentId ?? _selectedStudentId;
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _emergencyPickups = [];
+      notifyListeners();
+      return;
+    }
+
     try {
       final res = await _dio.get(ApiEndpoints.parentEmergencyPickups,
           queryParameters: {'studentId': targetId});
       _emergencyPickups = (res.data as List)
           .map((e) => EmergencyPickup.fromJson(e as Map<String, dynamic>))
           .toList();
+      _error = null;
     } on DioException catch (e) {
       logError('loadEmergencyPickups', e);
-      _emergencyPickups = [
-        EmergencyPickup(
-          authorizationId: 101,
-          studentId: targetId,
-          studentName: _selectedStudentName,
-          pickupPersonName: 'Bác Nguyễn Thị Mai (Hàng xóm)',
-          pickupPersonPhone: '0912345678',
-          otpCode: '852963',
-          validUntil: DateTime.now().add(const Duration(minutes: 45)),
-          status: 'ACTIVE',
-          qrData: 'KIDPRO_PICKUP:101:$targetId:852963',
-        ),
-      ];
+      _emergencyPickups = [];
     }
     notifyListeners();
   }
@@ -188,28 +248,20 @@ class ParentProvider extends ChangeNotifier {
   Future<EmergencyPickup?> createEmergencyPickup(
       EmergencyPickup req, String parentId) async {
     try {
+      final effectiveParentId = parentId.isNotEmpty
+          ? parentId
+          : (_selectedParentId ?? '');
       final res = await _dio.post(ApiEndpoints.parentEmergencyPickups,
-          data: req.toJson(parentId));
+          data: req.toJson(effectiveParentId));
       final created = EmergencyPickup.fromJson(res.data);
       _emergencyPickups.insert(0, created);
       notifyListeners();
       return created;
     } on DioException catch (e) {
       logError('createEmergencyPickup', e);
-      final fallback = EmergencyPickup(
-        authorizationId: DateTime.now().millisecondsSinceEpoch % 10000,
-        studentId: req.studentId,
-        studentName: _selectedStudentName,
-        pickupPersonName: req.pickupPersonName,
-        pickupPersonPhone: req.pickupPersonPhone,
-        otpCode: req.pinCode ?? '123456',
-        validUntil: DateTime.now().add(const Duration(minutes: 60)),
-        status: 'ACTIVE',
-        qrData: 'KIDPRO_PICKUP:demo:${req.studentId}:${req.pinCode ?? "123456"}',
-      );
-      _emergencyPickups.insert(0, fallback);
+      _error = e.response?.data?['message']?.toString() ?? 'Tạo mã ủy quyền thất bại';
       notifyListeners();
-      return fallback;
+      return null;
     }
   }
 
@@ -233,7 +285,8 @@ class ParentProvider extends ChangeNotifier {
           .toList();
       notifyListeners();
       return true;
-    } catch (_) {
+    } on DioException catch (e) {
+      logError('revokeEmergencyPickup', e);
       return false;
     }
   }
@@ -243,37 +296,25 @@ class ParentProvider extends ChangeNotifier {
   List<AuthorizedGuardian> get guardians => _guardians;
 
   Future<void> loadGuardians([String? studentId]) async {
-    final targetId = studentId ?? _selectedStudentId;
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _guardians = [];
+      notifyListeners();
+      return;
+    }
+
     try {
       final res =
           await _dio.get(ApiEndpoints.parentStudentGuardians(targetId));
       _guardians = (res.data as List)
           .map((e) => AuthorizedGuardian.fromJson(e as Map<String, dynamic>))
           .toList();
+      _error = null;
     } on DioException catch (e) {
       logError('loadGuardians', e);
-      _guardians = [
-        AuthorizedGuardian(
-          guardianId: 1,
-          studentId: targetId,
-          fullName: 'Bà Ngoại - Lê Thị Lan',
-          phoneNumber: '0908123456',
-          relationshipToStudent: 'Bà Ngoại',
-          isAllowedPickup: true,
-          note: 'Đón bé vào các buổi chiều Thứ Ba và Thứ Năm',
-          createdAt: DateTime.now().subtract(const Duration(days: 30)),
-        ),
-        AuthorizedGuardian(
-          guardianId: 2,
-          studentId: targetId,
-          fullName: 'Bác Ruột - Nguyễn Văn Thành',
-          phoneNumber: '0987654321',
-          relationshipToStudent: 'Bác Ruột',
-          isAllowedPickup: true,
-          note: 'Đón hộ khi bố mẹ đi công tác',
-          createdAt: DateTime.now().subtract(const Duration(days: 15)),
-        ),
-      ];
+      _guardians = [];
     }
     notifyListeners();
   }
@@ -287,33 +328,21 @@ class ParentProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } on DioException catch (e) {
-      _error = e.response?.data?['message'] as String? ?? 'Thêm người đón thất bại';
-      _guardians.add(guardian);
+      logError('registerGuardian', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Thêm người đón thất bại';
       notifyListeners();
-      return true;
+      return false;
     }
   }
 
   Future<bool> revokeGuardian(int id) async {
     try {
       await _dio.delete(ApiEndpoints.parentGuardianRevoke(id));
-      _guardians = _guardians
-          .map((g) => g.guardianId == id
-              ? AuthorizedGuardian(
-                  guardianId: g.guardianId,
-                  studentId: g.studentId,
-                  fullName: g.fullName,
-                  phoneNumber: g.phoneNumber,
-                  relationshipToStudent: g.relationshipToStudent,
-                  isAllowedPickup: false,
-                  note: g.note,
-                  createdAt: g.createdAt,
-                )
-              : g)
-          .toList();
+      _guardians = _guardians.where((g) => g.guardianId != id).toList();
       notifyListeners();
       return true;
-    } catch (_) {
+    } on DioException catch (e) {
+      logError('revokeGuardian', e);
       return false;
     }
   }
@@ -323,27 +352,25 @@ class ParentProvider extends ChangeNotifier {
   List<MedicationRequest> get medications => _medications;
 
   Future<void> loadMedications([String? studentId]) async {
-    final targetId = studentId ?? _selectedStudentId;
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _medications = [];
+      notifyListeners();
+      return;
+    }
+
     try {
       final res = await _dio.get(ApiEndpoints.parentMedications,
           queryParameters: {'studentId': targetId});
       _medications = (res.data as List)
           .map((e) => MedicationRequest.fromJson(e as Map<String, dynamic>))
           .toList();
+      _error = null;
     } on DioException catch (e) {
       logError('loadMedications', e);
-      _medications = [
-        MedicationRequest(
-          id: 501,
-          studentId: targetId,
-          studentName: _selectedStudentName,
-          instructions:
-              'Siro ho Prospan: Uống 5ml sau giờ ăn trưa (11:30). Uống cùng nước ấm.',
-          startDate: DateTime.now(),
-          endDate: DateTime.now().add(const Duration(days: 3)),
-          status: 'PENDING',
-        ),
-      ];
+      _medications = [];
     }
     notifyListeners();
   }
@@ -354,10 +381,10 @@ class ParentProvider extends ChangeNotifier {
       await loadMedications(req.studentId);
       return true;
     } on DioException catch (e) {
-      _error = e.response?.data?['message'] as String? ?? 'Gửi dặn thuốc thất bại';
-      _medications.insert(0, req);
+      logError('submitMedication', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Gửi dặn thuốc thất bại';
       notifyListeners();
-      return true;
+      return false;
     }
   }
 
@@ -367,7 +394,8 @@ class ParentProvider extends ChangeNotifier {
       _medications.removeWhere((m) => m.id == id);
       notifyListeners();
       return true;
-    } catch (_) {
+    } on DioException catch (e) {
+      logError('cancelMedication', e);
       return false;
     }
   }
@@ -377,34 +405,25 @@ class ParentProvider extends ChangeNotifier {
   List<AllergyAlert> get allergies => _allergies;
 
   Future<void> loadAllergies([String? studentId]) async {
-    final targetId = studentId ?? _selectedStudentId;
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _allergies = [];
+      notifyListeners();
+      return;
+    }
+
     try {
       final res = await _dio.get(ApiEndpoints.parentAllergies,
           queryParameters: {'studentId': targetId});
       _allergies = (res.data as List)
           .map((e) => AllergyAlert.fromJson(e as Map<String, dynamic>))
           .toList();
+      _error = null;
     } on DioException catch (e) {
       logError('loadAllergies', e);
-      _allergies = [
-        AllergyAlert(
-          allergyId: 1,
-          studentId: targetId,
-          allergyType: 'FOOD',
-          allergen: 'Tôm, Cua biển',
-          severity: 'SEVERE',
-          description:
-              'Bé bị mẩn ngứa và khó thở khi ăn hải sản có vỏ. Bếp không nấu suất ăn có tôm cua cho bé.',
-        ),
-        AllergyAlert(
-          allergyId: 2,
-          studentId: targetId,
-          allergyType: 'MEDICATION',
-          allergen: 'Kháng sinh Penicillin',
-          severity: 'SEVERE',
-          description: 'Tuyệt đối không dùng nhóm thuốc Penicillin.',
-        ),
-      ];
+      _allergies = [];
     }
     notifyListeners();
   }
@@ -418,9 +437,10 @@ class ParentProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } on DioException catch (e) {
-      _allergies.add(allergy);
+      logError('createAllergy', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Thêm dị ứng thất bại';
       notifyListeners();
-      return true;
+      return false;
     }
   }
 
@@ -430,7 +450,8 @@ class ParentProvider extends ChangeNotifier {
       _allergies.removeWhere((a) => a.allergyId == id);
       notifyListeners();
       return true;
-    } catch (_) {
+    } on DioException catch (e) {
+      logError('deleteAllergy', e);
       return false;
     }
   }
@@ -440,18 +461,27 @@ class ParentProvider extends ChangeNotifier {
   BiometricPurgeCertificate? get purgeCertificate => _purgeCertificate;
 
   Future<String?> requestPurgeOtp([String? studentId]) async {
-    final targetId = studentId ?? _selectedStudentId;
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) return null;
+
     try {
       final res = await _dio.post(ApiEndpoints.parentBiometricPurgeOtp(targetId));
-      return res.data['demoOtp'] as String? ?? '123456';
-    } catch (_) {
-      return '123456'; // demo fallback OTP
+      return res.data['otp']?.toString();
+    } on DioException catch (e) {
+      logError('requestPurgeOtp', e);
+      return null;
     }
   }
 
   Future<bool> confirmBiometricPurge(String otpCode, String reason,
       [String? studentId]) async {
-    final targetId = studentId ?? _selectedStudentId;
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) return false;
+
     try {
       final res = await _dio.post(
         ApiEndpoints.parentBiometricPurgeConfirm(targetId),
@@ -460,18 +490,12 @@ class ParentProvider extends ChangeNotifier {
       _purgeCertificate = BiometricPurgeCertificate.fromJson(res.data);
       notifyListeners();
       return true;
-    } catch (_) {
-      _purgeCertificate = BiometricPurgeCertificate(
-        studentId: targetId,
-        studentName: _selectedStudentName,
-        certificateCode: 'PURGE-ND13-${DateTime.now().millisecondsSinceEpoch}',
-        hashSha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
-        purgedAt: DateTime.now().toIso8601String(),
-        deletedFaceVectorsCount: 3,
-        message: 'Đã tiêu hủy vĩnh viễn dữ liệu sinh trắc học theo Nghị định 13/2023/NĐ-CP.',
-      );
+    } on DioException catch (e) {
+      logError('confirmBiometricPurge', e);
+      _purgeCertificate = null;
+      _error = e.response?.data?['message']?.toString() ?? e.message;
       notifyListeners();
-      return true;
+      return false;
     }
   }
 
@@ -492,22 +516,7 @@ class ParentProvider extends ChangeNotifier {
           .toList();
     } on DioException catch (e) {
       logError('loadChatThreads', e);
-      _chatThreads = [
-        ChatThread(
-          id: 'th-1',
-          otherPartyName: 'Cô Thu Hương (Chủ nhiệm Lớp Mầm 1)',
-          lastMessage: 'Hôm nay bé Kiệt ăn rất ngoan và ngủ đủ giấc mẹ nhé!',
-          lastMessageAt: DateTime.now().subtract(const Duration(minutes: 25)),
-          unreadCount: 1,
-        ),
-        ChatThread(
-          id: 'th-2',
-          otherPartyName: 'Bác sĩ Y tế Học đường - Cô Thảo',
-          lastMessage: 'Đã nhận đơn dặn siro ho của bé lúc 11:30 ạ.',
-          lastMessageAt: DateTime.now().subtract(const Duration(hours: 3)),
-          unreadCount: 0,
-        ),
-      ];
+      _chatThreads = [];
     }
     _loading = false;
     notifyListeners();
@@ -520,46 +529,301 @@ class ParentProvider extends ChangeNotifier {
       _messages = content
           .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException {
-      _messages = [
-        ChatMessage(
-          id: 'm1',
-          senderId: 'teacher',
-          content: 'Chào phụ huynh bé Kiệt ạ, hôm nay bé tham gia hoạt động múa hát rất hào hứng!',
-          sentAt: DateTime.now().subtract(const Duration(hours: 4)),
-        ),
-        ChatMessage(
-          id: 'm2',
-          senderId: 'parent',
-          content: 'Dạ cảm ơn cô giáo nhiều ạ. Trưa nay cô cho bé uống 5ml siro ho giúp gia đình nhé.',
-          sentAt: DateTime.now().subtract(const Duration(hours: 3)),
-        ),
-        ChatMessage(
-          id: 'm3',
-          senderId: 'teacher',
-          content: 'Vâng mẹ yên tâm, đúng 11:30 cô sẽ cho bé uống thuốc ấm và báo mẹ liền nhé.',
-          sentAt: DateTime.now().subtract(const Duration(minutes: 25)),
-        ),
-      ];
+    } on DioException catch (e) {
+      logError('loadMessages', e);
+      _messages = [];
     }
     notifyListeners();
   }
 
   Future<bool> sendMessage(String threadId, String content) async {
-    final newMsg = ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      senderId: 'parent',
-      content: content,
-      sentAt: DateTime.now(),
-    );
-    _messages.add(newMsg);
-    notifyListeners();
     try {
-      await _dio.post(ApiEndpoints.chatMessages(threadId),
+      final res = await _dio.post(ApiEndpoints.chatMessages(threadId),
           data: {'content': content});
+      final newMsg = ChatMessage.fromJson(res.data);
+      _messages.add(newMsg);
+      notifyListeners();
       return true;
-    } catch (_) {
+    } on DioException catch (e) {
+      logError('sendMessage', e);
+      return false;
+    }
+  }
+
+  // ── 9. SỔ ĐIỆN TỬ: SỔ SINH HOẠT HẰNG NGÀY (student.daily_activities) ──
+  List<DailyActivityModel> _dailyActivities = [];
+  List<DailyActivityModel> get dailyActivities => _dailyActivities;
+
+  Future<void> loadDailyActivities([String? studentId]) async {
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _dailyActivities = [];
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final res = await _dio.get(ApiEndpoints.parentDailyActivities(targetId));
+      _dailyActivities = (res.data as List)
+          .map((e) => DailyActivityModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      logError('loadDailyActivities', e);
+      _dailyActivities = [];
+    }
+    notifyListeners();
+  }
+
+  // ── 10. SỔ ĐIỆN TỬ: SỔ ĐIỂM DANH ĐIỆN TỬ (student.attendances) ──
+  List<AttendanceRecordModel> _attendances = [];
+  List<AttendanceRecordModel> get attendances => _attendances;
+
+  Future<void> loadAttendances([String? studentId]) async {
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _attendances = [];
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final res = await _dio.get(ApiEndpoints.parentAttendances(targetId));
+      _attendances = (res.data as List)
+          .map((e) => AttendanceRecordModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      logError('loadAttendances', e);
+      _attendances = [];
+    }
+    notifyListeners();
+  }
+
+  // ── 11. SỔ ĐIỆN TỬ: SỔ ĐÁNH GIÁ PHÁT TRIỂN ĐỊNH KỲ (student.development_evaluation) ──
+  List<DevelopmentEvaluationModel> _evaluations = [];
+  List<DevelopmentEvaluationModel> get evaluations => _evaluations;
+
+  Future<void> loadEvaluations([String? studentId]) async {
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _evaluations = [];
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final res = await _dio.get(ApiEndpoints.parentEvaluations(targetId));
+      _evaluations = (res.data as List)
+          .map((e) => DevelopmentEvaluationModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      logError('loadEvaluations', e);
+      _evaluations = [];
+    }
+    notifyListeners();
+  }
+
+  // ── 12. SỔ ĐIỆN TỬ: SỔ Y TẾ & THỂ CHẤT WHO (health.health_metrics) ──
+  List<HealthGrowthMetricModel> _growthHistory = [];
+  List<HealthGrowthMetricModel> get growthHistory => _growthHistory;
+
+  Future<void> loadGrowthHistory([String? studentId]) async {
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _growthHistory = [];
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final res = await _dio.get(ApiEndpoints.parentGrowthHistory(targetId));
+      final data = res.data;
+      final list = (data is Map && data['data'] != null) ? data['data'] as List : (data as List? ?? []);
+      _growthHistory = list
+          .map((e) => HealthGrowthMetricModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      logError('loadGrowthHistory', e);
+      _growthHistory = [];
+    }
+    notifyListeners();
+  }
+
+  // ── 13. SỔ ĐIỆN TỬ: SỔ NHẬT KÝ LỚP HỌC (academic.classroom_journal_post) ──
+  List<JournalPostModel> _journalPosts = [];
+  List<JournalPostModel> get journalPosts => _journalPosts;
+
+  Future<void> loadJournalPosts(String classId) async {
+    if (classId.isEmpty) return;
+    try {
+      final res = await _dio.get(ApiEndpoints.parentJournalPosts(classId));
+      final data = res.data;
+      final list = (data is Map && data['data'] != null) ? data['data'] as List : (data as List? ?? []);
+      _journalPosts = list
+          .map((e) => JournalPostModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      logError('loadJournalPosts', e);
+      _journalPosts = [];
+    }
+    notifyListeners();
+  }
+
+  // ── 14. TRUNG TÂM ĐƠN TỪ: TỔNG HỢP TOÀN BỘ 11 LOẠI ĐƠN TỪ ──
+  List<ParentUnifiedRequest> _allRequests = [];
+  List<ParentUnifiedRequest> get allRequests => _allRequests;
+
+  Future<void> loadAllRequests([String? studentId]) async {
+    final targetId = (studentId != null && studentId.isNotEmpty)
+        ? studentId
+        : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _allRequests = [];
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final res = await _dio.get(ApiEndpoints.parentAllRequests(targetId));
+      _allRequests = (res.data as List)
+          .map((e) => ParentUnifiedRequest.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      logError('loadAllRequests', e);
+      _allRequests = [];
+    }
+    notifyListeners();
+  }
+
+  // ── 15. DANH MỤC THAM CHIẾU CHO FORM NỘP ĐƠN ──
+  List<AvailableOption> _availableClasses = [];
+  List<AvailableOption> _availableBuses = [];
+  List<AvailableOption> _availableExtracurricular = [];
+
+  List<AvailableOption> get availableClasses => _availableClasses;
+  List<AvailableOption> get availableBuses => _availableBuses;
+  List<AvailableOption> get availableExtracurricular => _availableExtracurricular;
+
+  Future<void> loadFormOptions() async {
+    try {
+      final resClasses = await _dio.get(ApiEndpoints.parentAvailableClasses);
+      _availableClasses = (resClasses.data as List)
+          .map((e) => AvailableOption.fromClassJson(e as Map<String, dynamic>))
+          .toList();
+
+      final resBuses = await _dio.get(ApiEndpoints.parentAvailableBuses);
+      _availableBuses = (resBuses.data as List)
+          .map((e) => AvailableOption.fromBusJson(e as Map<String, dynamic>))
+          .toList();
+
+      final resExtra = await _dio.get(ApiEndpoints.parentAvailableExtracurricular);
+      _availableExtracurricular = (resExtra.data as List)
+          .map((e) => AvailableOption.fromExtraJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      if (kDebugMode) print('loadFormOptions error: $e');
+    }
+    notifyListeners();
+  }
+
+  Future<bool> submitClassTransfer({
+    required String studentId,
+    required String toClassId,
+    required String reason,
+    String? effectiveDate,
+  }) async {
+    try {
+      await _dio.post(ApiEndpoints.parentClassTransfer, data: {
+        'studentId': studentId,
+        'toClassId': toClassId,
+        'reason': reason,
+        if (effectiveDate != null) 'effectiveDate': effectiveDate,
+      });
+      await loadAllRequests(studentId);
       return true;
+    } on DioException catch (e) {
+      logError('submitClassTransfer', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Nộp đơn chuyển lớp thất bại';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> submitBusRegister({
+    required String studentId,
+    required String busId,
+    required String pickupAddress,
+    required String pickupType,
+    String? startDate,
+    String? note,
+  }) async {
+    try {
+      await _dio.post(ApiEndpoints.parentBusRegister, data: {
+        'studentId': studentId,
+        'busId': busId,
+        'pickupAddress': pickupAddress,
+        'pickupType': pickupType,
+        if (startDate != null) 'startDate': startDate,
+        if (note != null) 'note': note,
+      });
+      await loadAllRequests(studentId);
+      return true;
+    } on DioException catch (e) {
+      logError('submitBusRegister', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Đăng ký xe buýt thất bại';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> submitExtracurricularRegister({
+    required String studentId,
+    required String extracurricularClassId,
+    String? startDate,
+    String? note,
+  }) async {
+    try {
+      await _dio.post(ApiEndpoints.parentExtracurricularRegister, data: {
+        'studentId': studentId,
+        'extracurricularClassId': extracurricularClassId,
+        if (startDate != null) 'startDate': startDate,
+        if (note != null) 'note': note,
+      });
+      await loadAllRequests(studentId);
+      return true;
+    } on DioException catch (e) {
+      logError('submitExtracurricularRegister', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Đăng ký ngoại khóa thất bại';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> submitOtherRequest({
+    required String studentId,
+    required String title,
+    required String content,
+  }) async {
+    try {
+      await _dio.post(ApiEndpoints.parentOtherRequest, data: {
+        'studentId': studentId,
+        'title': title,
+        'content': content,
+      });
+      await loadAllRequests(studentId);
+      return true;
+    } on DioException catch (e) {
+      logError('submitOtherRequest', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Gửi đơn thất bại';
+      notifyListeners();
+      return false;
     }
   }
 

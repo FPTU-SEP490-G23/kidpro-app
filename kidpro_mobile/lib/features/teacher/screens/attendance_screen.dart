@@ -17,8 +17,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Default to current teacher's class
-      context.read<TeacherProvider>().loadStudents('');
+      final prov = context.read<TeacherProvider>();
+      prov.loadStudents(prov.currentClassId);
     });
   }
 
@@ -44,46 +44,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  void _simulateAiScan() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.face, color: AppColors.primary),
-            SizedBox(width: 8),
-            Text('AI Camera Check-in'),
-          ],
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              height: 120,
-              child: Center(
-                child: Icon(Icons.qr_code_scanner, size: 72, color: AppColors.primary),
-              ),
-            ),
-            Text(
-              'Đang kích hoạt camera đối chiếu vector 512 chiều YOLOv8 + InsightFace...',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Đóng'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _saveBatch() async {
     final prov = context.read<TeacherProvider>();
-    final success = await prov.submitAttendanceBatch();
+    final success = await prov.saveBatchAttendance();
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(

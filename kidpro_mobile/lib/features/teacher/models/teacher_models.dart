@@ -18,12 +18,20 @@ class TeacherStudent {
   });
 
   factory TeacherStudent.fromJson(Map<String, dynamic> json) => TeacherStudent(
-        id: json['id'] as String,
-        fullName: json['fullName'] as String? ?? json['name'] as String? ?? '',
+        id: (json['id'] ?? json['studentId'] ?? '') as String,
+        fullName: (json['fullName'] ?? json['name'] ?? '') as String,
         avatarUrl: json['avatarUrl'] as String?,
         studentCode: json['studentCode'] as String?,
-        status: AttendanceStatus.notArrived,
+        status: _parseStatus(json['status'] as String?),
       );
+
+  static AttendanceStatus _parseStatus(String? status) {
+    if (status == 'PRESENT') return AttendanceStatus.present;
+    if (status == 'EXCUSED_ABSENCE' || status == 'ON_LEAVE' || status == 'ABSENT_PERMITTED') {
+      return AttendanceStatus.onLeave;
+    }
+    return AttendanceStatus.notArrived;
+  }
 }
 
 class StrangerAlert {
@@ -44,7 +52,7 @@ class StrangerAlert {
   });
 
   factory StrangerAlert.fromJson(Map<String, dynamic> json) => StrangerAlert(
-        id: json['id'] as String,
+        id: (json['id'] ?? json['faceLogId'] ?? '') as String,
         snapshotUrl: json['snapshotUrl'] as String? ?? json['photoUrl'] as String?,
         detectedAt: json['timestamp'] != null
             ? DateTime.parse(json['timestamp'] as String)
@@ -82,16 +90,366 @@ class MedicationTask {
   bool get isAdministered => status == 'ADMINISTERED';
 
   factory MedicationTask.fromJson(Map<String, dynamic> json) => MedicationTask(
-        id: json['id'] as String,
+        id: (json['id'] ?? json['requestId'] ?? '').toString(),
         studentId: json['studentId'] as String? ?? '',
         studentName: json['studentName'] as String? ?? 'Học sinh',
         medicineName: json['medicineName'] as String? ?? '',
         dosage: json['dosage'] as String? ?? '',
-        note: json['note'] as String?,
+        note: json['note'] as String? ?? json['instructions'] as String?,
         status: json['status'] as String? ?? 'PENDING',
-        proofImageUrl: json['proofImageUrl'] as String?,
+        proofImageUrl: json['proofImageUrl'] as String? ?? json['proofPhotoUrl'] as String?,
         administeredAt: json['administeredAt'] != null
             ? DateTime.parse(json['administeredAt'] as String)
             : null,
+      );
+}
+
+// ── Bus Attendance (G5-UC-02, G5-UC-03, BR-024) ──
+class BusTripInfo {
+  final String tripId;
+  final String routeName;
+  final String plateNumber;
+  final int totalStudents;
+  final int onboardCount;
+  final int deboardedCount;
+  final int remainingCount;
+  final bool isSafetyClosed;
+
+  const BusTripInfo({
+    required this.tripId,
+    required this.routeName,
+    required this.plateNumber,
+    required this.totalStudents,
+    required this.onboardCount,
+    required this.deboardedCount,
+    required this.remainingCount,
+    this.isSafetyClosed = false,
+  });
+
+  factory BusTripInfo.fromJson(Map<String, dynamic> json) => BusTripInfo(
+        tripId: (json['tripId'] ?? '').toString(),
+        routeName: json['routeName'] as String? ?? 'Tuyến xe buýt KidPro',
+        plateNumber: json['plateNumber'] as String? ?? '29B-123.45',
+        totalStudents: (json['totalStudents'] as num?)?.toInt() ?? 0,
+        onboardCount: (json['onboardCount'] as num?)?.toInt() ?? 0,
+        deboardedCount: (json['deboardedCount'] as num?)?.toInt() ?? 0,
+        remainingCount: (json['remainingCount'] as num?)?.toInt() ?? 0,
+        isSafetyClosed: json['isSafetyClosed'] as bool? ?? false,
+      );
+}
+
+// ── Late Pickup & Progressive Fee (G5-UC-05, BR-020) ──
+class LatePickupRecord {
+  final String studentId;
+  final String studentName;
+  final String pickupTime;
+  final int lateMinutes;
+  final double feeAmount;
+  final bool isExempted;
+  final String? exemptionReason;
+
+  const LatePickupRecord({
+    required this.studentId,
+    required this.studentName,
+    required this.pickupTime,
+    required this.lateMinutes,
+    required this.feeAmount,
+    this.isExempted = false,
+    this.exemptionReason,
+  });
+
+  factory LatePickupRecord.fromJson(Map<String, dynamic> json) => LatePickupRecord(
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String? ?? 'Bé',
+        pickupTime: json['pickupTime'] as String? ?? '',
+        lateMinutes: (json['lateMinutes'] as num?)?.toInt() ?? 0,
+        feeAmount: (json['feeAmount'] as num?)?.toDouble() ?? 0.0,
+        isExempted: json['isExempted'] as bool? ?? false,
+        exemptionReason: json['exemptionReason'] as String?,
+      );
+}
+
+// ── Health Metrics (WHO) (G8-UC-03, BR-031) ──
+class HealthMetricItem {
+  final String studentId;
+  final String studentName;
+  double? heightCm;
+  double? weightKg;
+  double? bmi;
+  String? nutritionalStatus;
+
+  HealthMetricItem({
+    required this.studentId,
+    required this.studentName,
+    this.heightCm,
+    this.weightKg,
+    this.bmi,
+    this.nutritionalStatus,
+  });
+
+  factory HealthMetricItem.fromJson(Map<String, dynamic> json) => HealthMetricItem(
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String? ?? '',
+        heightCm: ((json['heightCm'] ?? json['lastHeightCm']) as num?)?.toDouble(),
+        weightKg: ((json['weightKg'] ?? json['lastWeightKg']) as num?)?.toDouble(),
+        bmi: ((json['bmi'] ?? json['lastBmi']) as num?)?.toDouble(),
+        nutritionalStatus: (json['nutritionalStatus'] ?? json['lastZScoreStatus'])?.toString(),
+      );
+}
+
+// ── Health Incident (G8-UC-04, BR-031) ──
+class HealthIncident {
+  final int incidentId;
+  final String studentId;
+  final String studentName;
+  final String incidentType;
+  final String severity; // MILD, MODERATE, SEVERE
+  final String description;
+  final String? firstAidGiven;
+  final String status;
+  final DateTime createdAt;
+
+  const HealthIncident({
+    required this.incidentId,
+    required this.studentId,
+    required this.studentName,
+    required this.incidentType,
+    required this.severity,
+    required this.description,
+    this.firstAidGiven,
+    required this.status,
+    required this.createdAt,
+  });
+
+  factory HealthIncident.fromJson(Map<String, dynamic> json) => HealthIncident(
+        incidentId: (json['incidentId'] as num?)?.toInt() ?? 0,
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String? ?? 'Bé',
+        incidentType: json['incidentType'] as String? ?? 'SỰ CỐ',
+        severity: json['severity'] as String? ?? 'MILD',
+        description: json['description'] as String? ?? '',
+        firstAidGiven: json['firstAidGiven'] as String?,
+        status: json['status'] as String? ?? 'REPORTED',
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : DateTime.now(),
+      );
+}
+
+// ── Lesson Plan (G9-UC-01, BR-053) ──
+class WeeklyLessonPlan {
+  final int planId;
+  final String classId;
+  final int weekNumber;
+  final String title;
+  final String status; // DRAFT, SUBMITTED, APPROVED, REJECTED
+  final String? fileUrl;
+  final String? reviewComment;
+  final DateTime createdAt;
+
+  const WeeklyLessonPlan({
+    required this.planId,
+    required this.classId,
+    required this.weekNumber,
+    required this.title,
+    required this.status,
+    this.fileUrl,
+    this.reviewComment,
+    required this.createdAt,
+  });
+
+  factory WeeklyLessonPlan.fromJson(Map<String, dynamic> json) => WeeklyLessonPlan(
+        planId: (json['planId'] as num?)?.toInt() ?? 0,
+        classId: (json['classId'] ?? '').toString(),
+        weekNumber: (json['weekNumber'] as num?)?.toInt() ?? 1,
+        title: json['title'] as String? ?? 'Kế hoạch giáo dục tuần',
+        status: json['status'] as String? ?? 'SUBMITTED',
+        fileUrl: json['fileUrl'] as String?,
+        reviewComment: json['reviewComment'] as String?,
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : DateTime.now(),
+      );
+}
+
+// ── 5-Domain Development Evaluation (G9-UC-04, BR-049) ──
+class DevelopmentEvaluationItem {
+  final int? evaluationId;
+  final String studentId;
+  final String studentName;
+  final String evaluationPeriod;
+  final double physicalScore;
+  final double cognitiveScore;
+  final double languageScore;
+  final double socialEmotionalScore;
+  final double aestheticScore;
+  final String teacherComment;
+  final String status;
+
+  const DevelopmentEvaluationItem({
+    this.evaluationId,
+    required this.studentId,
+    required this.studentName,
+    required this.evaluationPeriod,
+    required this.physicalScore,
+    required this.cognitiveScore,
+    required this.languageScore,
+    required this.socialEmotionalScore,
+    required this.aestheticScore,
+    required this.teacherComment,
+    required this.status,
+  });
+
+  factory DevelopmentEvaluationItem.fromJson(Map<String, dynamic> json) => DevelopmentEvaluationItem(
+        evaluationId: (json['evaluationId'] as num?)?.toInt(),
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String? ?? '',
+        evaluationPeriod: json['evaluationPeriod'] as String? ?? 'HỌC KỲ I',
+        physicalScore: (json['physicalScore'] as num?)?.toDouble() ?? 5.0,
+        cognitiveScore: (json['cognitiveScore'] as num?)?.toDouble() ?? 5.0,
+        languageScore: (json['languageScore'] as num?)?.toDouble() ?? 5.0,
+        socialEmotionalScore: (json['socialEmotionalScore'] as num?)?.toDouble() ?? 5.0,
+        aestheticScore: (json['aestheticScore'] as num?)?.toDouble() ?? 5.0,
+        teacherComment: json['teacherComment'] as String? ?? '',
+        status: json['status'] as String? ?? 'SUBMITTED',
+      );
+}
+
+// ── Classroom Equipment Incident (G9-UC-06, BR-051, BR-052) ──
+class EquipmentIncidentItem {
+  final int incidentId;
+  final String equipmentName;
+  final String classroomName;
+  final String description;
+  final String? photoUrl;
+  final String status; // REPORTED, IN_REPAIR, REPAIRED
+  final DateTime createdAt;
+
+  const EquipmentIncidentItem({
+    required this.incidentId,
+    required this.equipmentName,
+    required this.classroomName,
+    required this.description,
+    this.photoUrl,
+    required this.status,
+    required this.createdAt,
+  });
+
+  factory EquipmentIncidentItem.fromJson(Map<String, dynamic> json) => EquipmentIncidentItem(
+        incidentId: (json['incidentId'] as num?)?.toInt() ?? 0,
+        equipmentName: json['equipmentName'] as String? ?? '',
+        classroomName: json['classroomName'] as String? ?? 'Lớp học',
+        description: json['description'] as String? ?? '',
+        photoUrl: json['photoUrl'] as String?,
+        status: json['status'] as String? ?? 'REPORTED',
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : DateTime.now(),
+      );
+}
+
+// ── Leave Request Review (G10-UC-09, BR-064, BR-065) ──
+class TeacherLeaveRequestItem {
+  final int id;
+  final String studentId;
+  final String studentName;
+  final String startDate;
+  final String endDate;
+  final String reason;
+  final String status; // PENDING, APPROVED, REJECTED
+  final bool mealRefundEligible;
+
+  const TeacherLeaveRequestItem({
+    required this.id,
+    required this.studentId,
+    required this.studentName,
+    required this.startDate,
+    required this.endDate,
+    required this.reason,
+    required this.status,
+    this.mealRefundEligible = false,
+  });
+
+  factory TeacherLeaveRequestItem.fromJson(Map<String, dynamic> json) => TeacherLeaveRequestItem(
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String? ?? 'Học sinh',
+        startDate: json['startDate'] as String? ?? '',
+        endDate: json['endDate'] as String? ?? '',
+        reason: json['reason'] as String? ?? '',
+        status: json['status'] as String? ?? 'PENDING',
+        mealRefundEligible: json['mealRefundEligible'] as bool? ?? false,
+      );
+}
+
+// ── Classroom Chat Message (G11-UC-04, BR-058, BR-059) ──
+class ClassChatMessageItem {
+  final int messageId;
+  final String classId;
+  final String? studentName;
+  final String senderType; // TEACHER, PARENT
+  final String senderName;
+  final String content;
+  final bool isSilent;
+  final DateTime createdAt;
+
+  const ClassChatMessageItem({
+    required this.messageId,
+    required this.classId,
+    this.studentName,
+    required this.senderType,
+    required this.senderName,
+    required this.content,
+    this.isSilent = false,
+    required this.createdAt,
+  });
+
+  factory ClassChatMessageItem.fromJson(Map<String, dynamic> json) => ClassChatMessageItem(
+        messageId: (json['messageId'] as num?)?.toInt() ?? 0,
+        classId: (json['classId'] ?? '').toString(),
+        studentName: json['studentName'] as String?,
+        senderType: json['senderType'] as String? ?? 'TEACHER',
+        senderName: json['senderName'] as String? ?? 'Giáo viên',
+        content: json['content'] as String? ?? '',
+        isSilent: json['isSilent'] as bool? ?? false,
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : DateTime.now(),
+      );
+}
+
+// ── Classroom Journal Post (G11-UC-05, BR-060) ──
+class ClassroomJournalItem {
+  final int postId;
+  final String classId;
+  final String className;
+  final String title;
+  final String content;
+  final List<String> photoUrls;
+  final List<String> taggedStudentIds;
+  final DateTime createdAt;
+
+  const ClassroomJournalItem({
+    required this.postId,
+    required this.classId,
+    required this.className,
+    required this.title,
+    required this.content,
+    required this.photoUrls,
+    required this.taggedStudentIds,
+    required this.createdAt,
+  });
+
+  factory ClassroomJournalItem.fromJson(Map<String, dynamic> json) => ClassroomJournalItem(
+        postId: (json['postId'] as num?)?.toInt() ?? 0,
+        classId: (json['classId'] ?? '').toString(),
+        className: json['className'] as String? ?? 'Lớp học',
+        title: json['title'] as String? ?? '',
+        content: json['content'] as String? ?? '',
+        photoUrls: (json['photoUrls'] as List?)?.map((e) => e.toString()).toList() ?? [],
+        taggedStudentIds: (json['taggedStudentIds'] as List?)?.map((e) => e.toString()).toList() ?? [],
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : DateTime.now(),
       );
 }
