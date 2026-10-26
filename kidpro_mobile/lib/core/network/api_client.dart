@@ -7,16 +7,37 @@ class ApiClient {
   static ApiClient? _instance;
   late final Dio dio;
 
+  String get baseUrl => dio.options.baseUrl;
+
   ApiClient._() {
     dio = Dio(BaseOptions(
-      // ponytail: hardcoded localhost, swap via --dart-define=BASE_URL=... for staging/prod
       baseUrl: const String.fromEnvironment('BASE_URL',
-          defaultValue: 'http://10.0.2.2:8080'),
+          defaultValue: 'http://192.168.10.125:8080'),
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
     ));
     dio.interceptors.add(AuthInterceptor(dio));
+    _loadSavedBaseUrl();
+  }
+
+  Future<void> _loadSavedBaseUrl() async {
+    final saved = await SecureStorageHelper.getCustomBaseUrl();
+    if (saved != null && saved.isNotEmpty) {
+      dio.options.baseUrl = saved;
+    }
+  }
+
+  Future<void> updateBaseUrl(String newUrl) async {
+    String formatted = newUrl.trim();
+    if (!formatted.startsWith('http://') && !formatted.startsWith('https://')) {
+      formatted = 'http://$formatted';
+    }
+    if (formatted.endsWith('/')) {
+      formatted = formatted.substring(0, formatted.length - 1);
+    }
+    dio.options.baseUrl = formatted;
+    await SecureStorageHelper.saveCustomBaseUrl(formatted);
   }
 
   factory ApiClient() => _instance ??= ApiClient._();

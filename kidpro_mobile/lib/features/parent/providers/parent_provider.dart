@@ -48,13 +48,21 @@ class ParentProvider extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
 
+  List<dynamic> _extractList(dynamic data) {
+    if (data is List) return data;
+    if (data is Map && data['data'] != null) {
+      if (data['data'] is List) return data['data'] as List;
+    }
+    return [];
+  }
+
   /// Loads all children associated with the currently authenticated parent account.
   Future<void> loadMyStudents() async {
     _loading = true;
     notifyListeners();
     try {
       final res = await _dio.get(ApiEndpoints.parentStudents);
-      final list = res.data as List;
+      final list = _extractList(res.data);
       _students = list
           .map((e) => StudentSummary.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -133,7 +141,7 @@ class ParentProvider extends ChangeNotifier {
     try {
       final res = await _dio.get(ApiEndpoints.parentInvoices,
           queryParameters: {'studentId': targetId});
-      _invoices = (res.data as List)
+      _invoices = _extractList(res.data)
           .map((e) => Invoice.fromJson(e as Map<String, dynamic>))
           .toList();
       _error = null;
@@ -181,16 +189,9 @@ class ParentProvider extends ChangeNotifier {
     try {
       final res = await _dio.get(ApiEndpoints.parentLeaveRequests,
           queryParameters: {'studentId': targetId});
-      final rawData = res.data is Map<String, dynamic> && res.data['data'] != null
-          ? res.data['data']
-          : res.data;
-      if (rawData is List) {
-        _leaveRequests = rawData
-            .map((e) => LeaveRequest.fromJson(e as Map<String, dynamic>))
-            .toList();
-      } else {
-        _leaveRequests = [];
-      }
+      _leaveRequests = _extractList(res.data)
+          .map((e) => LeaveRequest.fromJson(e as Map<String, dynamic>))
+          .toList();
       _error = null;
     } on DioException catch (e) {
       logError('loadLeaveRequests', e);
@@ -241,7 +242,7 @@ class ParentProvider extends ChangeNotifier {
     try {
       final res = await _dio.get(ApiEndpoints.parentEmergencyPickups,
           queryParameters: {'studentId': targetId});
-      _emergencyPickups = (res.data as List)
+      _emergencyPickups = _extractList(res.data)
           .map((e) => EmergencyPickup.fromJson(e as Map<String, dynamic>))
           .toList();
       _error = null;
@@ -315,7 +316,7 @@ class ParentProvider extends ChangeNotifier {
     try {
       final res =
           await _dio.get(ApiEndpoints.parentStudentGuardians(targetId));
-      _guardians = (res.data as List)
+      _guardians = _extractList(res.data)
           .map((e) => AuthorizedGuardian.fromJson(e as Map<String, dynamic>))
           .toList();
       _error = null;
@@ -371,7 +372,7 @@ class ParentProvider extends ChangeNotifier {
     try {
       final res = await _dio.get(ApiEndpoints.parentMedications,
           queryParameters: {'studentId': targetId});
-      _medications = (res.data as List)
+      _medications = _extractList(res.data)
           .map((e) => MedicationRequest.fromJson(e as Map<String, dynamic>))
           .toList();
       _error = null;
@@ -424,7 +425,7 @@ class ParentProvider extends ChangeNotifier {
     try {
       final res = await _dio.get(ApiEndpoints.parentAllergies,
           queryParameters: {'studentId': targetId});
-      _allergies = (res.data as List)
+      _allergies = _extractList(res.data)
           .map((e) => AllergyAlert.fromJson(e as Map<String, dynamic>))
           .toList();
       _error = null;
@@ -475,7 +476,7 @@ class ParentProvider extends ChangeNotifier {
 
     try {
       final res = await _dio.post(ApiEndpoints.parentBiometricPurgeOtp(targetId));
-      return res.data['otp']?.toString();
+      return (res.data['demoOtp'] ?? res.data['otp'])?.toString();
     } on DioException catch (e) {
       logError('requestPurgeOtp', e);
       return null;
@@ -518,12 +519,27 @@ class ParentProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final res = await _dio.get(ApiEndpoints.chatThreads);
-      _chatThreads = (res.data as List)
+      final list = _extractList(res.data);
+      _chatThreads = list
           .map((e) => ChatThread.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
       logError('loadChatThreads', e);
-      _chatThreads = [];
+      // Fallback: Tạo chat thread tự động từ danh sách lớp học của các con
+      if (_students.isNotEmpty) {
+        _chatThreads = _students.map((s) {
+          final cid = s.classId?.isNotEmpty == true ? s.classId! : s.studentId;
+          final cname = s.className?.isNotEmpty == true ? s.className! : 'Lớp học';
+          return ChatThread(
+            id: cid,
+            otherPartyName: '$cname - ${s.fullName}',
+            lastMessage: 'Nhóm trao đổi phụ huynh & giáo viên',
+            unreadCount: 0,
+          );
+        }).toList();
+      } else {
+        _chatThreads = [];
+      }
     }
     _loading = false;
     notifyListeners();
@@ -531,9 +547,14 @@ class ParentProvider extends ChangeNotifier {
 
   Future<void> loadMessages(String threadId) async {
     try {
-      final res = await _dio.get(ApiEndpoints.chatMessages(threadId));
-      final content = res.data['content'] as List? ?? res.data as List;
-      _messages = content
+      dynamic res;
+      try {
+        res = await _dio.get(ApiEndpoints.classChatMessages(threadId));
+      } catch (_) {
+        res = await _dio.get(ApiEndpoints.chatMessages(threadId));
+      }
+      final list = _extractList(res.data);
+      _messages = list
           .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
@@ -545,9 +566,18 @@ class ParentProvider extends ChangeNotifier {
 
   Future<bool> sendMessage(String threadId, String content) async {
     try {
-      final res = await _dio.post(ApiEndpoints.chatMessages(threadId),
-          data: {'content': content});
-      final newMsg = ChatMessage.fromJson(res.data);
+      dynamic res;
+      try {
+        res = await _dio.post(ApiEndpoints.classChatMessages(threadId),
+            data: {'content': content});
+      } catch (_) {
+        res = await _dio.post(ApiEndpoints.chatMessages(threadId),
+            data: {'content': content});
+      }
+      final rawData = (res.data is Map && res.data['data'] != null)
+          ? res.data['data']
+          : res.data;
+      final newMsg = ChatMessage.fromJson(rawData as Map<String, dynamic>);
       _messages.add(newMsg);
       notifyListeners();
       return true;
@@ -573,7 +603,7 @@ class ParentProvider extends ChangeNotifier {
 
     try {
       final res = await _dio.get(ApiEndpoints.parentDailyActivities(targetId));
-      _dailyActivities = (res.data as List)
+      _dailyActivities = _extractList(res.data)
           .map((e) => DailyActivityModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
@@ -599,7 +629,7 @@ class ParentProvider extends ChangeNotifier {
 
     try {
       final res = await _dio.get(ApiEndpoints.parentAttendances(targetId));
-      _attendances = (res.data as List)
+      _attendances = _extractList(res.data)
           .map((e) => AttendanceRecordModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
@@ -625,7 +655,7 @@ class ParentProvider extends ChangeNotifier {
 
     try {
       final res = await _dio.get(ApiEndpoints.parentEvaluations(targetId));
-      _evaluations = (res.data as List)
+      _evaluations = _extractList(res.data)
           .map((e) => DevelopmentEvaluationModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
@@ -699,7 +729,7 @@ class ParentProvider extends ChangeNotifier {
 
     try {
       final res = await _dio.get(ApiEndpoints.parentAllRequests(targetId));
-      _allRequests = (res.data as List)
+      _allRequests = _extractList(res.data)
           .map((e) => ParentUnifiedRequest.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {

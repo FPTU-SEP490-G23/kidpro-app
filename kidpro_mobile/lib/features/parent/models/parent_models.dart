@@ -363,6 +363,7 @@ class ChatThread {
 class ChatMessage {
   final String id;
   final String senderId;
+  final String senderName;
   final String content;
   final DateTime sentAt;
   final bool isRead;
@@ -370,16 +371,20 @@ class ChatMessage {
   const ChatMessage({
     required this.id,
     required this.senderId,
+    this.senderName = 'Người dùng',
     required this.content,
     required this.sentAt,
     this.isRead = false,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
-        id: json['id'] as String,
-        senderId: json['senderId'] as String,
-        content: json['content'] as String,
-        sentAt: DateTime.parse(json['sentAt'] as String),
+        id: (json['messageId'] ?? json['id'] ?? '')?.toString() ?? '',
+        senderId: (json['senderAccountId'] ?? json['senderId'] ?? '')?.toString() ?? '',
+        senderName: json['senderName'] as String? ?? 'Người dùng',
+        content: json['content'] as String? ?? '',
+        sentAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : (json['sentAt'] != null ? DateTime.parse(json['sentAt'] as String) : DateTime.now()),
         isRead: json['isRead'] as bool? ?? false,
       );
 }
