@@ -6,7 +6,10 @@ Cách dùng:
 """
 
 import argparse
+import sys
 import requests
+
+sys.stdout.reconfigure(encoding='utf-8')
 
 BASE_URL = "http://localhost:8000"
 

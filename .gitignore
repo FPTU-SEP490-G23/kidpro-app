@@ -23,3 +23,20 @@
 # OS files
 .DS_Store
 Thumbs.db
+
+# Python & AI weights / databases
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.onnx
+*.pt
+*.bin
+*.pth
+*.tflite
+*.db
+*.sqlite
+*.sqlite3
+*.pkl
+venv/
+.env

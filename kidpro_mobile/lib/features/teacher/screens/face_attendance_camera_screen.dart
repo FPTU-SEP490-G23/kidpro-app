@@ -17,8 +17,8 @@ class FaceAttendanceCameraScreen extends StatefulWidget {
 
 class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     with SingleTickerProviderStateMixin {
-  // Configurable AI server URL (USB adb reverse or LAN IP)
-  String _serverBaseUrl = 'http://127.0.0.1:8000';
+  // Configurable AI server URL (Wi-Fi LAN IP or USB adb reverse)
+  String _serverBaseUrl = 'http://192.168.10.125:8000';
   final _urlCtrl = TextEditingController();
 
   late AnimationController _animCtrl;
