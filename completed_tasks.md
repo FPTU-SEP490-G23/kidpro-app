@@ -332,6 +332,10 @@
        - Thay thế hành động gán ảnh giả lập bằng hộp thoại chọn chụp ảnh toa thuốc từ Camera hoặc tải ảnh từ Thư viện qua `ImagePicker`.
        - Hỗ trợ hiển thị và nộp tệp ảnh thực tế lên hệ thống.
 
+## 2026-10-27: Khắc phục lỗi biên dịch getter 'currentBaseUrl' trong ApiClient
+- **Task:** Bổ sung getter `currentBaseUrl` trong `ApiClient` (`api_client.dart`) để tương thích với `login_screen.dart`.
+- **Mô tả:** Thêm `String get currentBaseUrl => dio.options.baseUrl;` vào `ApiClient` trong `kidpro_mobile/lib/core/network/api_client.dart` giúp Flutter compile thành công `login_screen.dart` khi gọi `ApiClient().currentBaseUrl`.
+
 
 
 
