@@ -1,6 +1,6 @@
 /// Teacher models matching KidPro backend entities and DTOs.
 
-enum AttendanceStatus { present, notArrived, onLeave }
+enum AttendanceStatus { present, late, onLeave, notArrived }
 
 class TeacherStudent {
   final String id;
@@ -8,6 +8,13 @@ class TeacherStudent {
   final String? avatarUrl;
   final String? studentCode;
   AttendanceStatus status;
+  String? checkInTime;
+  String? checkOutTime;
+  String? notes;
+  double? temperature;
+  String? guardianName;
+  String? photoUrl;
+  String? checkInMethod;
 
   TeacherStudent({
     required this.id,
@@ -15,19 +22,39 @@ class TeacherStudent {
     this.avatarUrl,
     this.studentCode,
     this.status = AttendanceStatus.notArrived,
+    this.checkInTime,
+    this.checkOutTime,
+    this.notes,
+    this.temperature,
+    this.guardianName,
+    this.photoUrl,
+    this.checkInMethod,
   });
 
   factory TeacherStudent.fromJson(Map<String, dynamic> json) => TeacherStudent(
         id: (json['id'] ?? json['studentId'] ?? '') as String,
-        fullName: (json['fullName'] ?? json['name'] ?? '') as String,
+        fullName: (json['fullName'] ?? json['name'] ?? json['studentName'] ?? '') as String,
         avatarUrl: json['avatarUrl'] as String?,
         studentCode: json['studentCode'] as String?,
-        status: _parseStatus(json['status'] as String?),
+        status: parseStatus(json['status'] as String?),
+        checkInTime: json['checkInTime'] as String?,
+        checkOutTime: json['checkOutTime'] as String?,
+        notes: json['notes'] as String?,
+        temperature: (json['temperature'] as num?)?.toDouble(),
+        guardianName: json['guardianName'] as String?,
+        photoUrl: json['photoUrl'] as String?,
+        checkInMethod: json['checkInMethod'] as String?,
       );
 
-  static AttendanceStatus _parseStatus(String? status) {
-    if (status == 'PRESENT') return AttendanceStatus.present;
-    if (status == 'EXCUSED_ABSENCE' || status == 'ON_LEAVE' || status == 'ABSENT_PERMITTED') {
+  static AttendanceStatus parseStatus(String? status) {
+    if (status == null) return AttendanceStatus.notArrived;
+    final upper = status.toUpperCase();
+    if (upper == 'PRESENT') return AttendanceStatus.present;
+    if (upper == 'LATE') return AttendanceStatus.late;
+    if (upper == 'EXCUSED_ABSENCE' ||
+        upper == 'ON_LEAVE' ||
+        upper == 'ABSENT_PERMITTED' ||
+        upper == 'ABSENT_WITH_LEAVE') {
       return AttendanceStatus.onLeave;
     }
     return AttendanceStatus.notArrived;

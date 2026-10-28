@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/core/router/app_router.dart';
@@ -8,6 +9,7 @@ import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('vi', null);
 
   final authProvider = AuthProvider();
   await authProvider.tryAutoLogin();

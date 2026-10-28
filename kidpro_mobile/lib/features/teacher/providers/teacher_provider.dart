@@ -80,10 +80,13 @@ class TeacherProvider extends ChangeNotifier {
 
   int get presentCount =>
       _students.where((s) => s.status == AttendanceStatus.present).length;
+  int get lateCount =>
+      _students.where((s) => s.status == AttendanceStatus.late).length;
   int get notArrivedCount =>
       _students.where((s) => s.status == AttendanceStatus.notArrived).length;
   int get onLeaveCount =>
       _students.where((s) => s.status == AttendanceStatus.onLeave).length;
+  int get totalCount => _students.length;
 
   // ─────────────────────────────────────────────────────────────
   // 0. Khởi tạo & Quản lý Lớp học thực tế từ Supabase
@@ -154,7 +157,7 @@ class TeacherProvider extends ChangeNotifier {
   // 1. Attendance (G5-UC-01) - 100% Supabase Live
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> loadStudents(String classId) async {
+  Future<void> loadStudents(String classId, [DateTime? date]) async {
     _loading = true;
     notifyListeners();
     try {
@@ -163,6 +166,54 @@ class TeacherProvider extends ChangeNotifier {
         final data = res.data;
         final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
         _students = list.map((e) => TeacherStudent.fromJson(e as Map<String, dynamic>)).toList();
+
+        // Đồng bộ dữ liệu điểm danh đã lưu trong ngày (nếu có)
+        try {
+          final targetDate = (date ?? DateTime.now()).toIso8601String().split('T').first;
+          final attRes = await _dio.get(
+            '/api/teachers/attendance',
+            queryParameters: {
+              'classId': classId,
+              'date': targetDate,
+            },
+          );
+          final attData = attRes.data;
+          final attList = attData is List
+              ? attData
+              : (attData is Map<String, dynamic> ? (attData['data'] as List? ?? []) : []);
+
+          if (attList.isNotEmpty) {
+            final Map<String, dynamic> attMap = {};
+            for (var item in attList) {
+              if (item is Map) {
+                final sId = item['studentId']?.toString();
+                if (sId != null) attMap[sId] = item;
+              }
+            }
+            for (var s in _students) {
+              if (attMap.containsKey(s.id)) {
+                final rec = attMap[s.id];
+                if (rec['status'] != null) {
+                  s.status = TeacherStudent.parseStatus(rec['status'].toString());
+                }
+                if (rec['checkInTime'] != null) {
+                  s.checkInTime = rec['checkInTime'].toString();
+                }
+                if (rec['checkOutTime'] != null) {
+                  s.checkOutTime = rec['checkOutTime'].toString();
+                }
+                if (rec['notes'] != null) {
+                  s.notes = rec['notes'].toString();
+                }
+                if (rec['checkInMethod'] != null) {
+                  s.checkInMethod = rec['checkInMethod'].toString();
+                }
+              }
+            }
+          }
+        } catch (attErr) {
+          log('loadAttendance optional sync note: $attErr');
+        }
       }
       _error = null;
     } catch (e) {
@@ -172,14 +223,57 @@ class TeacherProvider extends ChangeNotifier {
 
     if (_students.isEmpty) {
       _students = [
-        TeacherStudent(id: '1', fullName: 'Bé Nguyễn Bảo An', studentCode: 'HS001', status: AttendanceStatus.present),
-        TeacherStudent(id: '2', fullName: 'Bé Trần Minh Khôi', studentCode: 'HS002', status: AttendanceStatus.notArrived),
-        TeacherStudent(id: '3', fullName: 'Bé Lê Phương Thảo', studentCode: 'HS003', status: AttendanceStatus.onLeave),
-        TeacherStudent(id: '4', fullName: 'Bé Phạm Đức Anh', studentCode: 'HS004', status: AttendanceStatus.present),
+        TeacherStudent(id: '1', fullName: 'Bé Nguyễn Bảo An', studentCode: 'HS001', status: AttendanceStatus.present, checkInTime: '07:30'),
+        TeacherStudent(id: '2', fullName: 'Bé Trần Minh Khôi', studentCode: 'HS002', status: AttendanceStatus.late, checkInTime: '08:20'),
+        TeacherStudent(id: '3', fullName: 'Bé Lê Phương Thảo', studentCode: 'HS003', status: AttendanceStatus.onLeave, notes: 'Bé sốt nhẹ có phép'),
+        TeacherStudent(id: '4', fullName: 'Bé Phạm Đức Anh', studentCode: 'HS004', status: AttendanceStatus.present, checkInTime: '07:45'),
         TeacherStudent(id: '5', fullName: 'Bé Vũ Khánh Linh', studentCode: 'HS005', status: AttendanceStatus.notArrived),
       ];
     }
     _loading = false;
+    notifyListeners();
+  }
+
+  void setStudentStatus(int index, AttendanceStatus status) {
+    if (index < 0 || index >= _students.length) return;
+    _students[index].status = status;
+    if ((status == AttendanceStatus.present || status == AttendanceStatus.late) &&
+        (_students[index].checkInTime == null || _students[index].checkInTime!.isEmpty)) {
+      final now = DateTime.now();
+      _students[index].checkInTime =
+          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    }
+    notifyListeners();
+  }
+
+  void updateStudentDetails({
+    required int index,
+    AttendanceStatus? status,
+    String? checkInTime,
+    String? notes,
+    double? temperature,
+    String? guardianName,
+    String? photoUrl,
+  }) {
+    if (index < 0 || index >= _students.length) return;
+    final s = _students[index];
+    if (status != null) s.status = status;
+    if (checkInTime != null) s.checkInTime = checkInTime;
+    if (notes != null) s.notes = notes;
+    if (temperature != null) s.temperature = temperature;
+    if (guardianName != null) s.guardianName = guardianName;
+    if (photoUrl != null) s.photoUrl = photoUrl;
+    notifyListeners();
+  }
+
+  void markAllPresent() {
+    final now = DateTime.now();
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    for (var s in _students) {
+      s.status = AttendanceStatus.present;
+      s.checkInTime ??= timeStr;
+    }
     notifyListeners();
   }
 
@@ -191,56 +285,114 @@ class TeacherProvider extends ChangeNotifier {
         _students[index].status = AttendanceStatus.present;
         break;
       case AttendanceStatus.present:
+        _students[index].status = AttendanceStatus.late;
+        break;
+      case AttendanceStatus.late:
         _students[index].status = AttendanceStatus.onLeave;
         break;
       case AttendanceStatus.onLeave:
         _students[index].status = AttendanceStatus.notArrived;
         break;
     }
+    if ((_students[index].status == AttendanceStatus.present ||
+            _students[index].status == AttendanceStatus.late) &&
+        (_students[index].checkInTime == null || _students[index].checkInTime!.isEmpty)) {
+      final now = DateTime.now();
+      _students[index].checkInTime =
+          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    }
     notifyListeners();
   }
 
   Future<bool> submitAttendanceBatch() => saveBatchAttendance();
 
-  Future<bool> saveBatchAttendance() async {
+  Future<bool> saveBatchAttendance({DateTime? date}) async {
     _loading = true;
     notifyListeners();
     try {
-      final records = _students.map((s) {
+      if (_currentClassId.isEmpty) {
+        await loadMyClasses();
+      }
+
+      if (_currentClassId.isEmpty) {
+        _error = 'Chưa xác định được lớp học của giáo viên';
+        _loading = false;
+        notifyListeners();
+        return false;
+      }
+
+      // Kiểm tra nếu danh sách đang là dữ liệu mẫu (ID không phải UUID)
+      final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+      final hasInvalidUuid = _students.any((s) => !uuidRegex.hasMatch(s.id));
+
+      if (hasInvalidUuid) {
+        // Thử tải lại danh sách học sinh thật từ Supabase trước
+        await loadStudents(_currentClassId, date);
+      }
+
+      final validStudents = _students.where((s) => uuidRegex.hasMatch(s.id)).toList();
+      if (validStudents.isEmpty) {
+        _loading = false;
+        notifyListeners();
+        return true; // Giả lập thành công cho chế độ offline/mock
+      }
+
+      final records = validStudents.map((s) {
         String statusStr;
         switch (s.status) {
           case AttendanceStatus.present:
             statusStr = 'PRESENT';
             break;
+          case AttendanceStatus.late:
+            statusStr = 'LATE';
+            break;
           case AttendanceStatus.onLeave:
-            statusStr = 'ABSENT_PERMITTED';
+            statusStr = 'ABSENT_WITH_LEAVE';
             break;
           case AttendanceStatus.notArrived:
-            statusStr = 'ABSENT_UNPERMITTED';
+            statusStr = 'ABSENT_WITHOUT_LEAVE';
             break;
         }
         return {
           'studentId': s.id,
           'status': statusStr,
+          if (s.notes != null && s.notes!.isNotEmpty) 'notes': s.notes,
         };
       }).toList();
 
-      await _dio.post(
+      final targetDate = (date ?? DateTime.now()).toIso8601String().split('T').first;
+
+      final res = await _dio.post(
         ApiEndpoints.teacherAttendanceBatch,
         data: {
           'classId': _currentClassId,
-          'date': DateTime.now().toIso8601String().split('T').first,
+          'date': targetDate,
           'records': records,
         },
       );
+
       _loading = false;
       notifyListeners();
       return true;
+    } on DioException catch (dioErr) {
+      final resData = dioErr.response?.data;
+      String msg = 'Lỗi lưu điểm danh';
+      if (resData is Map && resData['message'] != null) {
+        msg = resData['message'].toString();
+      } else if (dioErr.message != null) {
+        msg = dioErr.message!;
+      }
+      log('saveBatchAttendance DioException: $msg, data: $resData');
+      _error = msg;
+      _loading = false;
+      notifyListeners();
+      return false;
     } catch (e) {
       log('saveBatchAttendance error: $e');
+      _error = 'Lỗi lưu điểm danh: $e';
       _loading = false;
       notifyListeners();
-      return true;
+      return false;
     }
   }
 

@@ -96,6 +96,15 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: Badge(
+              isLabelVisible: parentProv.unreadNotificationCount > 0,
+              label: Text('${parentProv.unreadNotificationCount}'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            tooltip: 'Thông báo',
+            onPressed: () => context.push('/parent/notifications'),
+          ),
+          IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
             tooltip: 'Lời nhắn với cô',
             onPressed: () => context.push('/parent/chat'),
@@ -114,7 +123,11 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
           children: [
             // Student Card Header
             _buildStudentCard(parentProv, currentStudent),
-            const SizedBox(height: 20),
+            if (parentProv.notifications.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildNotificationBanner(parentProv),
+            ],
+            const SizedBox(height: 18),
 
             // Sổ điện tử Banner Shortcuts (6 Sổ)
             Row(
@@ -151,6 +164,76 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
             const SizedBox(height: 12),
             _buildTodayStatusCard(parentProv),
             const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationBanner(ParentProvider parentProv) {
+    final latest = parentProv.notifications.first;
+    final isUnread = !latest.isRead;
+    return InkWell(
+      onTap: () => context.push('/parent/notifications'),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isUnread ? Colors.orange.shade50 : Colors.blue.shade50.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isUnread ? Colors.orange.shade200 : Colors.blue.shade100,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isUnread ? Icons.notifications_active : Icons.notifications_none,
+              color: isUnread ? Colors.orange.shade800 : AppColors.primary,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        isUnread ? 'Thông báo mới' : 'Thông báo',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isUnread ? Colors.orange.shade900 : AppColors.primary,
+                        ),
+                      ),
+                      if (parentProv.unreadNotificationCount > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '${parentProv.unreadNotificationCount}',
+                            style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    latest.title,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
           ],
         ),
       ),

@@ -89,6 +89,7 @@ class ParentProvider extends ChangeNotifier {
         _allergies = [];
       }
       _error = null;
+      loadNotifications();
     } on DioException catch (e) {
       logError('loadMyStudents', e);
       _error = e.response?.data?['message']?.toString() ?? e.message;
@@ -861,6 +862,67 @@ class ParentProvider extends ChangeNotifier {
       _error = e.response?.data?['message']?.toString() ?? 'Gửi đơn thất bại';
       notifyListeners();
       return false;
+    }
+  }
+
+  // ── 16. THÔNG BÁO (NOTIFICATIONS - G11-UC-02) ──
+  List<NotificationItem> _notifications = [];
+  int _unreadNotificationCount = 0;
+
+  List<NotificationItem> get notifications => _notifications;
+  int get unreadNotificationCount => _unreadNotificationCount;
+
+  Future<void> loadNotifications() async {
+    try {
+      final res = await _dio.get(ApiEndpoints.notifications);
+      final list = _extractList(res.data);
+      _notifications = list
+          .map((e) => NotificationItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _unreadNotificationCount = _notifications.where((n) => !n.isRead).length;
+    } on DioException catch (e) {
+      logError('loadNotifications', e);
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadUnreadNotificationCount() async {
+    try {
+      final res = await _dio.get(ApiEndpoints.notificationsUnreadCount);
+      if (res.data is Map && res.data['data'] != null) {
+        final data = res.data['data'] as Map<String, dynamic>;
+        _unreadNotificationCount = int.tryParse(data['unreadCount']?.toString() ?? '0') ?? 0;
+      }
+    } on DioException catch (e) {
+      logError('loadUnreadNotificationCount', e);
+    }
+    notifyListeners();
+  }
+
+  Future<void> markNotificationAsRead(int notificationId) async {
+    try {
+      await _dio.put(ApiEndpoints.notificationMarkRead(notificationId));
+      final idx = _notifications.indexWhere((n) => n.notificationId == notificationId);
+      if (idx != -1 && !_notifications[idx].isRead) {
+        _notifications[idx] = _notifications[idx].copyWith(isRead: true);
+        if (_unreadNotificationCount > 0) {
+          _unreadNotificationCount--;
+        }
+        notifyListeners();
+      }
+    } on DioException catch (e) {
+      logError('markNotificationAsRead', e);
+    }
+  }
+
+  Future<void> markAllNotificationsAsRead() async {
+    try {
+      await _dio.put(ApiEndpoints.notificationsMarkAllRead);
+      _notifications = _notifications.map((n) => n.copyWith(isRead: true)).toList();
+      _unreadNotificationCount = 0;
+      notifyListeners();
+    } on DioException catch (e) {
+      logError('markAllNotificationsAsRead', e);
     }
   }
 
