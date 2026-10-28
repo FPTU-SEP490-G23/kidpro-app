@@ -177,9 +177,16 @@ class AuthProvider extends ChangeNotifier {
       return true;
     } on DioException catch (e) {
       _loading = false;
-      String msg = 'Không thể kết nối đến máy chủ backend';
-      if (e.response?.data is Map && e.response?.data['message'] != null) {
+      final statusCode = e.response?.statusCode;
+      String msg = 'Tài khoản không chính xác hoặc chưa được khởi tạo trên máy chủ';
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.receiveTimeout) {
+        msg = 'Không thể kết nối đến máy chủ (${_dio.options.baseUrl}). Vui lòng kiểm tra địa chỉ IP backend.';
+      } else if (e.response?.data is Map && e.response?.data['message'] != null) {
         msg = '${e.response?.data['message']}';
+      } else if (statusCode == 401 || statusCode == 403 || statusCode == 400) {
+        msg = 'Tài khoản hoặc mật khẩu không chính xác ($statusCode)';
       }
       _error = msg;
       _status = AuthStatus.unauthenticated;
