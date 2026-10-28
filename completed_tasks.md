@@ -387,6 +387,33 @@
      - Thêm thanh thông báo mới nhất nổi bật (`_buildNotificationBanner`) ngay trên Trang chủ giúp phụ huynh nắm bắt thông tin ngay tức thì.
      - Đăng ký GoRoute `/parent/notifications` trong `app_router.dart`.
 
+## 2026-10-28: Khắc phục Lỗi Điểm Danh Giáo Viên (LocaleDataException, Lỗi 500 & Transaction Rollback-Only)
+- **Task:** Khắc phục triệt để chuỗi lỗi phát sinh khi điểm danh thủ công trên ứng dụng di động giáo viên và backend Spring Boot.
+- **Mô tả:**
+  1. **Lỗi `LocaleDataException: Locale data has not been initialized`:**
+     - Nguyên nhân: Flutter ném ngoại lệ khi dùng `DateFormat(..., 'vi')` mà chưa chạy `initializeDateFormatting('vi', null)`.
+     - Khắc phục: Xây dựng hàm định dạng thứ ngày tháng tiếng Việt thuần túy `_formatDateVietnamese` trong `attendance_screen.dart` và bổ sung `initializeDateFormatting('vi', null)` tại `main.dart`.
+  2. **Lỗi `DioException [bad response]: status code of 500`:**
+     - Nguyên nhân: Mobile gửi trạng thái `ABSENT_PERMITTED` / `ABSENT_UNPERMITTED` vi phạm ràng buộc Enum PostgreSQL Supabase `student.attendance_status` (`'PRESENT'`, `'ABSENT_WITH_LEAVE'`, `'ABSENT_WITHOUT_LEAVE'`, `'LATE'`), đồng thời gửi mock student ID khi lớp học rỗng.
+     - Khắc phục: Chuẩn hóa `teacher_provider.dart` gửi chuẩn `ABSENT_WITH_LEAVE` và `ABSENT_WITHOUT_LEAVE`, lọc bỏ ID không phải UUID và tải lớp học tự động.
+  3. **Lỗi `Transaction silently rolled back because it has been marked as rollback-only`:**
+     - Nguyên nhân: Trong phương thức `@Transactional` `AttendanceServiceImpl.recordBatchAttendance`, việc gọi `mealHeadcountSnapshotRepository.save(snapshot)` gặp lỗi lưu snapshot định mức bếp do ràng buộc enum PostgreSQL `catering.cutoff_time`. Dù có khối `try-catch`, Hibernate Session vẫn đánh dấu giao dịch là `rollback-only`, dẫn đến việc Spring ném `UnexpectedRollbackException` khi commit.
+     - Khắc phục:
+       + Loại bỏ việc ghi dư thừa `mealHeadcountSnapshotRepository.save` khỏi giao dịch batch attendance (bộ phận bếp tính toán trực tiếp từ `attendanceRepository`).
+       + Chuẩn hóa entity `MealHeadcountSnapshot` với `@ColumnTransformer` sử dụng `LTRIM(REGEXP_REPLACE(?, '^TIME_', ''), '_')::catering.cutoff_time` (đúng chuẩn 1 placeholder `?` của Hibernate) và đọc chuỗi enum an toàn.
+       + Khởi động lại backend Spring Boot thành công trên cổng 8080.
+
+## 2026-10-28: Tái Cấu Trúc Toàn Diện Dashboard Giáo Viên (Teacher Dashboard UI/UX Revamp)
+- **Task:** Nâng cấp và thiết kế lại toàn bộ giao diện Trang chủ Dashboard Giáo viên (`TeacherDashboardScreen`) chuẩn KidPro Design System hiện đại, tiện ích và thông minh.
+- **Mô tả:**
+  1. **Header & Profile Bar hiện đại:** Lời chào cá nhân hóa theo buổi trong ngày (sáng/trưa/chiều/tối), hiển thị avatar giáo viên với trạng thái hoạt động trực tuyến, thanh chọn/đổi lớp phụ trách bằng Pop-up Menu trực quan, nút đồng bộ dữ liệu kèm spinner xoay và hộp thoại xác nhận đăng xuất an toàn.
+  2. **Dải Hướng Dẫn & Ngữ Cảnh Ca Trực (Shift Guidance Banner):** Tự động gợi ý nhiệm vụ trọng tâm theo khung giờ thực tế trong ngày (đón trẻ & dặn thuốc buổi sáng, bán trú & giấc ngủ trưa, uống thuốc & trả trẻ chiều, đóng chuyến xe buýt tối).
+  3. **Thẻ Hero Sĩ Số Thời Gian Thực (Class Pulse Card):** Phối màu dải Gradient xanh Forest Green `#275A4E` - `#193B33` sang trọng, vòng tròn tiến độ phần trăm tỷ lệ bé có mặt trong ngày, 4 chip trạng thái màu sắc (Có mặt, Đi muộn, Có phép, Chưa đến) và nút gọi hành động 1-chạm mở ngay màn hình điểm danh.
+  4. **Cảnh Báo Việc Cần Xử Lý Gấp (Priority Alerts Hub):** Tự động phát hiện và ghim cảnh báo đỏ khi có người lạ nhận diện tại cổng (AI), cảnh báo xanh cho nhiệm vụ uống thuốc lúc 14:00 (BR-030), và cảnh báo đơn xin nghỉ học chờ duyệt (BR-064).
+  5. **Thanh Thao Tác Nhanh Đầu Ngày (Quick Actions 1-Tap):** 4 nút tròn truy cập tức thì cho các hành động thường xuyên nhất: Điểm danh thủ công, Quét mặt AI, Xe buýt đưa đón, và Tan học/Trả trẻ.
+  6. **Bộ Lọc Phân Hệ Linh Hoạt (Category Filter Chips):** 5 chip danh mục chuyển đổi tức thì (`Tất cả`, `Điểm danh & Xe`, `Sức khỏe & Bán trú`, `Học vụ & Lớp`, `Tương tác & Ảnh`) giúp giáo viên không bị ngợp và truy cập nhanh chức năng cần thiết.
+  7. **Thẻ Chức Năng Hiện Đại (Modern Feature Cards):** Icon container bo góc mềm mại, hiển thị tag nghiệp vụ tiêu chuẩn (G5-UC, G8-UC, BR-024...), badge số lượng nhiệm vụ cần xử lý và chuyển trang mượt mà qua GoRouter.
+
 
 
 
