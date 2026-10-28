@@ -8,11 +8,12 @@ class ApiClient {
   late final Dio dio;
 
   String get baseUrl => dio.options.baseUrl;
+  String get currentBaseUrl => dio.options.baseUrl;
 
   ApiClient._() {
     dio = Dio(BaseOptions(
       baseUrl: const String.fromEnvironment('BASE_URL',
-          defaultValue: 'http://192.168.10.125:8080'),
+          defaultValue: 'http://127.0.0.1:8080'),
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
@@ -23,8 +24,10 @@ class ApiClient {
 
   Future<void> _loadSavedBaseUrl() async {
     final saved = await SecureStorageHelper.getCustomBaseUrl();
-    if (saved != null && saved.isNotEmpty) {
+    if (saved != null && saved.isNotEmpty && saved != 'http://192.168.10.125:8080') {
       dio.options.baseUrl = saved;
+    } else {
+      dio.options.baseUrl = 'http://127.0.0.1:8080';
     }
   }
 
@@ -57,6 +60,7 @@ class AuthInterceptor extends Interceptor {
     // Skip auth header for public endpoints
     final publicPaths = [
       ApiEndpoints.login,
+      ApiEndpoints.googleLogin,
       ApiEndpoints.register,
       ApiEndpoints.refreshToken,
     ];
