@@ -16,6 +16,7 @@ import 'package:kidpro_mobile/features/parent/screens/biometric_purge_screen.dar
 import 'package:kidpro_mobile/features/parent/screens/records_overview_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/requests_overview_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/request_center_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/parent_notification_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/teacher_dashboard_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/attendance_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/face_attendance_camera_screen.dart';
@@ -99,6 +100,9 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
             GoRoute(
                 path: 'requests/center',
                 builder: (_, __) => const RequestCenterScreen()),
+            GoRoute(
+                path: 'notifications',
+                builder: (_, __) => const ParentNotificationScreen()),
           ],
         ),
 

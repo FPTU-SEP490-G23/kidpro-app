@@ -698,3 +698,53 @@ class AvailableOption {
         subtitle: '${json['subject'] ?? ""} • Lịch: ${json['scheduleDescription'] ?? ""}',
       );
 }
+
+class NotificationItem {
+  final int notificationId;
+  final String title;
+  final String body;
+  final bool isRead;
+  final String? createdAt;
+  final String type; // BILLING, ATTENDANCE, REQUEST, ANNOUNCEMENT, GENERAL
+
+  const NotificationItem({
+    required this.notificationId,
+    required this.title,
+    required this.body,
+    required this.isRead,
+    this.createdAt,
+    this.type = 'GENERAL',
+  });
+
+  factory NotificationItem.fromJson(Map<String, dynamic> json) {
+    return NotificationItem(
+      notificationId: json['notificationId'] is int
+          ? json['notificationId'] as int
+          : int.tryParse(json['notificationId']?.toString() ?? '0') ?? 0,
+      title: json['title'] as String? ?? 'Thông báo',
+      body: json['body'] as String? ?? '',
+      isRead: json['isRead'] as bool? ?? (json['read'] as bool? ?? false),
+      createdAt: json['createdAt']?.toString(),
+      type: json['type'] as String? ?? 'GENERAL',
+    );
+  }
+
+  NotificationItem copyWith({
+    int? notificationId,
+    String? title,
+    String? body,
+    bool? isRead,
+    String? createdAt,
+    String? type,
+  }) {
+    return NotificationItem(
+      notificationId: notificationId ?? this.notificationId,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      isRead: isRead ?? this.isRead,
+      createdAt: createdAt ?? this.createdAt,
+      type: type ?? this.type,
+    );
+  }
+}
+

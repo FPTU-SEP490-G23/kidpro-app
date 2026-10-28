@@ -17,8 +17,10 @@ class AppColors {
 
   // Attendance
   static const present = Color(0xFF10B981);
-  static const notArrived = Color(0xFFF59E0B);
-  static const onLeave = Color(0xFF94A3B8);
+  static const late = Color(0xFFF97316);
+  static const onLeave = Color(0xFF3B82F6);
+  static const notArrived = Color(0xFF94A3B8);
+  static const absentUnexcused = Color(0xFFEF4444);
 
   // Alert
   static const strangerAlert = Color(0xFFDC2626);

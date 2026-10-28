@@ -169,4 +169,6 @@ class ApiEndpoints {
   static const notifications = '/api/notifications';
   static const notificationsFcmToken = '/api/notifications/fcm-token';
   static const notificationsUnreadCount = '/api/notifications/unread-count';
+  static String notificationMarkRead(int id) => '/api/notifications/$id/read';
+  static const notificationsMarkAllRead = '/api/notifications/read-all';
 }

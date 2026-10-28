@@ -277,6 +277,34 @@
        - `GET /api/teachers/my-classes`: Tự động nhận diện `accountId` phiên đăng nhập, tra cứu phân công giảng dạy `TeacherClassAssignment` và trả về danh sách các lớp học thuộc quyền phụ trách thật của giáo viên.
        - `GET /api/teachers/classes/{classId}/students`: Trả về danh sách học sinh thật trong lớp (kèm họ tên, mã học sinh, thông tin phụ huynh và trạng thái điểm danh hôm nay từ bảng `student.attendance`).
        - `GET /api/teachers/classes/{classId}/daily-summary`: Tổng hợp thời gian thực số học sinh, số bé có mặt, số đơn dặn thuốc đang chờ (`PENDING`), số đơn xin nghỉ đang chờ và số lượng cảnh báo người lạ (`faceRecognitionLogRepository`).
+
+## 2026-10-28: Tái Thiết Kế & Nâng Cấp Giao Diện Điểm Danh Thủ Công Cho Giáo Viên (G5-UC-01 & BR-018)
+- **Task:** Tái thiết kế toàn diện màn hình Điểm danh thủ công (`AttendanceScreen`), đồng bộ chuẩn 4 trạng thái theo schema PostgreSQL Supabase (`PRESENT`, `LATE`, `ABSENT_PERMITTED` / `ABSENT_WITH_LEAVE`, `ABSENT_UNPERMITTED` / `ABSENT_WITHOUT_LEAVE`), bổ sung điểm danh nhanh cả lớp, bộ lọc trạng thái, tìm kiếm và Modal Bottom Sheet chi tiết đón trẻ.
+- **Mô tả:**
+  1. **Khớp nối dữ liệu Supabase Database & Backend Model:**
+     - Nâng cấp `AttendanceStatus` enum với 4 trạng thái: `present` (Có mặt), `late` (Đi muộn), `onLeave` (Nghỉ phép), `notArrived` (Chưa đến).
+     - Mở rộng model `TeacherStudent` hỗ trợ lưu trữ `checkInTime`, `checkOutTime`, `notes`, `temperature`, `guardianName`, `photoUrl`, `checkInMethod`.
+     - Cập nhật hàm `TeacherStudent.parseStatus` để chuyển đổi chuẩn xác từ các định dạng chuỗi enum của Supabase/Spring Boot.
+  2. **Nâng cấp State Management (`TeacherProvider`):**
+     - Bổ sung các KPI getter: `presentCount`, `lateCount`, `onLeaveCount`, `notArrivedCount`, `totalCount`.
+     - Bổ sung hàm `markAllPresent()`: Đánh dấu nhanh cả lớp có mặt với giờ điểm danh hiện tại.
+     - Bổ sung hàm `setStudentStatus(index, status)` và `updateStudentDetails(...)`.
+     - Tự động đồng bộ dữ liệu điểm danh đã lưu trong ngày từ endpoint `/api/teachers/attendance?classId=...&date=...`.
+     - Cập nhật payload `saveBatchAttendance` gửi chuẩn 4 trạng thái và ghi chú theo ngày được chọn.
+  3. **Tái thiết kế UI/UX `AttendanceScreen`:**
+     - Thanh chuyển ngày kèm DatePicker giới hạn trong khung 7 ngày theo quy tắc BR-018 (tránh khóa sổ học vụ).
+     - Hàng thẻ KPI trực quan 4 trạng thái với màu sắc chuyên biệt và khả năng bấm để lọc nhanh.
+     - Thanh tìm kiếm học sinh theo tên/mã học sinh kết hợp nút "Cả lớp có mặt" 1 chạm.
+     - Thanh phân loại Chip Filter (Tất cả, Có mặt, Đi muộn, Nghỉ phép, Chưa đến).
+     - Thẻ học sinh cải tiến với thanh chuyển nhanh 4 trạng thái ngay trên thẻ (Có mặt, Muộn, Phép, Vắng).
+     - Modal Bottom Sheet `_StudentDetailSheet` chi tiết:
+       + Chọn trạng thái lớn trực quan
+       + Chọn giờ đón (`TimePicker`)
+       + Đo thân nhiệt (°C) đầu ngày
+       + Nhập tên người đưa đón trẻ
+       + Nhập ghi chú tình trạng sức khỏe bé lúc đến lớp
+       + Chụp ảnh minh chứng đón trẻ trực tiếp từ máy ảnh (`ImagePicker`)
+     - Thanh lưu điểm danh cố định dưới đáy màn hình với thống kê tỷ lệ hiện diện và nút lưu batch.
        - `GET /api/teachers/bus/trips/{tripId}/stops`: Lấy lộ trình xe buýt, thông tin tài xế và danh sách học sinh đăng ký đưa đón từ bảng `finance.bus` và `finance.student_bus_register`.
   2. **Tối Ưu & Dự Phòng Dữ Liệu Thực Tại Service Tầng Backend:**
      - Bổ sung helper `getRoomNumber()` an toàn trong `ClassEntity.java`.
@@ -335,6 +363,30 @@
 ## 2026-10-27: Khắc phục lỗi biên dịch getter 'currentBaseUrl' trong ApiClient
 - **Task:** Bổ sung getter `currentBaseUrl` trong `ApiClient` (`api_client.dart`) để tương thích với `login_screen.dart`.
 - **Mô tả:** Thêm `String get currentBaseUrl => dio.options.baseUrl;` vào `ApiClient` trong `kidpro_mobile/lib/core/network/api_client.dart` giúp Flutter compile thành công `login_screen.dart` khi gọi `ApiClient().currentBaseUrl`.
+
+## 2026-10-28: Thêm Tính Năng Hiển Thị Thông Báo Cho Phụ Huynh (Parent Notifications G11-UC-02)
+- **Task:** Xây dựng trọn bộ hệ thống hiển thị thông báo thời gian thực cho phân hệ Phụ huynh trên ứng dụng di động `kidpro_mobile` và backend Spring Boot `kidpro-be`.
+- **Mô tả:**
+  1. **Backend Spring Boot (`kidpro-be`):**
+     - Xây dựng DTO `NotificationResponseDto` và REST Controller `NotificationController` mapping tại `/api/notifications`, `/api/parents/notifications` và `/api/comms/notifications`.
+     - Cung cấp các endpoint:
+       - `GET /api/notifications`: Lấy danh sách thông báo của tài khoản kèm tự động đồng bộ từ bảng `communication.announcements` hoặc thông báo mẫu chào mừng / học phí.
+       - `GET /api/notifications/unread-count`: Đếm số lượng thông báo chưa đọc.
+       - `PUT /api/notifications/{id}/read`: Đánh dấu 1 thông báo đã đọc.
+       - `PUT /api/notifications/read-all`: Đánh dấu tất cả thông báo đã đọc bằng batch update JPQL.
+  2. **Mobile App Flutter (`kidpro_mobile`):**
+     - Khai báo model `NotificationItem` trong `parent_models.dart`.
+     - Bổ sung state và methods trong `ParentProvider`: `notifications`, `unreadNotificationCount`, `loadNotifications()`, `markNotificationAsRead()`, `markAllNotificationsAsRead()`.
+     - Xây dựng giao diện `ParentNotificationScreen`:
+       - TabBar 2 tab: "Tất cả" và "Chưa đọc".
+       - Phân loại màu sắc và icon theo loại thông báo: Học phí (`BILLING`), Điểm danh (`ATTENDANCE`), Đơn từ (`REQUEST`), Tin nhà trường (`ANNOUNCEMENT`), Thông báo chung (`GENERAL`).
+       - Modal Bottom Sheet xem chi tiết thông báo và tự động đánh dấu đã đọc khi xem.
+       - Nút hành động "Đọc tất cả" nhanh trên AppBar.
+       - Kéo xuống để làm mới (`RefreshIndicator`).
+     - Tích hợp biểu tượng Chuông thông báo kèm huy hiệu đếm số chưa đọc (Badge) trên AppBar của `ParentDashboardScreen`.
+     - Thêm thanh thông báo mới nhất nổi bật (`_buildNotificationBanner`) ngay trên Trang chủ giúp phụ huynh nắm bắt thông tin ngay tức thì.
+     - Đăng ký GoRoute `/parent/notifications` trong `app_router.dart`.
+
 
 
 
