@@ -139,8 +139,8 @@ def startup_event():
 # ==========================================
 # FACE EXTRACTION PIPELINE (YOLOv8 + ArcFace)
 # ==========================================
-def read_image_from_upload(upload_file: UploadFile) -> np.ndarray:
-    contents = upload_file.file.read()
+async def read_image_from_upload(upload_file: UploadFile) -> np.ndarray:
+    contents = await upload_file.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
@@ -226,7 +226,7 @@ async def register_student(
     global registered_embeddings, registered_student_ids
 
     # 1. Giải mã và trích xuất vector đặc trưng
-    img = read_image_from_upload(file)
+    img = await read_image_from_upload(file)
     embedding = extract_l2_normalized_embedding(img)
     if embedding is None:
         raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh chân dung.")
@@ -272,53 +272,61 @@ async def check_in_face(
 ):
     global registered_embeddings, registered_student_ids
 
-    # 1. Giải mã ảnh
-    img = read_image_from_upload(file)
+    try:
+        # 1. Giải mã ảnh
+        img = await read_image_from_upload(file)
 
-    # 2. Trích xuất embedding bằng YOLOv8n + ArcFace
-    target_embedding = extract_l2_normalized_embedding(img)
-    if target_embedding is None:
-        _log_attendance(None, "UNKNOWN", 0.0)
+        # 2. Trích xuất embedding bằng YOLOv8n + ArcFace
+        target_embedding = extract_l2_normalized_embedding(img)
+        if target_embedding is None:
+            _log_attendance(None, "UNKNOWN", 0.0)
+            return {
+                "status": "UNKNOWN",
+                "confidence_score": 0.0,
+                "message": "Không phát hiện khuôn mặt trong khung hình",
+            }
+
+        # 3. Kiểm tra danh sách học sinh đã đăng ký
+        if registered_embeddings is None or len(registered_student_ids) == 0:
+            _log_attendance(None, "UNKNOWN", 0.0)
+            return {
+                "status": "UNKNOWN",
+                "confidence_score": 0.0,
+                "message": "Chưa có học sinh nào được đăng ký trong hệ thống",
+            }
+
+        # 4. So khớp nhanh Cosine Similarity (np.dot)
+        scores = np.dot(registered_embeddings, target_embedding)
+        best_idx = int(np.argmax(scores))
+        best_score = float(scores[best_idx])
+        matched_student_id = registered_student_ids[best_idx]
+
+        # 5. Đánh giá ngưỡng nhận diện
+        if best_score >= SIMILARITY_THRESHOLD:
+            student = _get_student(matched_student_id)
+            _log_attendance(matched_student_id, "PRESENT", best_score)
+            return {
+                "status": "PRESENT",
+                "student_id": matched_student_id,
+                "name": student["name"] if student else "Học sinh",
+                "class_name": student["class_name"] if student else "",
+                "confidence_score": round(best_score, 4),
+                "checkin_time": datetime.now().strftime("%H:%M:%S - %d/%m/%Y"),
+            }
+        else:
+            # Cảnh báo người lạ / chưa đăng ký
+            _log_attendance(None, "UNKNOWN", best_score)
+            return {
+                "status": "UNKNOWN",
+                "confidence_score": round(best_score, 4),
+                "message": f"Không nhận diện được học sinh (Độ khớp {int(best_score * 100)}% thấp hơn ngưỡng {int(SIMILARITY_THRESHOLD * 100)}%)",
+            }
+    except Exception as e:
+        print(f"Lỗi xử lý check-in: {e}")
         return {
             "status": "UNKNOWN",
             "confidence_score": 0.0,
-            "message": "Không phát hiện khuôn mặt trong khung hình",
-        }
-
-    # 3. Kiểm tra danh sách học sinh đã đăng ký
-    if registered_embeddings is None or len(registered_student_ids) == 0:
-        _log_attendance(None, "UNKNOWN", 0.0)
-        return {
-            "status": "UNKNOWN",
-            "confidence_score": 0.0,
-            "message": "Chưa có học sinh nào được đăng ký trong hệ thống",
-        }
-
-    # 4. So khớp nhanh Cosine Similarity (np.dot)
-    scores = np.dot(registered_embeddings, target_embedding)
-    best_idx = int(np.argmax(scores))
-    best_score = float(scores[best_idx])
-    matched_student_id = registered_student_ids[best_idx]
-
-    # 5. Đánh giá ngưỡng nhận diện
-    if best_score >= SIMILARITY_THRESHOLD:
-        student = _get_student(matched_student_id)
-        _log_attendance(matched_student_id, "PRESENT", best_score)
-        return {
-            "status": "PRESENT",
-            "student_id": matched_student_id,
-            "name": student["name"] if student else "Học sinh",
-            "class_name": student["class_name"] if student else "",
-            "confidence_score": round(best_score, 4),
-            "checkin_time": datetime.now().strftime("%H:%M:%S - %d/%m/%Y"),
-        }
-    else:
-        # Cảnh báo người lạ / chưa đăng ký
-        _log_attendance(None, "UNKNOWN", best_score)
-        return {
-            "status": "UNKNOWN",
-            "confidence_score": round(best_score, 4),
-            "message": f"Không nhận diện được học sinh (Độ khớp {int(best_score * 100)}% thấp hơn ngưỡng {int(SIMILARITY_THRESHOLD * 100)}%)",
+            "message": f"Lỗi xử lý AI: {str(e)}",
         }
 
 
