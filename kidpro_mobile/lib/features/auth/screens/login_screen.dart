@@ -270,8 +270,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: () => setDialogState(() => ctrl.text = 'http://127.0.0.1:8080'),
                       ),
                       ActionChip(
-                        label: const Text('Wi-Fi (192.168.10.125)', style: TextStyle(fontSize: 11)),
-                        onPressed: () => setDialogState(() => ctrl.text = 'http://192.168.10.125:8080'),
+                        label: const Text('Wi-Fi (192.168.1.2)', style: TextStyle(fontSize: 11)),
+                        onPressed: () => setDialogState(() => ctrl.text = 'http://192.168.1.2:8080'),
                       ),
                       ActionChip(
                         label: const Text('Emulator (10.0.2.2)', style: TextStyle(fontSize: 11)),

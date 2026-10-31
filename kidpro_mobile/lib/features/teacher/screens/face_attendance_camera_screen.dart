@@ -537,7 +537,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
               controller: _urlCtrl,
               decoration: const InputDecoration(
                 labelText: 'AI Backend Base URL',
-                hintText: 'http://127.0.0.1:8000 hoặc http://192.168.10.125:8000',
+                hintText: 'http://127.0.0.1:8000 hoặc http://192.168.1.2:8000',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -550,8 +550,8 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                   onPressed: () => _urlCtrl.text = 'http://127.0.0.1:8000',
                 ),
                 ActionChip(
-                  label: const Text('Wi-Fi LAN (192.168.10.125)', style: TextStyle(fontSize: 11)),
-                  onPressed: () => _urlCtrl.text = 'http://192.168.10.125:8000',
+                  label: const Text('Wi-Fi LAN (192.168.1.2)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _urlCtrl.text = 'http://192.168.1.2:8000',
                 ),
                 ActionChip(
                   label: const Text('10.0.2.2 (Emulator)', style: TextStyle(fontSize: 11)),
