@@ -17,6 +17,7 @@ import 'package:kidpro_mobile/features/parent/screens/records_overview_screen.da
 import 'package:kidpro_mobile/features/parent/screens/requests_overview_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/request_center_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/parent_notification_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/face_registration_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/teacher_dashboard_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/attendance_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/face_attendance_camera_screen.dart';
@@ -91,6 +92,9 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
             GoRoute(
                 path: 'biometric-purge',
                 builder: (_, __) => const BiometricPurgeScreen()),
+            GoRoute(
+                path: 'face-registration',
+                builder: (_, __) => const FaceRegistrationScreen()),
             GoRoute(
                 path: 'records',
                 builder: (_, __) => const RecordsOverviewScreen()),

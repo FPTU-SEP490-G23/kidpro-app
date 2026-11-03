@@ -38,5 +38,3 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 *.pkl
-venv/
-.env

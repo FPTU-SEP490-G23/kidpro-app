@@ -369,6 +369,45 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 5),
+                InkWell(
+                  onTap: () => context.push('/parent/face-registration'),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: parentProv.activeFaceFile != null
+                          ? Colors.green.shade600.withValues(alpha: 0.35)
+                          : Colors.orange.shade700.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: parentProv.activeFaceFile != null
+                            ? Colors.greenAccent
+                            : Colors.orangeAccent,
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          parentProv.activeFaceFile != null ? Icons.verified : Icons.face,
+                          size: 13,
+                          color: parentProv.activeFaceFile != null ? Colors.greenAccent : Colors.orangeAccent,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          parentProv.activeFaceFile != null ? 'Khuôn mặt AI: Đã đăng ký' : 'Chưa đăng ký khuôn mặt AI >',
+                          style: TextStyle(
+                            color: parentProv.activeFaceFile != null ? Colors.greenAccent : Colors.orangeAccent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -646,6 +685,14 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                   title: const Text('Hồ sơ dị ứng thực phẩm/thuốc'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/parent/allergies'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.face_retouching_natural, color: AppColors.primary),
+                  title: const Text('Đăng ký khuôn mặt AI cho bé'),
+                  subtitle: const Text('Dùng để điểm danh tự động khi đến trường'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/parent/face-registration'),
                 ),
                 const Divider(height: 1),
                 ListTile(

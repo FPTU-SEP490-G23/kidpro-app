@@ -8,6 +8,9 @@ import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
+import 'package:kidpro_mobile/core/network/api_client.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
@@ -30,7 +33,7 @@ class FaceAttendanceCameraScreen extends StatefulWidget {
 class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     with SingleTickerProviderStateMixin {
   // Configurable AI server URL (Wi-Fi LAN IP or USB adb reverse)
-  String _serverBaseUrl = 'http://127.0.0.1:8000';
+  String _serverBaseUrl = 'http://192.168.10.125:8000';
   final _urlCtrl = TextEditingController();
 
   // Camera & ML Kit
@@ -67,6 +70,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   @override
   void initState() {
     super.initState();
+    _serverBaseUrl = ApiClient().aiBaseUrl;
     _urlCtrl.text = _serverBaseUrl;
 
     _animCtrl = AnimationController(
@@ -441,6 +445,33 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       final data = response.data as Map<String, dynamic>;
       data['liveness_verified'] = isLivenessVerified;
 
+      // Khi AI nhận diện thành công: Lưu vào Spring Boot (attendances, attendance_photos, face_recognition_logs)
+      if (data['status'] == 'PRESENT' && data['student_id'] != null) {
+        try {
+          final scannedBase64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+          final logPayload = {
+            'studentId': data['student_id'],
+            'confidenceScore': data['confidence_score'] ?? 0.85,
+            'photoUrl': scannedBase64,
+            'recognitionType': 'ATTENDANCE_CHECK_IN',
+            'personType': 'STUDENT',
+          };
+          final backendRes = await ApiClient().dio.post(
+            ApiEndpoints.faceLogs,
+            data: logPayload,
+          );
+          if (backendRes.data != null && backendRes.data['registeredPhotoUrl'] != null) {
+            data['registered_photo_url'] = backendRes.data['registeredPhotoUrl'];
+          }
+          if (mounted) {
+            final tProv = context.read<TeacherProvider>();
+            tProv.loadStudents(tProv.currentClassId);
+          }
+        } catch (backendErr) {
+          debugPrint('Lỗi đồng bộ backend face-logs: $backendErr');
+        }
+      }
+
       HapticFeedback.mediumImpact();
       if (mounted) {
         setState(() {
@@ -546,12 +577,12 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
               spacing: 6,
               children: [
                 ActionChip(
-                  label: const Text('USB Cáp (127.0.0.1:8000)', style: TextStyle(fontSize: 11)),
-                  onPressed: () => _urlCtrl.text = 'http://127.0.0.1:8000',
+                  label: const Text('Wi-Fi LAN (192.168.10.125:8000)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _urlCtrl.text = 'http://192.168.10.125:8000',
                 ),
                 ActionChip(
-                  label: const Text('Wi-Fi LAN (192.168.1.2)', style: TextStyle(fontSize: 11)),
-                  onPressed: () => _urlCtrl.text = 'http://192.168.1.2:8000',
+                  label: const Text('USB Cáp (127.0.0.1:8000)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _urlCtrl.text = 'http://127.0.0.1:8000',
                 ),
                 ActionChip(
                   label: const Text('10.0.2.2 (Emulator)', style: TextStyle(fontSize: 11)),
@@ -1126,13 +1157,68 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                                 ],
                               ),
                               const Divider(color: Colors.white24, height: 14),
-                              Text(
-                                'Học sinh: ${_lastResult!["name"]}',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                              ),
-                              Text(
-                                'Lớp: ${_lastResult!["class_name"]} • Mã: ${_lastResult!["student_id"]}',
-                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              Row(
+                                children: [
+                                  if (_capturedImageBytes != null) ...[
+                                    Column(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Image.memory(
+                                            _capturedImageBytes!,
+                                            width: 52,
+                                            height: 52,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        const Text('Ảnh lúc quét', style: TextStyle(color: Colors.white60, fontSize: 10)),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 10),
+                                  ],
+                                  if (_lastResult!['registered_photo_url'] != null) ...[
+                                    Column(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Image.network(
+                                            _lastResult!['registered_photo_url'].toString().startsWith('http')
+                                                ? _lastResult!['registered_photo_url'].toString()
+                                                : '${ApiClient().baseUrl}${_lastResult!['registered_photo_url']}',
+                                            width: 52,
+                                            height: 52,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Container(
+                                              width: 52,
+                                              height: 52,
+                                              color: Colors.white12,
+                                              child: const Icon(Icons.face, size: 24, color: Colors.white54),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        const Text('Ảnh PH đăng ký', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 12),
+                                  ],
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Học sinh: ${_lastResult!["name"]}',
+                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                        ),
+                                        Text(
+                                          'Lớp: ${_lastResult!["class_name"]} • Mã: ${_lastResult!["student_id"]}',
+                                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 4),
                               Row(
