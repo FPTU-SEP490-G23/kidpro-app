@@ -12,6 +12,12 @@ class ApiEndpoints {
   // Parent - Students (Children)
   static const parentStudents = '/api/parents/students';
 
+  // Parent - Student Face Registration
+  static String parentStudentFace(String studentId) =>
+      '/api/parents/students/$studentId/face';
+  static String parentStudentFaceRegister(String studentId) =>
+      '/api/parents/students/$studentId/face/register';
+
   // Parent - Electronic Records (6 Sổ điện tử)
   static String parentDailyActivities(String studentId) =>
       '/api/parents/students/$studentId/daily-activities';
@@ -144,6 +150,7 @@ class ApiEndpoints {
 
   // Attendance / Face Recognition
   static const faceLogs = '/api/attendance/face-logs';
+  static const faceLogsRegistered = '/api/attendance/face-logs/registered-faces';
   static const faceLogsUnresolved = '/api/attendance/face-logs/unresolved-alerts';
   static String faceLogResolve(String id) =>
       '/api/attendance/face-logs/$id/resolve-alert';

@@ -1,7 +1,9 @@
 import io
+import json
 import os
 import pickle
 import sqlite3
+import urllib.request
 from datetime import datetime
 from typing import List, Optional
 
@@ -41,7 +43,6 @@ registered_student_ids: List[str] = []
 
 def ensure_model_file(path: str, url: str, fallback_path: Optional[str] = None):
     import shutil
-    import urllib.request
     if not os.path.exists(path):
         if fallback_path and os.path.exists(fallback_path):
             print(f"📦 Đang sao chép {path} từ cache {fallback_path}...")
@@ -264,6 +265,71 @@ async def register_student(
         "class_name": class_name,
         "message": f"Đã đăng ký thành công học sinh {name} (YOLOv8 + ArcFace 512-dim)",
     }
+
+
+@app.post("/api/v1/sync")
+def sync_from_backend(backend_url: str = "http://127.0.0.1:8080"):
+    """Đồng bộ toàn bộ ảnh khuôn mặt học sinh đã đăng ký từ Spring Boot Backend vào AI Engine"""
+    global registered_embeddings, registered_student_ids
+    try:
+        url = f"{backend_url}/api/attendance/face-logs/registered-faces"
+        req = urllib.request.Request(url, headers={'User-Agent': 'KidPro-AI-Engine'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+
+        synced_count = 0
+        for item in data:
+            sid = str(item.get("studentId"))
+            sname = item.get("studentName", "Học sinh")
+            cname = item.get("className", "")
+            photo_url = item.get("photoUrl", "")
+            if not photo_url:
+                continue
+
+            # Tải ảnh từ backend URL
+            full_img_url = photo_url if photo_url.startswith("http") else f"{backend_url}{photo_url}"
+            try:
+                img_req = urllib.request.Request(full_img_url, headers={'User-Agent': 'KidPro-AI-Engine'})
+                with urllib.request.urlopen(img_req, timeout=5) as img_resp:
+                    img_bytes = img_resp.read()
+                nparr = np.frombuffer(img_bytes, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img is None:
+                    continue
+                emb = extract_l2_normalized_embedding(img)
+                if emb is None:
+                    continue
+
+                if sid in registered_student_ids:
+                    idx = registered_student_ids.index(sid)
+                    registered_embeddings[idx] = emb
+                else:
+                    registered_student_ids.append(sid)
+                    if registered_embeddings is None or len(registered_embeddings) == 0:
+                        registered_embeddings = np.expand_dims(emb, axis=0)
+                    else:
+                        registered_embeddings = np.vstack([registered_embeddings, emb])
+
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT OR REPLACE INTO students (student_id, name, class_name) VALUES (?, ?, ?)",
+                    (sid, sname, cname),
+                )
+                conn.commit()
+                conn.close()
+                synced_count += 1
+            except Exception as e:
+                print(f"Lỗi tải ảnh bé {sid}: {e}")
+
+        save_embeddings_cache()
+        return {
+            "success": True,
+            "synced_count": synced_count,
+            "total_registered": len(registered_student_ids),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/api/v1/check-in")

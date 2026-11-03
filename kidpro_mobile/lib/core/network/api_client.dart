@@ -8,14 +8,25 @@ class ApiClient {
   static ApiClient? _instance;
   late final Dio dio;
 
-  static String get defaultHostUrl => 'http://127.0.0.1:8080';
+  static String get defaultHostUrl => 'http://192.168.10.125:8080';
 
   String get baseUrl => dio.options.baseUrl;
   String get currentBaseUrl => dio.options.baseUrl;
 
+  /// Tự động lấy URL của AI Backend (cổng 8000) dựa theo Host của Backend (cổng 8080)
+  String get aiBaseUrl {
+    try {
+      final uri = Uri.parse(dio.options.baseUrl);
+      if (uri.host.isNotEmpty && uri.host != '127.0.0.1' && uri.host != 'localhost') {
+        return '${uri.scheme}://${uri.host}:8000';
+      }
+    } catch (_) {}
+    return 'http://192.168.10.125:8000';
+  }
+
   ApiClient._() {
     dio = Dio(BaseOptions(
-      baseUrl: const String.fromEnvironment('BASE_URL', defaultValue: 'http://127.0.0.1:8080'),
+      baseUrl: const String.fromEnvironment('BASE_URL', defaultValue: 'http://192.168.10.125:8080'),
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
@@ -26,13 +37,10 @@ class ApiClient {
 
   Future<void> _loadSavedBaseUrl() async {
     final saved = await SecureStorageHelper.getCustomBaseUrl();
-    if (saved != null &&
-        saved.isNotEmpty &&
-        saved != 'http://192.168.10.125:8080' &&
-        saved != 'http://10.0.2.2:8080') {
+    if (saved != null && saved.isNotEmpty) {
       dio.options.baseUrl = saved;
     } else {
-      dio.options.baseUrl = 'http://127.0.0.1:8080';
+      dio.options.baseUrl = 'http://192.168.10.125:8080';
     }
   }
 

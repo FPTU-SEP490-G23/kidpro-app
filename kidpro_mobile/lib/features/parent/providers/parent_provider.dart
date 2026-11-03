@@ -114,6 +114,7 @@ class ParentProvider extends ChangeNotifier {
       loadEvaluations(studentId),
       loadGrowthHistory(studentId),
       loadAllRequests(studentId),
+      loadStudentFace(studentId),
     ]);
     if (selectedStudent?.classId != null && selectedStudent!.classId!.isNotEmpty) {
       loadJournalPosts(selectedStudent!.classId!);
@@ -923,6 +924,58 @@ class ParentProvider extends ChangeNotifier {
       notifyListeners();
     } on DioException catch (e) {
       logError('markAllNotificationsAsRead', e);
+    }
+  }
+
+  // ── 12. STUDENT FACE REGISTRATION ──
+  StudentFaceFile? _activeFaceFile;
+  StudentFaceFile? get activeFaceFile => _activeFaceFile;
+
+  Future<void> loadStudentFace(String studentId) async {
+    if (studentId.isEmpty) return;
+    try {
+      final res = await _dio.get(ApiEndpoints.parentStudentFace(studentId));
+      if (res.statusCode == 200 && res.data != null) {
+        _activeFaceFile = StudentFaceFile.fromJson(res.data as Map<String, dynamic>);
+      } else {
+        _activeFaceFile = null;
+      }
+      notifyListeners();
+    } on DioException catch (e) {
+      _activeFaceFile = null;
+      if (e.response?.statusCode != 204) {
+        logError('loadStudentFace', e);
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<bool> registerStudentFace(String studentId, Uint8List imageBytes, String filename) async {
+    _loading = true;
+    notifyListeners();
+    try {
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(imageBytes, filename: filename),
+      });
+      final res = await _dio.post(
+        ApiEndpoints.parentStudentFaceRegister(studentId),
+        data: formData,
+      );
+      if (res.statusCode == 200 && res.data != null) {
+        _activeFaceFile = StudentFaceFile.fromJson(res.data as Map<String, dynamic>);
+        _loading = false;
+        notifyListeners();
+        return true;
+      }
+      _loading = false;
+      notifyListeners();
+      return false;
+    } on DioException catch (e) {
+      logError('registerStudentFace', e);
+      _error = e.response?.data?['message']?.toString() ?? e.message;
+      _loading = false;
+      notifyListeners();
+      return false;
     }
   }
 

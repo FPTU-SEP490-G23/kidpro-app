@@ -748,3 +748,43 @@ class NotificationItem {
   }
 }
 
+
+
+class StudentFaceFile {
+  final int? faceFileId;
+  final String? studentId;
+  final String? studentName;
+  final String? className;
+  final String photoUrl;
+  final int? fileSize;
+  final bool isActive;
+  final String? createdAt;
+
+  const StudentFaceFile({
+    this.faceFileId,
+    this.studentId,
+    this.studentName,
+    this.className,
+    required this.photoUrl,
+    this.fileSize,
+    this.isActive = true,
+    this.createdAt,
+  });
+
+  factory StudentFaceFile.fromJson(Map<String, dynamic> json) {
+    return StudentFaceFile(
+      faceFileId: json['faceFileId'] is int
+          ? json['faceFileId'] as int
+          : int.tryParse(json['faceFileId']?.toString() ?? ''),
+      studentId: json['studentId']?.toString(),
+      studentName: json['studentName']?.toString(),
+      className: json['className']?.toString(),
+      photoUrl: json['photoUrl']?.toString() ?? '',
+      fileSize: json['fileSize'] is int
+          ? json['fileSize'] as int
+          : int.tryParse(json['fileSize']?.toString() ?? ''),
+      isActive: json['isActive'] as bool? ?? true,
+      createdAt: json['createdAt']?.toString(),
+    );
+  }
+}
