@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/core/network/api_client.dart';
+import 'package:kidpro_mobile/core/storage/secure_storage_helper.dart';
 import 'package:kidpro_mobile/features/auth/providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -226,13 +227,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showServerConfigDialog(BuildContext context) {
     final ctrl = TextEditingController(text: ApiClient().currentBaseUrl);
-    String? pingResult;
+    String? backendPingResult;
+    bool backendSuccess = false;
+    String? aiPingResult;
+    bool aiSuccess = false;
     bool isPinging = false;
 
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
+          final currentInput = ctrl.text.trim().replaceAll(RegExp(r"/+$"), "");
+          String derivedAiUrl = 'http://192.168.10.51:8000';
+          try {
+            final uri = Uri.parse(currentInput);
+            if (uri.host.isNotEmpty) {
+              final scheme = uri.scheme.isNotEmpty ? uri.scheme : 'http';
+              derivedAiUrl = '$scheme://${uri.host}:8000';
+            }
+          } catch (_) {}
+
           return AlertDialog(
             title: const Row(
               children: [
@@ -258,24 +272,58 @@ class _LoginScreenState extends State<LoginScreen> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
+                    onChanged: (_) => setDialogState(() {
+                      backendPingResult = null;
+                      aiPingResult = null;
+                    }),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'AI Face Backend (cổng 8000): $derivedAiUrl',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
                   const Text('Chọn nhanh cấu hình:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 4,
                     children: [
                       ActionChip(
-                        label: const Text('Wi-Fi (192.168.10.125:8080)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        onPressed: () => setDialogState(() => ctrl.text = 'http://192.168.10.125:8080'),
+                        avatar: const Icon(Icons.wifi, size: 14),
+                        label: const Text('Wi-Fi LAN (192.168.10.51:8080)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: () => setDialogState(() {
+                          ctrl.text = 'http://192.168.10.51:8080';
+                          backendPingResult = null;
+                          aiPingResult = null;
+                        }),
+                      ),
+                                            ActionChip(
+                        avatar: const Icon(Icons.wifi_tethering, size: 14),
+                        label: const Text('Hotspot (192.168.137.1)', style: TextStyle(fontSize: 11)),
+                        onPressed: () => setDialogState(() {
+                          ctrl.text = 'http://192.168.137.1:8080';
+                          backendPingResult = null;
+                          aiPingResult = null;
+                        }),
                       ),
                       ActionChip(
-                        label: const Text('USB (127.0.0.1:8080)', style: TextStyle(fontSize: 11)),
-                        onPressed: () => setDialogState(() => ctrl.text = 'http://127.0.0.1:8080'),
+                        avatar: const Icon(Icons.usb, size: 14),
+                        label: const Text('USB Cáp (127.0.0.1:8080)', style: TextStyle(fontSize: 11)),
+                        onPressed: () => setDialogState(() {
+                          ctrl.text = 'http://127.0.0.1:8080';
+                          backendPingResult = null;
+                          aiPingResult = null;
+                        }),
                       ),
                       ActionChip(
-                        label: const Text('Emulator (10.0.2.2)', style: TextStyle(fontSize: 11)),
-                        onPressed: () => setDialogState(() => ctrl.text = 'http://10.0.2.2:8080'),
+                        avatar: const Icon(Icons.phone_android, size: 14),
+                        label: const Text('Emulator (10.0.2.2:8080)', style: TextStyle(fontSize: 11)),
+                        onPressed: () => setDialogState(() {
+                          ctrl.text = 'http://10.0.2.2:8080';
+                          backendPingResult = null;
+                          aiPingResult = null;
+                        }),
                       ),
                     ],
                   ),
@@ -292,43 +340,114 @@ class _LoginScreenState extends State<LoginScreen> {
                             : () async {
                                 setDialogState(() {
                                   isPinging = true;
-                                  pingResult = null;
+                                  backendPingResult = null;
+                                  aiPingResult = null;
                                 });
+
+                                final base = ctrl.text.trim().replaceAll(RegExp(r"/+$"), "");
+
+                                // 1. Ping Backend Spring Boot (cổng 8080)
                                 try {
-                                  final dio = Dio(BaseOptions(
+                                  final dioBe = Dio(BaseOptions(
                                     connectTimeout: const Duration(seconds: 4),
                                     receiveTimeout: const Duration(seconds: 4),
                                   ));
-                                  final pingUrl = '${ctrl.text.trim().replaceAll(RegExp(r"/+$"), "")}/api/auth/me';
-                                  await dio.get(pingUrl);
-                                  setDialogState(() {
-                                    isPinging = false;
-                                    pingResult = 'Kết nối thành công! (200 OK)';
-                                  });
+                                  final pingUrl = '$base/api/auth/me';
+                                  await dioBe.get(pingUrl);
+                                  backendSuccess = true;
+                                  backendPingResult = 'Backend (8080): Sẵn sàng (200 OK)';
+                                } on DioException catch (e) {
+                                  if (e.response != null) {
+                                    backendSuccess = true;
+                                    backendPingResult = 'Backend (8080): Phản hồi HTTP ${e.response?.statusCode} (Kết nối tốt!)';
+                                  } else if (e.type == DioExceptionType.connectionTimeout) {
+                                    backendSuccess = false;
+                                    backendPingResult = 'Backend (8080): Timeout! Kiểm tra Wi-Fi / Firewall';
+                                  } else {
+                                    backendSuccess = false;
+                                    backendPingResult = 'Backend (8080): Không thể kết nối (${e.type.name}) - Kiểm tra xem Spring Boot đã chạy chưa!';
+                                  }
                                 } catch (e) {
-                                  setDialogState(() {
-                                    isPinging = false;
-                                    pingResult = 'Kết nối được với server! (${e is DioException ? e.response?.statusCode ?? e.type.name : "OK"})';
-                                  });
+                                  backendSuccess = false;
+                                  backendPingResult = 'Backend (8080): $e';
                                 }
+
+                                // 2. Ping Python AI Server (cổng 8000)
+                                try {
+                                  final dioAi = Dio(BaseOptions(
+                                    connectTimeout: const Duration(seconds: 4),
+                                    receiveTimeout: const Duration(seconds: 4),
+                                  ));
+                                  final resAi = await dioAi.get(derivedAiUrl);
+                                  aiSuccess = true;
+                                  final count = resAi.data is Map ? (resAi.data['registered_students_count'] ?? 0) : 0;
+                                  aiPingResult = 'AI Server (8000): ONLINE ($count học sinh)';
+                                } on DioException catch (e) {
+                                  if (e.response != null) {
+                                    aiSuccess = true;
+                                    aiPingResult = 'AI Server (8000): Phản hồi HTTP ${e.response?.statusCode} (Kết nối tốt!)';
+                                  } else if (e.type == DioExceptionType.connectionTimeout) {
+                                    aiSuccess = false;
+                                    aiPingResult = 'AI Server (8000): Timeout! Kiểm tra Wi-Fi / Firewall';
+                                  } else {
+                                    aiSuccess = false;
+                                    aiPingResult = 'AI Server (8000): Chưa chạy hoặc bị chặn (${e.type.name}) - Kiểm tra xem Python AI Server đã chạy chưa!';
+                                  }
+                                } catch (e) {
+                                  aiSuccess = false;
+                                  aiPingResult = 'AI Server (8000): $e';
+                                }
+
+                                setDialogState(() {
+                                  isPinging = false;
+                                });
                               },
                       ),
                     ],
                   ),
-                  if (pingResult != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.green.shade300),
+                  if (backendPingResult != null || aiPingResult != null) ...[
+                    const SizedBox(height: 10),
+                    if (backendPingResult != null)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: backendSuccess ? Colors.green.shade50 : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: backendSuccess ? Colors.green.shade300 : Colors.red.shade300,
+                          ),
+                        ),
+                        child: Text(
+                          backendPingResult!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: backendSuccess ? Colors.green.shade900 : Colors.red.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
-                      child: Text(
-                        pingResult!,
-                        style: TextStyle(fontSize: 12, color: Colors.green.shade900),
+                    if (aiPingResult != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: aiSuccess ? Colors.green.shade50 : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: aiSuccess ? Colors.green.shade300 : Colors.red.shade300,
+                          ),
+                        ),
+                        child: Text(
+                          aiPingResult!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: aiSuccess ? Colors.green.shade900 : Colors.red.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
-                    ),
                   ],
                 ],
               ),
@@ -343,11 +462,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   final newUrl = ctrl.text.trim();
                   if (newUrl.isNotEmpty) {
                     await ApiClient().updateBaseUrl(newUrl);
+                    await SecureStorageHelper.saveAiServerUrl(derivedAiUrl);
                     if (context.mounted) {
                       setState(() {});
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Đã cập nhật Server URL: $newUrl')),
+                        SnackBar(content: Text('Đã cập nhật Backend ($newUrl) & AI ($derivedAiUrl)')),
                       );
                     }
                   }
