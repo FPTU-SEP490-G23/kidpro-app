@@ -8,7 +8,7 @@ class ApiClient {
   static ApiClient? _instance;
   late final Dio dio;
 
-  static String get defaultHostUrl => 'http://192.168.10.125:8080';
+  static String get defaultHostUrl => 'http://192.168.10.51:8080';
 
   String get baseUrl => dio.options.baseUrl;
   String get currentBaseUrl => dio.options.baseUrl;
@@ -17,16 +17,17 @@ class ApiClient {
   String get aiBaseUrl {
     try {
       final uri = Uri.parse(dio.options.baseUrl);
-      if (uri.host.isNotEmpty && uri.host != '127.0.0.1' && uri.host != 'localhost') {
-        return '${uri.scheme}://${uri.host}:8000';
+      if (uri.host.isNotEmpty) {
+        final scheme = uri.scheme.isNotEmpty ? uri.scheme : 'http';
+        return '$scheme://${uri.host}:8000';
       }
     } catch (_) {}
-    return 'http://192.168.10.125:8000';
+    return 'http://192.168.10.51:8000';
   }
 
   ApiClient._() {
     dio = Dio(BaseOptions(
-      baseUrl: const String.fromEnvironment('BASE_URL', defaultValue: 'http://192.168.10.125:8080'),
+      baseUrl: const String.fromEnvironment('BASE_URL', defaultValue: 'http://192.168.10.51:8080'),
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
@@ -35,12 +36,14 @@ class ApiClient {
     _loadSavedBaseUrl();
   }
 
+  Future<void> init() async => _loadSavedBaseUrl();
+
   Future<void> _loadSavedBaseUrl() async {
     final saved = await SecureStorageHelper.getCustomBaseUrl();
-    if (saved != null && saved.isNotEmpty) {
+    if (saved != null && saved.isNotEmpty && saved != 'http://192.168.10.131:8080' && saved != 'http://192.168.10.125:8080' && saved != 'http://192.168.1.2:8080') {
       dio.options.baseUrl = saved;
     } else {
-      dio.options.baseUrl = 'http://192.168.10.125:8080';
+      dio.options.baseUrl = defaultHostUrl;
     }
   }
 

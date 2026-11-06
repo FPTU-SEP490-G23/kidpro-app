@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'dart:convert';
 import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
 import 'package:kidpro_mobile/core/network/api_client.dart';
+import 'package:kidpro_mobile/core/storage/secure_storage_helper.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
@@ -33,7 +34,7 @@ class FaceAttendanceCameraScreen extends StatefulWidget {
 class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     with SingleTickerProviderStateMixin {
   // Configurable AI server URL (Wi-Fi LAN IP or USB adb reverse)
-  String _serverBaseUrl = 'http://192.168.10.125:8000';
+  String _serverBaseUrl = 'http://192.168.10.51:8000';
   final _urlCtrl = TextEditingController();
 
   // Camera & ML Kit
@@ -549,6 +550,18 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     }
   }
 
+  Future<void> _initAiServer() async {
+    final saved = await SecureStorageHelper.getAiServerUrl();
+    if (saved != null && saved.isNotEmpty && saved != 'http://192.168.10.131:8000' && saved != 'http://192.168.10.125:8000') {
+      _serverBaseUrl = saved;
+    } else {
+      _serverBaseUrl = ApiClient().aiBaseUrl;
+    }
+    if (mounted) {
+      setState(() => _urlCtrl.text = _serverBaseUrl);
+    }
+  }
+
   /// Cài đặt IP Server
   void _showIpConfigDialog() {
     showDialog(
@@ -568,7 +581,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
               controller: _urlCtrl,
               decoration: const InputDecoration(
                 labelText: 'AI Backend Base URL',
-                hintText: 'http://127.0.0.1:8000 hoặc http://192.168.1.2:8000',
+                hintText: 'http://127.0.0.1:8000 hoặc http://192.168.10.51:8000',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -577,8 +590,8 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
               spacing: 6,
               children: [
                 ActionChip(
-                  label: const Text('Wi-Fi LAN (192.168.10.125:8000)', style: TextStyle(fontSize: 11)),
-                  onPressed: () => _urlCtrl.text = 'http://192.168.10.125:8000',
+                  label: const Text('Wi-Fi LAN (192.168.10.51:8000)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _urlCtrl.text = 'http://192.168.10.51:8000',
                 ),
                 ActionChip(
                   label: const Text('USB Cáp (127.0.0.1:8000)', style: TextStyle(fontSize: 11)),
@@ -604,6 +617,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
           ElevatedButton(
             onPressed: () {
               setState(() => _serverBaseUrl = _urlCtrl.text.trim());
+              SecureStorageHelper.saveAiServerUrl(_urlCtrl.text.trim());
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Đã cập nhật Server: $_serverBaseUrl')),

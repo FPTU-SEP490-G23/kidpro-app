@@ -155,34 +155,42 @@ def extract_l2_normalized_embedding(img: np.ndarray) -> Optional[np.ndarray]:
     1. YOLOv8n-Face phát hiện khuôn mặt & chọn khuôn mặt có diện tích lớn nhất.
     2. Cắt khuôn mặt, tiền xử lý và đưa vào ArcFace trích xuất vector 512 chiều chuẩn hóa L2.
     """
-    # 1. Phát hiện khuôn mặt bằng YOLOv8
+    if img is None or img.size == 0:
+        return None
+
+    # 1. Phát hiện khuôn mặt bằng YOLOv8 (conf 0.35 -> fallback 0.15)
     results = yolo_detector(img, conf=0.35, verbose=False)
     boxes = results[0].boxes
     if len(boxes) == 0:
-        return None
-
-    # Chọn khuôn mặt lớn nhất trong khung hình (trọng tâm bức ảnh)
-    best_box = max(boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0]) * (b.xyxy[0][3] - b.xyxy[0][1]))
-    xyxy = best_box.xyxy[0].cpu().numpy().astype(int)
+        results = yolo_detector(img, conf=0.15, verbose=False)
+        boxes = results[0].boxes
 
     h, w = img.shape[:2]
-    # Mở rộng bounding box thêm 10% lề để bao trọn cằm và trán
-    box_w = xyxy[2] - xyxy[0]
-    box_h = xyxy[3] - xyxy[1]
-    margin_x = int(box_w * 0.10)
-    margin_y = int(box_h * 0.10)
 
-    x1 = max(0, xyxy[0] - margin_x)
-    y1 = max(0, xyxy[1] - margin_y)
-    x2 = min(w, xyxy[2] + margin_x)
-    y2 = min(h, xyxy[3] + margin_y)
+    if len(boxes) > 0:
+        # Chọn khuôn mặt lớn nhất trong khung hình (trọng tâm bức ảnh)
+        best_box = max(boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0]) * (b.xyxy[0][3] - b.xyxy[0][1]))
+        xyxy = best_box.xyxy[0].cpu().numpy().astype(int)
 
-    if x2 <= x1 or y2 <= y1:
-        return None
+        # Mở rộng bounding box thêm 10% lề để bao trọn cằm và trán
+        box_w = xyxy[2] - xyxy[0]
+        box_h = xyxy[3] - xyxy[1]
+        margin_x = int(box_w * 0.10)
+        margin_y = int(box_h * 0.10)
 
-    face_crop = img[y1:y2, x1:x2]
-    if face_crop.size == 0:
-        return None
+        x1 = max(0, xyxy[0] - margin_x)
+        y1 = max(0, xyxy[1] - margin_y)
+        x2 = min(w, xyxy[2] + margin_x)
+        y2 = min(h, xyxy[3] + margin_y)
+        face_crop = img[y1:y2, x1:x2]
+    else:
+        # Fallback ảnh chân dung tự động cắt 80% trung tâm
+        margin_x = int(w * 0.10)
+        margin_y = int(h * 0.10)
+        face_crop = img[margin_y:h-margin_y, margin_x:w-margin_x]
+
+    if face_crop is None or face_crop.size == 0:
+        face_crop = img
 
     # 2. Tiền xử lý đưa vào ArcFace ONNX
     face_resized = cv2.resize(face_crop, (112, 112))
