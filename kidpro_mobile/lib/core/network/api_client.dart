@@ -8,7 +8,12 @@ class ApiClient {
   static ApiClient? _instance;
   late final Dio dio;
 
-  static String get defaultHostUrl => 'http://192.168.10.51:8080';
+  /// Ưu tiên `--dart-define=BASE_URL=http://<ip>:8080` (thiết bị thật qua Wi-Fi),
+  /// mặc định 10.0.2.2 cho Android Emulator (trỏ về localhost của máy tính).
+  static const _envBaseUrl = String.fromEnvironment('BASE_URL');
+  static String get defaultHostUrl => _envBaseUrl.isNotEmpty
+      ? _envBaseUrl
+      : (Platform.isAndroid ? 'http://10.0.2.2:8080' : 'http://127.0.0.1:8080');
 
   String get baseUrl => dio.options.baseUrl;
   String get currentBaseUrl => dio.options.baseUrl;
@@ -27,7 +32,7 @@ class ApiClient {
 
   ApiClient._() {
     dio = Dio(BaseOptions(
-      baseUrl: const String.fromEnvironment('BASE_URL', defaultValue: 'http://192.168.10.51:8080'),
+      baseUrl: defaultHostUrl,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},

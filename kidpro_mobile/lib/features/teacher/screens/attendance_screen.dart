@@ -253,7 +253,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           IconButton(
             icon: const Icon(Icons.qr_code_scanner_rounded),
             tooltip: 'Quét AI Face',
-            onPressed: () => context.go('/teacher/face-attendance'),
+            onPressed: () => context.push('/teacher/face-attendance'),
           ),
         ],
       ),
@@ -500,14 +500,32 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.person_search_rounded, size: 56, color: Colors.grey.shade400),
-                            const SizedBox(height: 8),
-                            Text(
-                              _searchQuery.isNotEmpty
-                                  ? 'Không tìm thấy học sinh phù hợp'
-                                  : 'Không có học sinh trong danh sách',
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                            Icon(
+                              teacherProv.studentsError != null
+                                  ? Icons.cloud_off_rounded
+                                  : Icons.person_search_rounded,
+                              size: 56,
+                              color: Colors.grey.shade400,
                             ),
+                            const SizedBox(height: 8),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'Không tìm thấy học sinh phù hợp'
+                                    : teacherProv.studentsError ?? 'Không có học sinh trong danh sách',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                              ),
+                            ),
+                            if (teacherProv.studentsError != null && _searchQuery.isEmpty) ...[
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: _loadData,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Thử lại'),
+                              ),
+                            ],
                           ],
                         ),
                       )

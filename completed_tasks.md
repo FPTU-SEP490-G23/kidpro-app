@@ -414,13 +414,88 @@
   6. **Bộ Lọc Phân Hệ Linh Hoạt (Category Filter Chips):** 5 chip danh mục chuyển đổi tức thì (`Tất cả`, `Điểm danh & Xe`, `Sức khỏe & Bán trú`, `Học vụ & Lớp`, `Tương tác & Ảnh`) giúp giáo viên không bị ngợp và truy cập nhanh chức năng cần thiết.
   7. **Thẻ Chức Năng Hiện Đại (Modern Feature Cards):** Icon container bo góc mềm mại, hiển thị tag nghiệp vụ tiêu chuẩn (G5-UC, G8-UC, BR-024...), badge số lượng nhiệm vụ cần xử lý và chuyển trang mượt mà qua GoRouter.
 
+## 2026-11-08: Gỡ Bỏ Chức Năng Điểm Danh Xe Buýt Khỏi Vai Trò Giáo Viên
+- **Task:** Xóa phần xe buýt khỏi app Giáo viên vì giáo viên chủ nhiệm chỉ điểm danh tại lớp, không đi xe đưa đón.
+- **Mô tả:**
+  1. **Mobile (`kidpro_mobile`):** Xóa `bus_attendance_screen.dart`, route `/teacher/bus`, model `BusTripInfo`, state/hàm `loadBusTrip` / `submitBusCheckin` / `performBusSafetyClosure` trong `TeacherProvider`, endpoint `busCheckin` / `busSafetyClosure`. Dashboard bỏ nút nhanh "Xe buýt" và thẻ "Xe Buýt Đưa Đón", đổi chip lọc thành "Điểm danh & Đón trả", sửa lời nhắc ca chiều.
+  2. **Backend (`kidpro-be`):** Xóa endpoint `GET /api/teachers/bus/trips/{tripId}/stops` trong `TeacherPortalController`; bỏ quyền `TEACHER` / `GIAO_VIEN` khỏi `BusAttendanceController` (chỉ còn `ADMIN` / `QUAN_TRI`).
+  3. **Giữ nguyên:** Phụ huynh đăng ký dịch vụ xe buýt và Admin quản lý xe/tuyến (`BusManagementController`).
 
+## 2026-11-08: Giáo Viên Trả Trẻ & Xác Thực Người Đón Hộ Bằng QR/OTP (G5-UC-04, G5-UC-06, BR-022)
+- **Task:** Bổ sung cho màn "Tan học & Đón trả trẻ" của giáo viên: nút "Đã trả trẻ" khi bố mẹ đón, và kiểm tra người đón hộ bằng quét QR hoặc nhập OTP.
+- **Mô tả:**
+  1. **Tab "Trả trẻ":** Danh sách bé có mặt/đi muộn hôm nay, bé chưa về xếp trên; thống kê "Đã trả x/y"; nút "Đã trả trẻ" (hộp thoại xác nhận) gọi `POST /api/teachers/attendance/checkout`; bé đã về hiện giờ về; kéo xuống để làm mới.
+  2. **Tab "Đón hộ":** Nút quét QR (màn mới `PickupQrScannerScreen`, gói `mobile_scanner` 7.5.0, có đèn flash) hoặc nhập OTP 6 số → hiện thẻ thông tin bé, người đón, SĐT, phụ huynh ủy quyền, giờ hết hạn để đối chiếu → "Xác nhận bàn giao". Mã sai/hết hạn hiện cảnh báo đỏ "KHÔNG bàn giao trẻ".
+  3. **`TeacherProvider`:** thêm `checkoutStudent`, `verifyEmergencyPickup`, `confirmEmergencyPickup` (trả về thông báo lỗi từ backend), cập nhật giờ về của bé ngay trên danh sách.
+  4. **Model/Endpoint:** thêm `EmergencyPickupInfo`, `teacherAttendanceCheckout`, `emergencyPickupVerify`, `emergencyPickupConfirm`.
 
+## 2026-11-08: Quét Mặt Người Đón Trẻ Bằng AI (BR-022) - Mobile App & AI Engine
+- **Task:** Thêm bước quét mặt người đón khi trả trẻ cho cả bố mẹ, người đón thường xuyên và người đón hộ; phụ huynh đăng ký ảnh khuôn mặt người đón.
+- **Mô tả:**
+  1. **Giáo viên - tab "Trả trẻ":** bấm "Trả trẻ" mở bảng trượt `pickup_handover_sheet.dart`: chọn người đón (ảnh + trạng thái "Chưa có ảnh mặt") → chụp mặt (`PickupFaceCheck`) → hiện "Khớp 87%" xanh / "KHÔNG KHỚP" đỏ, đặt ảnh đăng ký cạnh ảnh vừa chụp → xác nhận. Không khớp / chưa có ảnh / AI lỗi: bắt buộc nhập lý do ≥ 10 ký tự, nút đổi thành "Vẫn bàn giao".
+  2. **Giáo viên - tab "Đón hộ":** sau khi QR/OTP hợp lệ, thêm bước chụp mặt người đón hộ so với ảnh phụ huynh gửi kèm mã.
+  3. **Phụ huynh:** màn mới `PickupFaceRegistrationScreen` (`/parent/pickup-faces`, mở từ nút khuôn mặt trên màn "Người đón thường xuyên"): đăng ký / cập nhật ảnh của mình và người đón thường xuyên, có ô đồng ý NĐ 13/2023. Form tạo mã đón hộ thêm ảnh chân dung người đón (không bắt buộc).
+  4. **Dùng chung:** `core/models/pickup_models.dart` (`PickupPerson`, `PickupFaceVerification`), `core/widgets/auth_network_image.dart` (tải ảnh `/uploads/**` có JWT).
+  5. **AI Engine:** thêm `POST /api/v1/compare` và `POST /api/v1/detect` trong `ai_backend/main.py`.
 
+## 2026-11-08: Thanh Điều Hướng Dưới (Bottom Navigation Bar) Cho App Giáo Viên
+- **Task:** Thêm thanh điều hướng 5 tab cho vai trò Giáo viên.
+- **Mô tả:**
+  1. **Router:** chuyển route `/teacher` sang `StatefulShellRoute.indexedStack` (mỗi tab giữ trạng thái riêng). 5 nhánh: Trang chủ (`/teacher` + các chức năng con), Điểm danh (`/teacher/attendance`), Tan học (`/teacher/dismissal`), Nhóm lớp (`/teacher/chat`), Tài khoản (`/teacher/profile`). Các lệnh `context.go(...)` có sẵn trên Dashboard tự chuyển đúng tab.
+  2. **`TeacherShellScreen`:** thanh `BottomNavigationBar` cùng kiểu app phụ huynh; badge số cảnh báo người lạ trên tab Tan học; bấm lại tab đang mở thì về màn gốc của tab; nút Back ở tab khác quay về Trang chủ.
+  3. **`TeacherProfileScreen` (mới):** thông tin giáo viên, chọn lớp phụ trách, đăng xuất có xác nhận.
+  4. Camera quét mặt điểm danh và màn quét QR đón hộ mở toàn màn hình (che thanh điều hướng), mở bằng `push` để Back quay lại đúng tab đang đứng.
 
+## 2026-11-08: Sửa Lỗi Lớp Chồi B1 Hiện 5 Học Sinh Giả Thay Vì 30 Học Sinh Thật
+- **Task:** Lớp Chồi B1 (30 học sinh) hiển thị 5 học sinh, "đã điểm danh 3/5".
+- **Nguyên nhân:**
+  1. `TeacherProvider.loadStudents` tự chèn 5 học sinh giả (HS001–HS005) mỗi khi danh sách rỗng: lúc lớp chưa tải xong, hoặc khi API lỗi (lỗi bị nuốt).
+  2. API `GET /api/teachers/classes/{id}/students` và `GET /api/teachers/attendance` trả 500 `Invalid value for NanoOfSecond: -550000000`: lỗi Hibernate 6.5.3 khi đọc cột `time` có giờ trước 07:00 (UTC+7) kèm phần lẻ giây (điểm danh lưu lúc 04:02:32.45).
+  3. API danh sách học sinh chậm ~13 giây (94 câu SQL, N+1) — sát ngưỡng timeout 15 giây của app.
+- **Khắc phục:**
+  - Mobile: bỏ dữ liệu giả; lớp chưa tải thì tải lớp trước; lỗi API hiện thông báo thật + nút "Thử lại" (`studentsError`). "Lưu điểm danh" không còn báo thành công giả khi không có danh sách thật; "Ghi nhận đón muộn" lỗi thì báo lỗi thay vì báo thành công.
+  - Backend: `Attendance.checkInTime/checkOutTime` dùng `@JdbcType(LocalTimeJdbcType.class)` (đọc LocalTime trực tiếp từ JDBC). `getClassStudents` tải học sinh kèm phụ huynh bằng `@EntityGraph` và điểm danh cả lớp trong 1 truy vấn: 13 giây / 94 câu SQL → ~0,6 giây / 4 câu SQL.
 
+## 2026-11-08: Quét Mặt Trực Tiếp Người Đón (Thay Cho Chụp Ảnh)
+- **Task:** Khi trả trẻ / đón hộ, sau khi chọn người đón thì quét mặt trực tiếp bằng camera thay vì mở app camera để chụp.
+- **Mô tả:**
+  1. Màn mới `PickupFaceScanScreen`: camera trực tiếp toàn màn hình (mặc định camera sau, có nút đổi camera), khung oval đổi màu theo trạng thái; Google ML Kit tìm khuôn mặt → yêu cầu đưa lại gần (mặt ≥ 28% chiều ngang khung) → yêu cầu chớp mắt (chống giơ ảnh trên điện thoại) → tự chụp và trả ảnh để AI so khớp.
+  2. Sau 8 giây chưa nhận được chớp mắt (đeo kính…) hiện nút "Chụp tay"; kết quả ghi rõ "chưa xác thực chớp mắt".
+  3. `PickupFaceCheck` dùng màn quét mới (nút "Quét mặt người đón" / "Quét lại"), áp dụng cho cả tab "Trả trẻ" và tab "Đón hộ".
+  4. Tách hàm chuyển khung hình camera sang `InputImage` của ML Kit vào `teacher/utils/camera_input_image.dart` (màn điểm danh bằng khuôn mặt cũ giữ nguyên).
 
+## 2026-11-08: Luật Bàn Giao Trẻ Mới: Bố Mẹ Bàn Giao Trực Tiếp, Người Thân Quét Mặt Tự Động
+- **Task:** Sửa người đón bị lặp (phụ huynh chính + dòng FATHER trùng), bỏ "Vẫn bàn giao / nhập lý do", áp dụng luật mới.
+- **Luật mới (BR-022):**
+  - Bố mẹ / người giám hộ chính (phụ huynh chính, quan hệ FATHER/MOTHER/Bố/Mẹ/Cha, hoặc `is_primary`): nút "Bàn giao", không quét mặt.
+  - Ông bà, cô chú, anh chị đã đăng ký mặt: quét mặt, khớp → tự động bàn giao. Chưa đăng ký / không khớp / AI lỗi → chặn, hiện số điện thoại bố mẹ để gọi.
+  - Đón hộ QR/OTP: có ảnh → quét mặt, khớp tự bàn giao, không khớp chặn; không có ảnh → QR/OTP hợp lệ + bấm "Bàn giao".
+- **Backend:** `PickupFaceService.assertHandoverAllowed` bỏ `overrideReason`, kiểm tra theo luật trên; `getPickupPersons` gộp dòng người đón trùng phụ huynh chính (cùng SĐT hoặc cùng tên + là bố/mẹ), dịch nhãn quan hệ (FATHER → Bố…), thêm `faceRequired`; `EmergencyPickupResponseDto` thêm `hasPickupPhoto`, `authorizedByParentPhone`. Bỏ `overrideReason` khỏi DTO checkout / confirm đón hộ. Test: `PickupFaceServiceImplTest` 12 test, `AttendanceServiceImplTest` 9 test đều qua.
+- **Mobile:** viết lại bảng trượt "Trả trẻ" (huy hiệu "Bàn giao trực tiếp" / "Quét mặt" / "Chưa có ảnh mặt", tự bàn giao khi khớp), tab "Đón hộ" theo luật mới; thay ô nhập lý do bằng `CallParentsCard` (tên + SĐT bố mẹ).
+- **Lưu ý:** khi chạy thử API trả trẻ trên dữ liệu thật đã lỡ ghi `check_out_time = 05:46:31` cho bản ghi điểm danh số 31 (bé Bùi Minh Đức, 08/11) — cần hoàn tác thủ công.
 
+## 2026-11-08: Gộp Người Đón Trùng Tên (Trùng Tên = Cùng 1 Người)
+- **Task:** Nhiều học sinh vẫn hiện phụ huynh 2 lần (34/35 bé có dòng người đón thường xuyên trùng phụ huynh chính).
+- **Nguyên nhân:** backend 8080 khởi động lúc 05:14, trước khi có bản sửa gộp (build 05:40).
+- **Mô tả:** `PickupFaceServiceImpl.getPickupPersons` đổi luật gộp theo yêu cầu: trùng tên (không phân biệt hoa thường, khoảng trắng thừa) là cùng 1 người, chỉ hiện 1 lần — áp dụng cả giữa phụ huynh chính với người đón và giữa các người đón với nhau; phụ huynh chính được ưu tiên, nhãn quan hệ lấy từ dòng trùng (FATHER → Bố). Thêm test UTCID13 (13 test đều qua). Kiểm tra dữ liệu thật 30 bé Chồi B1: 0 bé trùng; 29 bé 1 người đón, 1 bé (Trần Nhật Minh) 2 người đón (phụ huynh + Ông Nội).
 
+## 2026-11-08: Bố/Mẹ Có Tài Khoản Hiện Chung Là "Phụ Huynh", Ẩn Dòng FATHER/MOTHER Trùng
+- **Nguyên nhân:** lúc nhập học (`StudentServiceImpl`, `ParentAccountServiceImpl`) bố/mẹ được lưu vào `student.student_guardian` với quan hệ FATHER/MOTHER, nên phụ huynh có tài khoản luôn có 1 bản sao trong danh sách người đón.
+- **Mô tả:**
+  - Màn trả trẻ (giáo viên): người có tài khoản luôn ghi nhãn "Phụ huynh" (không lấy "Bố"/"Mẹ" từ dòng trùng).
+  - Cổng phụ huynh `StudentGuardianServiceImpl`: danh sách "Người đón thường xuyên" (và danh sách đơn từ) ẩn dòng trùng tên phụ huynh chính; giới hạn tối đa 3 người (BR-012) không đếm dòng này; chặn phụ huynh tự đăng ký chính mình làm người đón.
+  - Không xóa dữ liệu trong DB (chỉ ẩn khi hiển thị). Test: `StudentGuardianServiceImplTest` 10, `PickupFaceServiceImplTest` 13, cùng các test trả trẻ / đón hộ: 39 test đều qua. Dữ liệu thật 30 bé Chồi B1: 0 trùng, 30 người nhãn "Phụ huynh", 1 "Ông Nội".
 
+## 2026-11-08: Đón Muộn Tự Động Tính Phí Sau 17:30 (BR-020)
+- **Task:** Bỏ ghi nhận đón muộn bằng tay; hệ thống tự tính: bé chưa được trả sau 17:30 tính 30.000đ/giờ.
+- **Luật tính:** mốc 17:30, mỗi giờ bắt đầu sau 17:30 tính tròn 1 giờ; đón muộn nhất 19:00 nên phí chỉ tính đến 19:00 (17:31-18:30: 30.000đ; 18:31-19:00 trở đi: 60.000đ, tối đa 60.000đ). Bé chưa được đón sau 19:00 vẫn hiện trong danh sách nhưng phí không tăng. Bé chưa được trả: phí tạm tính đến hiện tại (giờ Việt Nam). Bé đã trả: phí chốt theo `check_out_time`. Chỉ tính bé có mặt (PRESENT, đã điểm danh vào). Ngày cũ thiếu giờ ra về thì không tính.
+- **Backend:** `LatePickupServiceImpl.getClassLatePickups` + `GET /api/attendance/late-pickups?classId=&date=`; bỏ `POST /api/attendance/late-pickups/record` và `LatePickupRecordDto`; `AttendanceRepository.findWithStudentByStudent_Clazz_ClassIdAndDate` (EntityGraph, tránh N+1). Không cần bảng mới: phí suy ra từ `student.attendances`. `LatePickupServiceImplTest` viết lại: 16 test đều qua.
+- **Mobile:** tab "Theo dõi Đón muộn" thay form nhập tay bằng danh sách tự động (Đang chờ đón / Đã trả muộn, tổng phí, SĐT phụ huynh), tự tải lại mỗi phút, kéo để làm mới, tải lại ngay khi trả một bé đang chờ. `flutter analyze` không lỗi.
 
+## 2026-11-08: Sửa Lỗi Mất Thanh Điều Hướng Giáo Viên
+- **Nguyên nhân:** `main.dart` gọi `appRouter(auth)` trong `build` với `context.watch<AuthProvider>()`, nên mỗi khi AuthProvider thay đổi lại tạo GoRouter mới, dùng chung `_rootNavigatorKey` (trùng GlobalKey) và mất trạng thái điều hướng, khung `StatefulShellRoute` (thanh 5 tab) có thể bị dựng sai hoặc mất.
+- **Mô tả:** `KidProApp` chuyển sang StatefulWidget, tạo router đúng 1 lần (`late final`), dispose khi hủy; đăng nhập/đăng xuất vẫn chuyển trang nhờ `refreshListenable`. `flutter analyze` không lỗi.
+
+## 2026-11-07: Khắc phục lỗi "Không thể kết nối đến máy chủ" trên Android Emulator
+- **Task:** Sửa địa chỉ backend mặc định trong `api_client.dart` bị gán cứng `http://192.168.10.51:8080` (IP mạng Wi-Fi khác, không phải máy đang chạy backend).
+- **Mô tả:** `defaultHostUrl` ưu tiên `--dart-define=BASE_URL=...` (dùng cho điện thoại thật qua Wi-Fi); nếu không truyền thì Android dùng `http://10.0.2.2:8080`, nền tảng khác dùng `http://127.0.0.1:8080`. Bật `adb reverse tcp:8080` và `tcp:8000` cho máy ảo.

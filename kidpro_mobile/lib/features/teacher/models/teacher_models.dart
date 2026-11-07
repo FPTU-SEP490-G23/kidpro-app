@@ -131,69 +131,96 @@ class MedicationTask {
       );
 }
 
-// ── Bus Attendance (G5-UC-02, G5-UC-03, BR-024) ──
-class BusTripInfo {
-  final String tripId;
-  final String routeName;
-  final String plateNumber;
-  final int totalStudents;
-  final int onboardCount;
-  final int deboardedCount;
-  final int remainingCount;
-  final bool isSafetyClosed;
+// ── Emergency Pickup Verification (G5-UC-06, BR-022) ──
+class EmergencyPickupInfo {
+  final int authorizationId;
+  final String studentId;
+  final String studentName;
+  final String? studentCode;
+  final String? className;
+  final String? parentName;
+  final String? parentPhone;
+  final String pickupPersonName;
+  final String? pickupPersonPhone;
+  final DateTime? validUntil;
+  /// Phụ huynh có gửi ảnh người đón hộ: phải quét mặt khớp mới được bàn giao.
+  final bool hasPickupPhoto;
 
-  const BusTripInfo({
-    required this.tripId,
-    required this.routeName,
-    required this.plateNumber,
-    required this.totalStudents,
-    required this.onboardCount,
-    required this.deboardedCount,
-    required this.remainingCount,
-    this.isSafetyClosed = false,
+  const EmergencyPickupInfo({
+    required this.authorizationId,
+    required this.studentId,
+    required this.studentName,
+    this.studentCode,
+    this.className,
+    this.parentName,
+    this.parentPhone,
+    required this.pickupPersonName,
+    this.pickupPersonPhone,
+    this.validUntil,
+    this.hasPickupPhoto = false,
   });
 
-  factory BusTripInfo.fromJson(Map<String, dynamic> json) => BusTripInfo(
-        tripId: (json['tripId'] ?? '').toString(),
-        routeName: json['routeName'] as String? ?? 'Tuyến xe buýt KidPro',
-        plateNumber: json['plateNumber'] as String? ?? '29B-123.45',
-        totalStudents: (json['totalStudents'] as num?)?.toInt() ?? 0,
-        onboardCount: (json['onboardCount'] as num?)?.toInt() ?? 0,
-        deboardedCount: (json['deboardedCount'] as num?)?.toInt() ?? 0,
-        remainingCount: (json['remainingCount'] as num?)?.toInt() ?? 0,
-        isSafetyClosed: json['isSafetyClosed'] as bool? ?? false,
+  factory EmergencyPickupInfo.fromJson(Map<String, dynamic> json) => EmergencyPickupInfo(
+        authorizationId: (json['authorizationId'] as num).toInt(),
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String? ?? '',
+        studentCode: json['studentCode'] as String?,
+        className: json['className'] as String?,
+        parentName: json['authorizedByParentName'] as String?,
+        parentPhone: json['authorizedByParentPhone'] as String?,
+        pickupPersonName: json['pickupPersonName'] as String? ?? '',
+        pickupPersonPhone: json['pickupPersonPhone'] as String?,
+        validUntil: json['validUntil'] != null
+            ? DateTime.tryParse(json['validUntil'].toString())
+            : null,
+        hasPickupPhoto: json['hasPickupPhoto'] as bool? ?? false,
       );
 }
 
-// ── Late Pickup & Progressive Fee (G5-UC-05, BR-020) ──
+// ── Đón muộn tự động tính phí (G5-UC-05, BR-020) ──
+/// Hệ thống tự tính: sau 17:30 tính 30.000đ/giờ, giờ chưa trọn tính tròn 1 giờ.
 class LatePickupRecord {
   final String studentId;
   final String studentName;
-  final String pickupTime;
+  final String? studentCode;
+  final String? parentName;
+  final String? parentPhone;
+  /// Giờ trả bé (HH:mm); null khi bé vẫn đang chờ đón.
+  final String? pickupTime;
+  /// true: chưa được đón, phí còn tăng theo giờ.
+  final bool isWaiting;
   final int lateMinutes;
+  final int chargedHours;
   final double feeAmount;
-  final bool isExempted;
-  final String? exemptionReason;
 
   const LatePickupRecord({
     required this.studentId,
     required this.studentName,
-    required this.pickupTime,
+    this.studentCode,
+    this.parentName,
+    this.parentPhone,
+    this.pickupTime,
+    required this.isWaiting,
     required this.lateMinutes,
+    required this.chargedHours,
     required this.feeAmount,
-    this.isExempted = false,
-    this.exemptionReason,
   });
 
-  factory LatePickupRecord.fromJson(Map<String, dynamic> json) => LatePickupRecord(
-        studentId: (json['studentId'] ?? '').toString(),
-        studentName: json['studentName'] as String? ?? 'Bé',
-        pickupTime: json['pickupTime'] as String? ?? '',
-        lateMinutes: (json['lateMinutes'] as num?)?.toInt() ?? 0,
-        feeAmount: (json['feeAmount'] as num?)?.toDouble() ?? 0.0,
-        isExempted: json['isExempted'] as bool? ?? false,
-        exemptionReason: json['exemptionReason'] as String?,
-      );
+  factory LatePickupRecord.fromJson(Map<String, dynamic> json) {
+    final rawTime = json['pickupTime']?.toString();
+    return LatePickupRecord(
+      studentId: (json['studentId'] ?? '').toString(),
+      studentName: json['studentName'] as String? ?? 'Bé',
+      studentCode: json['studentCode'] as String?,
+      parentName: json['parentName'] as String?,
+      parentPhone: json['parentPhone'] as String?,
+      pickupTime: rawTime != null && rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime,
+      isWaiting: json['status'] == 'WAITING',
+      lateMinutes: (json['lateMinutes'] as num?)?.toInt() ?? 0,
+      chargedHours: (json['chargedHours'] as num?)?.toInt() ?? 0,
+      feeAmount: (json['feeAmount'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
 }
 
 // ── Health Metrics (WHO) (G8-UC-03, BR-031) ──

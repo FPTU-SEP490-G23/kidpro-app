@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
+import 'package:kidpro_mobile/core/models/pickup_models.dart';
 import 'package:kidpro_mobile/core/network/api_client.dart';
 import 'package:kidpro_mobile/features/parent/models/parent_models.dart';
 
@@ -354,6 +355,71 @@ class ParentProvider extends ChangeNotifier {
     } on DioException catch (e) {
       logError('revokeGuardian', e);
       return false;
+    }
+  }
+
+  // ── 4b. PICKUP FACES: ảnh khuôn mặt người đón để giáo viên quét khi trả trẻ (BR-022) ──
+  List<PickupPerson> _pickupPersons = [];
+  List<PickupPerson> get pickupPersons => _pickupPersons;
+  bool _pickupPersonsLoading = false;
+  bool get pickupPersonsLoading => _pickupPersonsLoading;
+
+  Future<void> loadPickupPersons([String? studentId]) async {
+    final targetId = (studentId != null && studentId.isNotEmpty) ? studentId : _selectedStudentId;
+    if (targetId.isEmpty) {
+      _pickupPersons = [];
+      notifyListeners();
+      return;
+    }
+    _pickupPersonsLoading = true;
+    notifyListeners();
+    try {
+      final res = await _dio.get(ApiEndpoints.parentPickupFaces, queryParameters: {'studentId': targetId});
+      _pickupPersons = _extractList(res.data)
+          .map((e) => PickupPerson.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _error = null;
+    } on DioException catch (e) {
+      logError('loadPickupPersons', e);
+      _pickupPersons = [];
+      _error = e.response?.data?['message']?.toString() ?? 'Không tải được danh sách người đón';
+    }
+    _pickupPersonsLoading = false;
+    notifyListeners();
+  }
+
+  /// Đăng ký ảnh khuôn mặt phụ huynh / người đón thường xuyên. Trả về null nếu thành công, ngược lại là lỗi.
+  Future<String?> registerPickupFace(PickupPerson person, Uint8List bytes, String filename) async {
+    try {
+      final form = FormData.fromMap({
+        'photo': MultipartFile.fromBytes(bytes, filename: filename),
+        'consent': true,
+      });
+      final url = person.isGuardian
+          ? ApiEndpoints.parentPickupFaceGuardian(person.guardianId!)
+          : ApiEndpoints.parentPickupFaceSelf;
+      await _dio.post(url, data: form, options: Options(receiveTimeout: const Duration(seconds: 40)));
+      await loadPickupPersons();
+      return null;
+    } on DioException catch (e) {
+      logError('registerPickupFace', e);
+      return e.response?.data?['message']?.toString() ?? 'Lưu ảnh khuôn mặt thất bại. Vui lòng thử lại.';
+    }
+  }
+
+  /// Gắn ảnh chân dung người đón hộ vào mã ủy quyền vừa tạo. Trả về null nếu thành công.
+  Future<String?> attachEmergencyPickupPhoto(int authorizationId, Uint8List bytes, String filename) async {
+    try {
+      final form = FormData.fromMap({
+        'photo': MultipartFile.fromBytes(bytes, filename: filename),
+        'consent': true,
+      });
+      await _dio.post(ApiEndpoints.parentPickupFaceEmergency(authorizationId),
+          data: form, options: Options(receiveTimeout: const Duration(seconds: 40)));
+      return null;
+    } on DioException catch (e) {
+      logError('attachEmergencyPickupPhoto', e);
+      return e.response?.data?['message']?.toString() ?? 'Lưu ảnh người đón hộ thất bại.';
     }
   }
 

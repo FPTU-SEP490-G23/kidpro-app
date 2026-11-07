@@ -17,13 +17,15 @@ import 'package:kidpro_mobile/features/parent/screens/records_overview_screen.da
 import 'package:kidpro_mobile/features/parent/screens/requests_overview_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/request_center_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/parent_notification_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/pickup_face_registration_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/face_registration_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/teacher_dashboard_screen.dart';
+import 'package:kidpro_mobile/features/teacher/screens/teacher_profile_screen.dart';
+import 'package:kidpro_mobile/features/teacher/screens/teacher_shell_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/attendance_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/face_attendance_camera_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/dismissal_alert_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/medication_admin_screen.dart';
-import 'package:kidpro_mobile/features/teacher/screens/bus_attendance_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/health_metrics_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/health_incidents_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/daily_activity_screen.dart';
@@ -107,56 +109,81 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
             GoRoute(
                 path: 'notifications',
                 builder: (_, __) => const ParentNotificationScreen()),
+            GoRoute(
+                path: 'pickup-faces',
+                builder: (_, __) => const PickupFaceRegistrationScreen()),
           ],
         ),
 
-        // ── Teacher routes (Full 18 use cases) ──
-        GoRoute(
-          path: '/teacher',
-          builder: (_, __) => const TeacherDashboardScreen(),
-          routes: [
-            GoRoute(
-                path: 'attendance',
-                builder: (_, __) => const AttendanceScreen()),
-            GoRoute(
-                path: 'face-attendance',
-                builder: (_, __) => const FaceAttendanceCameraScreen()),
-            GoRoute(
-                path: 'dismissal',
-                builder: (_, __) => const DismissalAlertScreen()),
-            GoRoute(
-                path: 'medication',
-                builder: (_, __) => const MedicationAdminScreen()),
-            GoRoute(
-                path: 'bus',
-                builder: (_, __) => const BusAttendanceScreen()),
-            GoRoute(
-                path: 'health-metrics',
-                builder: (_, __) => const HealthMetricsScreen()),
-            GoRoute(
-                path: 'health-incidents',
-                builder: (_, __) => const HealthIncidentsScreen()),
-            GoRoute(
-                path: 'daily-activity',
-                builder: (_, __) => const DailyActivityScreen()),
-            GoRoute(
-                path: 'lesson-plans',
-                builder: (_, __) => const LessonPlanScreen()),
-            GoRoute(
-                path: 'evaluations',
-                builder: (_, __) => const DevelopmentEvaluationScreen()),
-            GoRoute(
-                path: 'equipment',
-                builder: (_, __) => const EquipmentIncidentScreen()),
-            GoRoute(
-                path: 'leave-requests',
-                builder: (_, __) => const LeaveRequestReviewScreen()),
-            GoRoute(
-                path: 'chat',
-                builder: (_, __) => const ClassChatRoomScreen()),
-            GoRoute(
-                path: 'journal',
-                builder: (_, __) => const ClassroomJournalScreen()),
+        // ── Teacher routes: thanh điều hướng dưới 5 tab ──
+        StatefulShellRoute.indexedStack(
+          builder: (_, __, navigationShell) => TeacherShellScreen(navigationShell: navigationShell),
+          branches: [
+            // Tab 0: Trang chủ + các chức năng mở từ Dashboard (vẫn hiện thanh điều hướng)
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: '/teacher',
+                builder: (_, __) => const TeacherDashboardScreen(),
+                routes: [
+                  // Camera quét mặt điểm danh: toàn màn hình, che thanh điều hướng
+                  GoRoute(
+                      path: 'face-attendance',
+                      parentNavigatorKey: _rootNavigatorKey,
+                      builder: (_, __) => const FaceAttendanceCameraScreen()),
+                  GoRoute(
+                      path: 'medication',
+                      builder: (_, __) => const MedicationAdminScreen()),
+                  GoRoute(
+                      path: 'health-metrics',
+                      builder: (_, __) => const HealthMetricsScreen()),
+                  GoRoute(
+                      path: 'health-incidents',
+                      builder: (_, __) => const HealthIncidentsScreen()),
+                  GoRoute(
+                      path: 'daily-activity',
+                      builder: (_, __) => const DailyActivityScreen()),
+                  GoRoute(
+                      path: 'lesson-plans',
+                      builder: (_, __) => const LessonPlanScreen()),
+                  GoRoute(
+                      path: 'evaluations',
+                      builder: (_, __) => const DevelopmentEvaluationScreen()),
+                  GoRoute(
+                      path: 'equipment',
+                      builder: (_, __) => const EquipmentIncidentScreen()),
+                  GoRoute(
+                      path: 'leave-requests',
+                      builder: (_, __) => const LeaveRequestReviewScreen()),
+                  GoRoute(
+                      path: 'journal',
+                      builder: (_, __) => const ClassroomJournalScreen()),
+                ],
+              ),
+            ]),
+            // Tab 1: Điểm danh
+            StatefulShellBranch(routes: [
+              GoRoute(
+                  path: '/teacher/attendance',
+                  builder: (_, __) => const AttendanceScreen()),
+            ]),
+            // Tab 2: Tan học (trả trẻ, đón hộ, người lạ, đón muộn)
+            StatefulShellBranch(routes: [
+              GoRoute(
+                  path: '/teacher/dismissal',
+                  builder: (_, __) => const DismissalAlertScreen()),
+            ]),
+            // Tab 3: Nhóm lớp
+            StatefulShellBranch(routes: [
+              GoRoute(
+                  path: '/teacher/chat',
+                  builder: (_, __) => const ClassChatRoomScreen()),
+            ]),
+            // Tab 4: Tài khoản
+            StatefulShellBranch(routes: [
+              GoRoute(
+                  path: '/teacher/profile',
+                  builder: (_, __) => const TeacherProfileScreen()),
+            ]),
           ],
         ),
       ],
