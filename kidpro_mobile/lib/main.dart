@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
@@ -29,13 +30,28 @@ void main() async {
   );
 }
 
-class KidProApp extends StatelessWidget {
+class KidProApp extends StatefulWidget {
   const KidProApp({super.key});
 
   @override
+  State<KidProApp> createState() => _KidProAppState();
+}
+
+class _KidProAppState extends State<KidProApp> {
+  // Tạo router đúng 1 lần. Trước đây router bị tạo lại mỗi khi AuthProvider thay đổi:
+  // mất trạng thái điều hướng, trùng GlobalKey của navigator và có thể làm mất thanh điều hướng giáo viên.
+  // Thay đổi đăng nhập/đăng xuất đã được xử lý qua refreshListenable trong appRouter.
+  late final GoRouter _router = appRouter(context.read<AuthProvider>());
+
+  @override
+  void dispose() {
+    _router.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final router = appRouter(auth);
+    final router = _router;
 
     return MaterialApp.router(
       title: 'KidPro',

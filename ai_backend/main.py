@@ -149,11 +149,12 @@ async def read_image_from_upload(upload_file: UploadFile) -> np.ndarray:
     return img
 
 
-def extract_l2_normalized_embedding(img: np.ndarray) -> Optional[np.ndarray]:
+def extract_l2_normalized_embedding(img: np.ndarray, require_face: bool = False) -> Optional[np.ndarray]:
     """
     Pipeline 2 giai đoạn:
     1. YOLOv8n-Face phát hiện khuôn mặt & chọn khuôn mặt có diện tích lớn nhất.
     2. Cắt khuôn mặt, tiền xử lý và đưa vào ArcFace trích xuất vector 512 chiều chuẩn hóa L2.
+    require_face=True: trả về None nếu không phát hiện khuôn mặt (không dùng fallback cắt trung tâm).
     """
     if img is None or img.size == 0:
         return None
@@ -183,6 +184,8 @@ def extract_l2_normalized_embedding(img: np.ndarray) -> Optional[np.ndarray]:
         x2 = min(w, xyxy[2] + margin_x)
         y2 = min(h, xyxy[3] + margin_y)
         face_crop = img[y1:y2, x1:x2]
+    elif require_face:
+        return None
     else:
         # Fallback ảnh chân dung tự động cắt 80% trung tâm
         margin_x = int(w * 0.10)
@@ -402,6 +405,38 @@ async def check_in_face(
             "confidence_score": 0.0,
             "message": f"Lỗi xử lý AI: {str(e)}",
         }
+
+
+@app.post("/api/v1/detect")
+async def detect_face(
+    file: UploadFile = File(..., description="Ảnh cần kiểm tra có khuôn mặt hay không"),
+):
+    """Kiểm tra ảnh chân dung người đón có khuôn mặt rõ ràng trước khi lưu làm ảnh tham chiếu."""
+    img = await read_image_from_upload(file)
+    embedding = extract_l2_normalized_embedding(img, require_face=True)
+    return {"face_detected": embedding is not None}
+
+
+@app.post("/api/v1/compare")
+async def compare_faces(
+    reference: UploadFile = File(..., description="Ảnh khuôn mặt người đón đã đăng ký"),
+    probe: UploadFile = File(..., description="Ảnh giáo viên chụp người đến đón"),
+):
+    """So khớp 1-1 khuôn mặt người đến đón với ảnh đã đăng ký (BR-022). Ngưỡng do backend quyết định."""
+    reference_img = await read_image_from_upload(reference)
+    probe_img = await read_image_from_upload(probe)
+
+    probe_emb = extract_l2_normalized_embedding(probe_img, require_face=True)
+    if probe_emb is None:
+        raise HTTPException(status_code=422, detail="PROBE_NO_FACE")
+
+    # Ảnh tham chiếu đã được kiểm tra lúc đăng ký nên cho phép fallback cắt trung tâm
+    reference_emb = extract_l2_normalized_embedding(reference_img)
+    if reference_emb is None:
+        raise HTTPException(status_code=422, detail="REFERENCE_NO_FACE")
+
+    similarity = float(np.dot(reference_emb, probe_emb))
+    return {"similarity": round(similarity, 4)}
 
 
 @app.get("/api/v1/students")

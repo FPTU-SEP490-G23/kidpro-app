@@ -17,7 +17,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   final List<String> _categories = [
     'Tất cả',
-    'Điểm danh & Xe',
+    'Điểm danh & Đón trả',
     'Sức khỏe & Bán trú',
     'Học vụ & Lớp',
     'Tương tác & Ảnh',
@@ -48,7 +48,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     } else if (hour < 17) {
       return 'Cho uống thuốc lúc 14:00, hoàn thành nhật ký lớp & chuẩn bị trả trẻ.';
     } else {
-      return 'Kiểm tra trả trẻ, phí đón muộn sau 17:00 & đóng chuyến xe buýt an toàn.';
+      return 'Kiểm tra trả trẻ tận tay phụ huynh; hệ thống tự tính phí đón muộn sau 17:30.';
     }
   }
 
@@ -892,17 +892,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 subtitle: 'Tự động',
                 icon: Icons.camera_front_rounded,
                 color: const Color(0xFF7C3AED),
-                onTap: () => context.go('/teacher/face-attendance'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildQuickActionButton(
-                title: 'Xe buýt',
-                subtitle: 'Đóng chuyến',
-                icon: Icons.directions_bus_rounded,
-                color: const Color(0xFFEA580C),
-                onTap: () => context.go('/teacher/bus'),
+                onTap: () => context.push('/teacher/face-attendance'),
               ),
             ),
             const SizedBox(width: 10),
@@ -1022,7 +1012,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   List<Widget> _buildFilteredModules(TeacherProvider prov, int pendingMeds, int pendingLeaves) {
     final List<Widget> widgets = [];
 
-    // Category 0: All, or Category 1: Attendance & Bus
+    // Category 0: All, or Category 1: Attendance & Dismissal
     if (_selectedCategoryIndex == 0 || _selectedCategoryIndex == 1) {
       widgets.add(_buildSectionTitle('Điểm danh & An toàn Đưa đón'));
       widgets.add(const SizedBox(height: 8));
@@ -1041,21 +1031,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         tag: 'AI Face',
         icon: Icons.camera_front_rounded,
         color: const Color(0xFF7C3AED),
-        onTap: () => context.go('/teacher/face-attendance'),
-      ));
-      widgets.add(const SizedBox(height: 10));
-      widgets.add(_ModernActionCard(
-        title: 'Xe Buýt Đưa Đón & Quét Đuôi Xe',
-        subtitle: 'Quét QR đuôi xe (BR-024) đảm bảo không bỏ quên bé',
-        tag: 'G5-UC-02, 03',
-        icon: Icons.directions_bus_rounded,
-        color: const Color(0xFFEA580C),
-        onTap: () => context.go('/teacher/bus'),
+        onTap: () => context.push('/teacher/face-attendance'),
       ));
       widgets.add(const SizedBox(height: 10));
       widgets.add(_ModernActionCard(
         title: 'Tan Học, Trả Trẻ & Phí Đón Muộn',
-        subtitle: 'Kiểm tra người ủy quyền & tính phí lũy tiến sau 17:00 (BR-020)',
+        subtitle: 'Kiểm tra người ủy quyền; tự tính phí đón muộn sau 17:30 (BR-020)',
         tag: 'G5-UC-04, 05',
         icon: Icons.family_restroom_rounded,
         color: const Color(0xFF0D9488),

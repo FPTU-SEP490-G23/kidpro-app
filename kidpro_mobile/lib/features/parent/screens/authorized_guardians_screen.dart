@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
@@ -218,6 +219,13 @@ class _AuthorizedGuardiansScreenState extends State<AuthorizedGuardiansScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Người đón thường xuyên'),
+        actions: [
+          IconButton(
+            tooltip: 'Ảnh khuôn mặt người đón',
+            icon: const Icon(Icons.face_retouching_natural),
+            onPressed: () => context.push('/parent/pickup-faces'),
+          ),
+        ],
       ),
       body: Consumer<ParentProvider>(
         builder: (context, prov, child) {

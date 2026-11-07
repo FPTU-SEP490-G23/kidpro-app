@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/parent/models/parent_models.dart';
 import 'package:kidpro_mobile/features/parent/providers/parent_provider.dart';
+import 'package:kidpro_mobile/features/parent/screens/pickup_face_registration_screen.dart';
 
 class EmergencyPickupScreen extends StatefulWidget {
   const EmergencyPickupScreen({super.key});
@@ -26,6 +28,22 @@ class _EmergencyPickupScreenState extends State<EmergencyPickupScreen>
 
   bool _submitting = false;
   EmergencyPickup? _newlyCreated;
+
+  // Ảnh chân dung người đón hộ (không bắt buộc) + đồng ý NĐ 13/2023
+  Uint8List? _photoBytes;
+  String _photoName = 'pickup_person.jpg';
+  bool _photoConsent = false;
+
+  Future<void> _pickPhoto(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(source: source, maxWidth: 1024, imageQuality: 85);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      _photoBytes = bytes;
+      _photoName = picked.name;
+    });
+  }
 
   @override
   void initState() {
@@ -47,6 +65,12 @@ class _EmergencyPickupScreenState extends State<EmergencyPickupScreen>
 
   Future<void> _handleCreate() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_photoBytes != null && !_photoConsent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng tích đồng ý lưu ảnh khuôn mặt, hoặc bỏ ảnh.')),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     final prov = context.read<ParentProvider>();
@@ -61,15 +85,35 @@ class _EmergencyPickupScreenState extends State<EmergencyPickupScreen>
 
     final result = await prov.createEmergencyPickup(
         newPickup, prov.selectedParentId ?? '');
+
+    // Mã đã tạo; ảnh lỗi thì vẫn dùng được mã, chỉ báo cho phụ huynh biết
+    String? photoError;
+    final photo = _photoBytes;
+    if (result != null && photo != null && result.authorizationId != null) {
+      photoError = await prov.attachEmergencyPickupPhoto(result.authorizationId!, photo, _photoName);
+    }
+    if (!mounted) return;
     setState(() {
       _submitting = false;
       _newlyCreated = result;
     });
 
-    if (result != null && mounted) {
+    if (result != null) {
       _nameCtrl.clear();
       _phoneCtrl.clear();
       _pinCtrl.clear();
+      setState(() {
+        _photoBytes = null;
+        _photoConsent = false;
+      });
+      if (photoError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã tạo mã nhưng chưa lưu được ảnh: $photoError'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      }
       _showPickupSuccessDialog(result);
     }
   }
@@ -318,6 +362,67 @@ class _EmergencyPickupScreenState extends State<EmergencyPickupScreen>
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
+            const SizedBox(height: 16),
+
+            // Ảnh chân dung người đón hộ để cô giáo quét mặt so khớp (BR-022)
+            const Text('Ảnh chân dung người đón (Tùy chọn)',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 4),
+            Text(
+              'Có ảnh thì cô giáo quét mặt người đón để AI so khớp. Không có ảnh, cô sẽ gọi điện xác minh với bạn.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 72,
+                    height: 90,
+                    child: _photoBytes != null
+                        ? Image.memory(_photoBytes!, fit: BoxFit.cover)
+                        : Container(
+                            color: Colors.grey.shade100,
+                            child: Icon(Icons.face_outlined, color: Colors.grey.shade400, size: 36),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _submitting ? null : () => _pickPhoto(ImageSource.camera),
+                        icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                        label: const Text('Chụp ảnh'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _submitting ? null : () => _pickPhoto(ImageSource.gallery),
+                        icon: const Icon(Icons.photo_library_outlined, size: 18),
+                        label: const Text('Chọn từ thư viện'),
+                      ),
+                      if (_photoBytes != null)
+                        TextButton(
+                          onPressed: _submitting
+                              ? null
+                              : () => setState(() {
+                                    _photoBytes = null;
+                                    _photoConsent = false;
+                                  }),
+                          child: const Text('Bỏ ảnh', style: TextStyle(color: AppColors.error)),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (_photoBytes != null)
+              BiometricConsentTile(
+                value: _photoConsent,
+                onChanged: _submitting ? null : (v) => setState(() => _photoConsent = v),
+              ),
             const SizedBox(height: 28),
 
             SizedBox(

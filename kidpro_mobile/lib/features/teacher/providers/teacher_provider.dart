@@ -2,6 +2,7 @@ import 'dart:developer';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
+import 'package:kidpro_mobile/core/models/pickup_models.dart';
 import 'package:kidpro_mobile/core/network/api_client.dart';
 import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
 
@@ -25,14 +26,13 @@ class TeacherProvider extends ChangeNotifier {
 
   // 1. Attendance state
   List<TeacherStudent> _students = [];
+  // Lỗi tải danh sách học sinh (null khi tải thành công)
+  String? _studentsError;
+  String? get studentsError => _studentsError;
   List<StrangerAlert> _strangerAlerts = [];
   List<MedicationTask> _medications = [];
   bool _loading = false;
   String? _error;
-
-  // 2. Bus Attendance state (G5-UC-02, G5-UC-03)
-  BusTripInfo? _currentBusTrip;
-  BusTripInfo? get currentBusTrip => _currentBusTrip;
 
   // 3. Late Pickup state (G5-UC-05)
   List<LatePickupRecord> _latePickups = [];
@@ -159,9 +159,18 @@ class TeacherProvider extends ChangeNotifier {
 
   Future<void> loadStudents(String classId, [DateTime? date]) async {
     _loading = true;
+    _studentsError = null;
     notifyListeners();
     try {
-      if (classId.isNotEmpty) {
+      // Màn hình mở trước khi tải xong lớp phụ trách: tải lớp trước
+      if (classId.isEmpty) {
+        if (_currentClassId.isEmpty) await loadMyClasses();
+        classId = _currentClassId;
+      }
+      if (classId.isEmpty) {
+        _students = [];
+        _studentsError = 'Tài khoản chưa được phân công lớp phụ trách.';
+      } else {
         final res = await _dio.get(ApiEndpoints.teacherClassStudents(classId));
         final data = res.data;
         final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
@@ -218,17 +227,8 @@ class TeacherProvider extends ChangeNotifier {
       _error = null;
     } catch (e) {
       log('loadStudents error: $e');
-      _error = null;
-    }
-
-    if (_students.isEmpty) {
-      _students = [
-        TeacherStudent(id: '1', fullName: 'Bé Nguyễn Bảo An', studentCode: 'HS001', status: AttendanceStatus.present, checkInTime: '07:30'),
-        TeacherStudent(id: '2', fullName: 'Bé Trần Minh Khôi', studentCode: 'HS002', status: AttendanceStatus.late, checkInTime: '08:20'),
-        TeacherStudent(id: '3', fullName: 'Bé Lê Phương Thảo', studentCode: 'HS003', status: AttendanceStatus.onLeave, notes: 'Bé sốt nhẹ có phép'),
-        TeacherStudent(id: '4', fullName: 'Bé Phạm Đức Anh', studentCode: 'HS004', status: AttendanceStatus.present, checkInTime: '07:45'),
-        TeacherStudent(id: '5', fullName: 'Bé Vũ Khánh Linh', studentCode: 'HS005', status: AttendanceStatus.notArrived),
-      ];
+      _students = [];
+      _studentsError = _apiMessage(e, 'Không tải được danh sách học sinh. Vui lòng thử lại.');
     }
     _loading = false;
     notifyListeners();
@@ -332,9 +332,10 @@ class TeacherProvider extends ChangeNotifier {
 
       final validStudents = _students.where((s) => uuidRegex.hasMatch(s.id)).toList();
       if (validStudents.isEmpty) {
+        _error = _studentsError ?? 'Chưa có danh sách học sinh của lớp để lưu điểm danh.';
         _loading = false;
         notifyListeners();
-        return true; // Giả lập thành công cho chế độ offline/mock
+        return false;
       }
 
       final records = validStudents.map((s) {
@@ -397,95 +398,162 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 2. Bus Attendance (G5-UC-02, G5-UC-03, BR-024)
+  // 2. Dismissal: Parent Handover & Emergency Pickup (G5-UC-04, G5-UC-06, BR-022)
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> loadBusTrip(String tripId) async {
-    _loading = true;
-    notifyListeners();
+  /// Danh sách người được phép đón bé (phụ huynh + người đón thường xuyên).
+  Future<(List<PickupPerson>?, String)> loadPickupPersons(String studentId) async {
     try {
-      final res = await _dio.get('/api/teachers/bus/trips/$tripId/stops');
-      final data = res.data is Map<String, dynamic> && res.data['data'] != null
-          ? res.data['data']
-          : res.data;
-      _currentBusTrip = BusTripInfo.fromJson(data as Map<String, dynamic>);
+      final res = await _dio.get(ApiEndpoints.teacherPickupPersons(studentId));
+      final list = (res.data as List? ?? [])
+          .map((e) => PickupPerson.fromJson(e as Map<String, dynamic>))
+          .toList();
+      return (list, '');
     } catch (e) {
-      log('loadBusTrip error: $e');
-      _currentBusTrip = null;
+      log('loadPickupPersons error: $e');
+      return (null, _apiMessage(e, 'Không tải được danh sách người đón.'));
     }
-    _loading = false;
-    notifyListeners();
   }
 
-  Future<String?> submitBusCheckin({
-    required String tripId,
+  /// Quét mặt người đến đón, so khớp với ảnh đã đăng ký (BR-022).
+  Future<(PickupFaceVerification?, String)> verifyPickupFace({
     required String studentId,
-    required String stopId,
-    required String actionType,
+    required String personType,
+    int? guardianId,
+    int? authorizationId,
+    required Uint8List photo,
   }) async {
     try {
+      final form = FormData.fromMap({
+        'studentId': studentId,
+        'personType': personType,
+        if (guardianId != null) 'guardianId': guardianId,
+        if (authorizationId != null) 'authorizationId': authorizationId,
+        'photo': MultipartFile.fromBytes(photo, filename: 'pickup_face.jpg'),
+      });
       final res = await _dio.post(
-        ApiEndpoints.busCheckin,
-        data: {
-          'tripId': tripId,
-          'studentId': studentId,
-          'stopId': stopId,
-          'actionType': actionType,
-        },
+        ApiEndpoints.teacherPickupFaceVerify,
+        data: form,
+        options: Options(receiveTimeout: const Duration(seconds: 40)),
       );
-      return res.data['message']?.toString() ?? 'Ghi nhận điểm danh xe buýt thành công';
+      final result = PickupFaceVerification.fromJson(res.data as Map<String, dynamic>);
+      return (result, result.message);
     } catch (e) {
-      log('submitBusCheckin error: $e');
-      return 'Ghi nhận điểm danh xe buýt thành công.';
+      log('verifyPickupFace error: $e');
+      return (null, _apiMessage(e, 'Không quét được khuôn mặt. Vui lòng thử lại.'));
     }
   }
 
-  Future<String?> performBusSafetyClosure({
-    required String tripId,
-    required String photoUrl,
-    required String qrTailScanToken,
+  /// Trả trẻ cho phụ huynh / người đón thường xuyên: ghi giờ trẻ rời lớp.
+  /// Ông bà, cô chú… cần faceVerificationId của lần quét mặt khớp; bố mẹ thì không (BR-022).
+  Future<(bool, String)> checkoutStudent(
+    String studentId, {
+    int? guardianId,
+    String? faceVerificationId,
   }) async {
     try {
       final res = await _dio.post(
-        ApiEndpoints.busSafetyClosure(tripId),
+        ApiEndpoints.teacherAttendanceCheckout,
         data: {
-          'cabinPhotoUrl': photoUrl,
-          'qrTailScanToken': qrTailScanToken,
+          'studentId': studentId,
+          if (guardianId != null) 'guardianId': guardianId,
+          if (faceVerificationId != null) 'faceVerificationId': faceVerificationId,
         },
       );
-      return res.data['message']?.toString() ?? 'MSG-100: Xác nhận khoang xe an toàn & kết thúc chuyến đi thành công.';
+      final data = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
+      _markCheckedOut(studentId, data['checkOutTime']?.toString());
+      return (true, data['message']?.toString() ?? 'Đã xác nhận trả trẻ.');
     } catch (e) {
-      if (e is DioException && e.response?.data != null) {
-        return e.response?.data['message']?.toString() ?? 'MSG-100: Đã hoàn tất đóng chuyến an toàn.';
-      }
-      return 'MSG-100: Đã hoàn tất đóng chuyến xe an toàn theo chuẩn BR-024.';
+      log('checkoutStudent error: $e');
+      return (false, _apiMessage(e, 'Không thể xác nhận trả trẻ. Vui lòng thử lại.'));
     }
+  }
+
+  /// Kiểm tra mã QR / OTP người đón hộ, chưa bàn giao trẻ.
+  Future<(EmergencyPickupInfo?, String)> verifyEmergencyPickup(String code) async {
+    try {
+      final res = await _dio.post(
+        ApiEndpoints.emergencyPickupVerify,
+        data: {
+          'code': code,
+          if (_currentClassId.isNotEmpty) 'classId': _currentClassId,
+        },
+      );
+      final data = res.data as Map<String, dynamic>;
+      return (EmergencyPickupInfo.fromJson(data), data['message']?.toString() ?? 'Mã đón hộ hợp lệ.');
+    } catch (e) {
+      log('verifyEmergencyPickup error: $e');
+      return (null, _apiMessage(e, 'Không kiểm tra được mã đón hộ. Vui lòng thử lại.'));
+    }
+  }
+
+  /// Xác nhận bàn giao trẻ cho người đón hộ.
+  Future<(bool, String)> confirmEmergencyPickup(
+    EmergencyPickupInfo info,
+    String code, {
+    String? faceVerificationId,
+  }) async {
+    try {
+      final res = await _dio.post(
+        ApiEndpoints.emergencyPickupConfirm(info.authorizationId),
+        data: {
+          'code': code,
+          if (_currentClassId.isNotEmpty) 'classId': _currentClassId,
+          if (faceVerificationId != null) 'faceVerificationId': faceVerificationId,
+        },
+      );
+      _markCheckedOut(info.studentId, null);
+      return (true, res.data['message']?.toString() ?? 'Đã bàn giao trẻ cho người đón hộ.');
+    } catch (e) {
+      log('confirmEmergencyPickup error: $e');
+      return (false, _apiMessage(e, 'Không xác nhận được bàn giao. Vui lòng thử lại.'));
+    }
+  }
+
+  void _markCheckedOut(String studentId, String? checkOutTime) {
+    for (final s in _students) {
+      if (s.id == studentId) {
+        final now = DateTime.now();
+        s.checkOutTime = checkOutTime ??
+            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+      }
+    }
+    notifyListeners();
+    // Bé đang chờ đón muộn vừa được trả: tải lại để chốt phí theo giờ trả
+    if (_latePickups.any((r) => r.studentId == studentId)) loadLatePickups();
+  }
+
+  String _apiMessage(Object e, String fallback) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map && data['message'] != null) return data['message'].toString();
+      if (e.response == null) return 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng.';
+    }
+    return fallback;
   }
 
   // ─────────────────────────────────────────────────────────────
   // 3. Late Pickup (G5-UC-05, BR-020)
   // ─────────────────────────────────────────────────────────────
 
-  Future<String?> recordLatePickup({
-    required String studentId,
-    required String pickupTime,
-    bool isExempted = false,
-    String? exemptionReason,
-  }) async {
+  String? _latePickupsError;
+  String? get latePickupsError => _latePickupsError;
+
+  /// Danh sách đón muộn do server tự tính từ giờ trả bé (không ghi nhận bằng tay).
+  Future<void> loadLatePickups([String? classId]) async {
+    final cId = classId ?? currentClassId;
+    if (cId.isEmpty) return;
     try {
-      final res = await _dio.post(
-        ApiEndpoints.latePickupRecord,
-        data: {
-          'studentId': studentId,
-          'pickupTime': pickupTime,
-          'isExempted': isExempted,
-          if (exemptionReason != null) 'exemptionReason': exemptionReason,
-        },
-      );
-      return res.data['message']?.toString() ?? 'Ghi nhận đón muộn thành công.';
+      final res = await _dio.get(ApiEndpoints.latePickups, queryParameters: {'classId': cId});
+      final data = res.data;
+      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
+      _latePickups = list.map((e) => LatePickupRecord.fromJson(e as Map<String, dynamic>)).toList();
+      _latePickupsError = null;
     } catch (e) {
-      return 'MSG-094: Ghi nhận mốc giờ đón muộn thành công (Quy tắc BR-020).';
+      log('loadLatePickups error: $e');
+      _latePickupsError = _apiMessage(e, 'Không tải được danh sách đón muộn.');
     }
+    notifyListeners();
   }
 
   // ─────────────────────────────────────────────────────────────

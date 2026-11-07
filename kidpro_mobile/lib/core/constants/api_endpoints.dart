@@ -93,14 +93,28 @@ class ApiEndpoints {
       '/api/attendance/class/$classId/daily-checkin';
   static String teacherDailyDismissal(String classId) =>
       '/api/attendance/class/$classId/daily-dismissal';
+  static const teacherAttendanceCheckout = '/api/teachers/attendance/checkout';
 
-  // Bus Attendance (G5-UC-02, G5-UC-03, BR-024)
-  static const busCheckin = '/api/attendance/bus/stops/checkin';
-  static String busSafetyClosure(String tripId) =>
-      '/api/attendance/bus/trips/$tripId/safety-closure';
+  // Emergency Pickup Verification (G5-UC-06, BR-022)
+  static const emergencyPickupVerify = '/api/academic/emergency-pickups/verify';
+  static String emergencyPickupConfirm(int id) =>
+      '/api/academic/emergency-pickups/$id/confirm';
+
+  // Pickup Face Verification - Teacher (BR-022)
+  static String teacherPickupPersons(String studentId) =>
+      '/api/teachers/pickup/students/$studentId/persons';
+  static const teacherPickupFaceVerify = '/api/teachers/pickup/face-verify';
+
+  // Pickup Face Registration - Parent (BR-022, NĐ 13/2023)
+  static const parentPickupFaces = '/api/parents/pickup-faces';
+  static const parentPickupFaceSelf = '/api/parents/pickup-faces/parent';
+  static String parentPickupFaceGuardian(int guardianId) =>
+      '/api/parents/pickup-faces/guardians/$guardianId';
+  static String parentPickupFaceEmergency(int authorizationId) =>
+      '/api/parents/pickup-faces/emergency-pickups/$authorizationId';
 
   // Late Pickup & Progressive Fee (G5-UC-05, BR-020)
-  static const latePickupRecord = '/api/attendance/late-pickups/record';
+  static const latePickups = '/api/attendance/late-pickups'; // ?classId=&date=
   static const latePickupRules = '/api/admin/late-pickup-rules';
 
   // Health Metrics (WHO) (G8-UC-03, BR-031)
