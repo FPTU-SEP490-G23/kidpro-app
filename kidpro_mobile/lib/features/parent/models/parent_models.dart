@@ -843,3 +843,27 @@ class StudentFaceFile {
     );
   }
 }
+
+class BusStopOption {
+  final String stopId;
+  final String stopName;
+  final String stopAddress;
+  final int stopOrder;
+  final String estimatedTime;
+
+  const BusStopOption({
+    required this.stopId,
+    required this.stopName,
+    this.stopAddress = '',
+    this.stopOrder = 1,
+    this.estimatedTime = '',
+  });
+
+  factory BusStopOption.fromJson(Map<String, dynamic> json) => BusStopOption(
+        stopId: (json['stopId'] ?? '').toString(),
+        stopName: json['stopName'] as String? ?? 'Điểm dừng',
+        stopAddress: json['stopAddress'] as String? ?? '',
+        stopOrder: (json['stopOrder'] as num?)?.toInt() ?? 1,
+        estimatedTime: json['estimatedTime'] as String? ?? '',
+      );
+}

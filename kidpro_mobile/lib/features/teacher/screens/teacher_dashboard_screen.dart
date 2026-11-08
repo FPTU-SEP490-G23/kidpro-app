@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/auth/providers/auth_provider.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
+import 'package:kidpro_mobile/features/teacher/screens/parent_pickup_camera_screen.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({super.key});
@@ -1032,6 +1033,32 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         icon: Icons.camera_front_rounded,
         color: const Color(0xFF7C3AED),
         onTap: () => context.push('/teacher/face-attendance'),
+      ));
+      widgets.add(const SizedBox(height: 10));
+      widgets.add(_ModernActionCard(
+        title: 'Quét Mặt Phụ Huynh Đón Trẻ',
+        subtitle: 'Đối chiếu phụ huynh trong lớp, cho đón & ghi nhận giờ về',
+        tag: 'AI Pickup',
+        icon: Icons.face_retouching_natural_rounded,
+        color: const Color(0xFFE11D48),
+        onTap: () {
+          final cId = prov.currentClassId;
+          if (cId.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Vui lòng chọn lớp học trước khi quét mặt.')),
+            );
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ParentPickupCameraScreen(
+                classId: cId,
+                className: prov.currentClassName.isNotEmpty ? prov.currentClassName : 'Lớp học',
+              ),
+            ),
+          );
+        },
       ));
       widgets.add(const SizedBox(height: 10));
       widgets.add(_ModernActionCard(

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
@@ -13,7 +14,6 @@ import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
 import 'package:kidpro_mobile/core/network/api_client.dart';
 import 'package:kidpro_mobile/core/storage/secure_storage_helper.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
-import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
 
 enum LivenessStep {
@@ -32,9 +32,9 @@ class FaceAttendanceCameraScreen extends StatefulWidget {
 }
 
 class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // Configurable AI server URL (Wi-Fi LAN IP or USB adb reverse)
-  String _serverBaseUrl = 'http://192.168.10.51:8000';
+  String _serverBaseUrl = ApiClient().aiBaseUrl;
   final _urlCtrl = TextEditingController();
 
   // Camera & ML Kit
@@ -57,6 +57,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   // Animation & Processing
   late AnimationController _animCtrl;
   bool _isProcessing = false;
+  Timer? _autoResetTimer;
   Map<String, dynamic>? _lastResult;
   Uint8List? _capturedImageBytes;
   final ImagePicker _picker = ImagePicker();
@@ -71,8 +72,10 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _serverBaseUrl = ApiClient().aiBaseUrl;
     _urlCtrl.text = _serverBaseUrl;
+    _initAiServer();
 
     _animCtrl = AnimationController(
       vsync: this,
@@ -100,11 +103,55 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
 
   @override
   void dispose() {
+    _autoResetTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _animCtrl.dispose();
     _urlCtrl.dispose();
     _stopAndDisposeCamera();
     _faceDetector.close();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // WARN-04: Quản lý vòng đời camera khi app vào chế độ nền / chuyển màn hình
+    final CameraController? controller = _cameraController;
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+      if (controller != null && controller.value.isInitialized) {
+        _stopAndDisposeCamera();
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (_cameraController == null || !_cameraController!.value.isInitialized) {
+        if (_cameras.isNotEmpty && mounted) {
+          _setupCameraController(_cameras[_selectedCameraIndex]);
+        }
+      }
+    }
+  }
+
+  /// WARN-03: Resize về tối đa 1024x768 px và nén JPEG chất lượng 80% (giảm còn ~150KB - 200KB)
+  Uint8List _compressImage(Uint8List rawBytes) {
+    try {
+      final decoded = img.decodeImage(rawBytes);
+      if (decoded == null) return rawBytes;
+
+      img.Image processed = decoded;
+      const int maxDim = 1024;
+      if (decoded.width > maxDim || decoded.height > maxDim) {
+        if (decoded.width >= decoded.height) {
+          processed = img.copyResize(decoded, width: maxDim);
+        } else {
+          processed = img.copyResize(decoded, height: maxDim);
+        }
+      }
+
+      final compressed = img.encodeJpg(processed, quality: 80);
+      debugPrint('📸 [WARN-03] Nén ảnh camera: ${rawBytes.length ~/ 1024}KB -> ${compressed.length ~/ 1024}KB');
+      return Uint8List.fromList(compressed);
+    } catch (e) {
+      debugPrint('⚠️ Lỗi nén ảnh, fallback dùng ảnh gốc: $e');
+      return rawBytes;
+    }
   }
 
   Future<void> _stopAndDisposeCamera() async {
@@ -339,10 +386,10 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       return;
     }
 
-    // Tỷ lệ mở mắt trung bình
+    // Tỷ lệ mở mắt trung bình và kiểm tra linh hoạt góc nghiêng
     final double avgEye = (left + right) / 2.0;
-    final bool areEyesOpen = avgEye > 0.55;
-    final bool areEyesClosed = avgEye < 0.35 || left < 0.30 || right < 0.30;
+    final bool areEyesOpen = avgEye > 0.45 || left > 0.50 || right > 0.50;
+    final bool areEyesClosed = avgEye < 0.35 || left < 0.28 || right < 0.28;
 
     switch (_livenessStep) {
       case LivenessStep.searchingFace:
@@ -372,12 +419,12 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
 
       case LivenessStep.eyesClosed:
         if (areEyesOpen) {
-          // Đo thời gian chớp mắt tự nhiên (80ms - 1600ms)
+          // Đo thời gian chớp mắt tự nhiên (80ms - 1800ms)
           final durationMs = _blinkStartTime != null
               ? DateTime.now().difference(_blinkStartTime!).inMilliseconds
               : 0;
 
-          if (durationMs >= 80 && durationMs <= 1600) {
+          if (durationMs >= 80 && durationMs <= 1800) {
             setState(() {
               _livenessStep = LivenessStep.passed;
               _statusMessage = '✅ Đã xác thực người thật! Đang đối chiếu AI...';
@@ -402,24 +449,55 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     HapticFeedback.heavyImpact();
     setState(() => _isProcessing = true);
 
-    try {
-      if (_cameraController != null && _cameraController!.value.isInitialized) {
-        if (_cameraController!.value.isStreamingImages) {
-          await _cameraController!.stopImageStream();
-        }
-
-        final XFile photo = await _cameraController!.takePicture();
-        final bytes = await photo.readAsBytes();
-
+    // Watchdog timer: Đảm bảo không bao giờ bị treo ở bước 'đang đối chiếu' quá 8 giây
+    _autoResetTimer?.cancel();
+    _autoResetTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted && _isProcessing) {
+        debugPrint('⚠️ [Watchdog] Quá thời gian chờ nhận diện AI (8s). Tự động phục hồi...');
         setState(() {
-          _capturedImageBytes = bytes;
+          _isProcessing = false;
+          _statusMessage = 'Hết thời gian chờ nhận diện AI. Đang quét lại...';
         });
-
-        await _submitCheckinToServer(bytes, isLivenessVerified: true);
+        _resetForNextStudent();
       }
+    });
+
+    try {
+      if (_cameraController == null || !_cameraController!.value.isInitialized) {
+        throw Exception('Camera chưa sẵn sàng hoặc bị ngắt kết nối');
+      }
+
+      if (_cameraController!.value.isStreamingImages) {
+        try {
+          await _cameraController!.stopImageStream();
+        } catch (e) {
+          debugPrint('Lỗi dừng camera stream: $e');
+        }
+      }
+
+      final XFile photo = await _cameraController!.takePicture();
+      final bytes = await photo.readAsBytes();
+      final compressedBytes = _compressImage(bytes);
+
+      if (mounted) {
+        setState(() {
+          _capturedImageBytes = compressedBytes;
+        });
+      }
+
+      await _submitCheckinToServer(compressedBytes, isLivenessVerified: true);
     } catch (e) {
       debugPrint('Error on liveness auto capture: $e');
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = 'Lỗi camera khi chụp. Đang thử lại...';
+        });
+        _autoResetTimer?.cancel();
+        _autoResetTimer = Timer(const Duration(milliseconds: 1500), () {
+          if (mounted) _resetForNextStudent();
+        });
+      }
     }
   }
 
@@ -431,11 +509,15 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
         receiveTimeout: const Duration(seconds: 15),
       ));
 
+      final tProv = context.read<TeacherProvider>();
+      final curClassId = tProv.currentClassId;
+
       final formData = FormData.fromMap({
         'file': MultipartFile.fromBytes(
           bytes,
           filename: 'face_checkin.jpg',
         ),
+        if (curClassId.isNotEmpty) 'class_id': curClassId,
       });
 
       final response = await dio.post(
@@ -469,7 +551,11 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
             tProv.loadStudents(tProv.currentClassId);
           }
         } catch (backendErr) {
-          debugPrint('Lỗi đồng bộ backend face-logs: $backendErr');
+          if (backendErr is DioException) {
+            debugPrint('❌ Lỗi đồng bộ backend face-logs (${backendErr.response?.statusCode}): ${backendErr.response?.data}');
+          } else {
+            debugPrint('❌ Lỗi đồng bộ backend face-logs: $backendErr');
+          }
         }
       }
 
@@ -479,23 +565,48 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
           _lastResult = data;
           _isProcessing = false;
         });
+
+        // Nếu không nhận diện được hoặc ảnh mờ: Tự động lên lịch reset sau 4s để cô giáo không cần chạm tay
+        if (data['status'] != 'PRESENT') {
+          _autoResetTimer?.cancel();
+          _autoResetTimer = Timer(const Duration(seconds: 4), () {
+            if (mounted && _lastResult != null && _lastResult!['status'] != 'PRESENT') {
+              _resetForNextStudent();
+            }
+          });
+        }
       }
     } on DioException catch (e) {
       if (mounted) {
-        setState(() => _isProcessing = false);
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = 'Lỗi kết nối AI: ${e.message ?? "Timeout"}. Đang kết nối lại...';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Lỗi kết nối AI Server ($_serverBaseUrl): ${e.message ?? "Timeout"}'),
             backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 2),
           ),
         );
+        _autoResetTimer?.cancel();
+        _autoResetTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) _resetForNextStudent();
+        });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isProcessing = false);
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = 'Lỗi xử lý: $e';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error, duration: const Duration(seconds: 2)),
         );
+        _autoResetTimer?.cancel();
+        _autoResetTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) _resetForNextStudent();
+        });
       }
     }
   }
@@ -531,6 +642,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
 
   /// Reset để điểm danh bé tiếp theo
   void _resetForNextStudent() async {
+    _autoResetTimer?.cancel();
     setState(() {
       _lastResult = null;
       _capturedImageBytes = null;
@@ -701,7 +813,8 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   Widget build(BuildContext context) {
     final status = _lastResult?['status'];
     final isPresent = status == 'PRESENT';
-    final isUnknown = status == 'UNKNOWN';
+    final isFailedOrUnknown = _lastResult != null && !isPresent;
+    final isBlurred = status == 'BLURRED';
 
     // Viền khung tương tác đổi màu theo 4 bước
     Color borderColor = Colors.white38;
@@ -711,10 +824,12 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       borderColor = Colors.lightBlueAccent;
     } else if (_livenessStep == LivenessStep.eyesClosed) {
       borderColor = Colors.amberAccent;
-    } else if (_livenessStep == LivenessStep.passed || isPresent) {
+    } else if (isPresent) {
       borderColor = AppColors.success;
-    } else if (isUnknown) {
-      borderColor = AppColors.strangerAlert;
+    } else if (isFailedOrUnknown) {
+      borderColor = isBlurred ? AppColors.warning : AppColors.strangerAlert;
+    } else if (_livenessStep == LivenessStep.passed) {
+      borderColor = Colors.cyanAccent;
     }
 
     return Scaffold(
@@ -722,7 +837,15 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('AI Live Face & Blink Detection', style: TextStyle(fontSize: 16))
+        title: const Text('AI Live Face & Blink Detection', style: TextStyle(fontSize: 16)),
+        actions: [
+          if (_cameras.length > 1)
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+              tooltip: 'Đổi camera trước/sau',
+              onPressed: _toggleCamera,
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -738,7 +861,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
                   color: borderColor,
-                  width: _livenessStep == LivenessStep.passed || isPresent || isUnknown ? 3.5 : 2.0,
+                  width: _livenessStep == LivenessStep.passed || isPresent || isFailedOrUnknown ? 3.5 : 2.0,
                 ),
               ),
               child: ClipRRect(
@@ -1004,8 +1127,8 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                         ),
                       ),
 
-                    // RESULT SHEET (UNKNOWN - KHÔNG NHẬN DIỆN ĐƯỢC)
-                    if (isUnknown)
+                    // RESULT SHEET (KHÔNG THÀNH CÔNG / ẢNH MỜ / CHƯA NHẬN DIỆN ĐƯỢC)
+                    if (isFailedOrUnknown)
                       Positioned(
                         bottom: 12,
                         left: 12,
@@ -1015,7 +1138,10 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                           decoration: BoxDecoration(
                             color: const Color(0xEE111827),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.strangerAlert, width: 1.5),
+                            border: Border.all(
+                              color: isBlurred ? AppColors.warning : AppColors.strangerAlert,
+                              width: 1.5,
+                            ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1023,55 +1149,101 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.warning, color: AppColors.strangerAlert, size: 22),
+                                  Icon(
+                                    isBlurred ? Icons.motion_photos_off : Icons.warning_amber_rounded,
+                                    color: isBlurred ? AppColors.warning : AppColors.strangerAlert,
+                                    size: 22,
+                                  ),
                                   const SizedBox(width: 8),
-                                  const Text(
-                                    'CẢNH BÁO: KHÔNG NHẬN DIỆN',
+                                  Text(
+                                    isBlurred ? 'ẢNH BỊ MỜ / RUNG TAY' : 'CHƯA TRÙNG KHỚP KHUÔN MẶT',
                                     style: TextStyle(
-                                      color: AppColors.strangerAlert,
+                                      color: isBlurred ? AppColors.warning : AppColors.strangerAlert,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
                                     ),
                                   ),
                                   const Spacer(),
-                                  Text(
-                                    'Điểm: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
-                                    style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                  ),
+                                  if (_lastResult!["confidence_score"] != null && (_lastResult!["confidence_score"] as num) > 0)
+                                    Text(
+                                      'Điểm: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
+                                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                _lastResult!['message'] ?? 'Khuôn mặt chưa được đăng ký trong danh sách',
+                                _lastResult!['message'] ?? (isBlurred ? 'Ảnh bị nhòe do rung lắc. Giữ yên máy để nhận diện rõ hơn.' : 'Khuôn mặt chưa trùng khớp với học sinh trong danh sách.'),
                                 style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                '(Hệ thống sẽ tự động mở lại camera sau 4 giây)',
+                                style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic),
                               ),
                               const SizedBox(height: 10),
                               Row(
                                 children: [
                                   Expanded(
-                                    child: OutlinedButton(
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.white,
-                                        side: const BorderSide(color: Colors.white38),
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: isBlurred ? AppColors.warning : Colors.white24,
+                                        foregroundColor: isBlurred ? Colors.black : Colors.white,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                       ),
                                       onPressed: _resetForNextStudent,
-                                      child: const Text('Thử lại'),
+                                      icon: const Icon(Icons.refresh, size: 16),
+                                      label: const Text('Thử lại ngay', style: TextStyle(fontWeight: FontWeight.bold)),
                                     ),
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
-                                    child: ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.warning,
-                                        foregroundColor: Colors.black,
+                                    child: OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        side: const BorderSide(color: Colors.white38),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                       ),
                                       onPressed: () => Navigator.pop(context),
-                                      child: const Text('Thủ công', style: TextStyle(fontSize: 12)),
+                                      child: const Text('Điểm danh thủ công', style: TextStyle(fontSize: 11)),
                                     ),
                                   ),
                                 ],
                               ),
                             ],
+                          ),
+                        ),
+                      ),
+
+                    // Nút Reset/Quét lại nhanh ở góc phải trên (chống đơ kẹt trong mọi trường hợp)
+                    if (_livenessStep == LivenessStep.passed || _isProcessing || _lastResult != null)
+                      Positioned(
+                        top: 14,
+                        right: 14,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: _resetForNextStudent,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white38),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.refresh, color: Colors.white, size: 16),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Quét lại',
+                                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),

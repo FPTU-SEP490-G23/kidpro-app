@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
+import 'package:kidpro_mobile/features/teacher/screens/parent_pickup_camera_screen.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -252,8 +253,32 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.qr_code_scanner_rounded),
-            tooltip: 'Quét AI Face',
+            tooltip: 'Quét AI Face Điểm danh',
             onPressed: () => context.push('/teacher/face-attendance'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.face_retouching_natural_rounded),
+            tooltip: 'Quét mặt phụ huynh đón trẻ',
+            onPressed: () {
+              final cId = teacherProv.currentClassId;
+              if (cId.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Vui lòng chọn lớp học trước khi quét.')),
+                );
+                return;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ParentPickupCameraScreen(
+                    classId: cId,
+                    className: teacherProv.currentClassName.isNotEmpty
+                        ? teacherProv.currentClassName
+                        : 'Lớp học',
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),

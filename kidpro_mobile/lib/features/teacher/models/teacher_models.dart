@@ -1,4 +1,5 @@
 /// Teacher models matching KidPro backend entities and DTOs.
+library;
 
 enum AttendanceStatus { present, late, onLeave, notArrived }
 
@@ -131,6 +132,105 @@ class MedicationTask {
       );
 }
 
+// ── Bus Attendance (G5-UC-02, G5-UC-03, BR-024) ──
+class BusStopInfo {
+  final String stopId;
+  final String stopName;
+  final String stopAddress;
+  final int stopOrder;
+  final String estimatedTime;
+  final double? latitude;
+  final double? longitude;
+  final int boardedCount;
+  final int deboardedCount;
+  final bool isPassed;
+  final bool isDestination;
+
+  const BusStopInfo({
+    required this.stopId,
+    required this.stopName,
+    this.stopAddress = '',
+    this.stopOrder = 1,
+    this.estimatedTime = '',
+    this.latitude,
+    this.longitude,
+    this.boardedCount = 0,
+    this.deboardedCount = 0,
+    this.isPassed = false,
+    this.isDestination = false,
+  });
+
+  factory BusStopInfo.fromJson(Map<String, dynamic> json) => BusStopInfo(
+        stopId: (json['stopId'] ?? '').toString(),
+        stopName: json['stopName'] as String? ?? 'Trạm đón/trả',
+        stopAddress: json['stopAddress'] as String? ?? '',
+        stopOrder: (json['stopOrder'] as num?)?.toInt() ?? 1,
+        estimatedTime: json['estimatedTime'] as String? ?? '',
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
+        boardedCount: (json['boardedCount'] as num?)?.toInt() ?? 0,
+        deboardedCount: (json['deboardedCount'] as num?)?.toInt() ?? 0,
+        isPassed: json['isPassed'] as bool? ?? false,
+        isDestination: json['isDestination'] as bool? ?? false,
+      );
+}
+
+class BusTripInfo {
+  final String tripId;
+  final String routeName;
+  final String plateNumber;
+  final String? driverName;
+  final String? driverPhone;
+  final int totalStudents;
+  final int onboardCount;
+  final int deboardedCount;
+  final int remainingCount;
+  final bool isSafetyClosed;
+  final List<BusStopInfo> stops;
+
+  const BusTripInfo({
+    required this.tripId,
+    required this.routeName,
+    required this.plateNumber,
+    this.driverName,
+    this.driverPhone,
+    required this.totalStudents,
+    required this.onboardCount,
+    required this.deboardedCount,
+    required this.remainingCount,
+    this.isSafetyClosed = false,
+    this.stops = const [],
+  });
+
+  factory BusTripInfo.fromJson(Map<String, dynamic> json) {
+    List<BusStopInfo> stopsList = [];
+    if (json['stops'] is List) {
+      final rawStops = json['stops'] as List;
+      stopsList = rawStops.map((s) {
+        if (s is Map<String, dynamic>) {
+          return BusStopInfo.fromJson(s);
+        } else if (s is Map) {
+          return BusStopInfo.fromJson(Map<String, dynamic>.from(s));
+        }
+        return null;
+      }).whereType<BusStopInfo>().toList();
+    }
+    return BusTripInfo(
+      tripId: (json['tripId'] ?? '').toString(),
+      routeName: json['routeName'] as String? ?? 'Tuyến xe buýt KidPro',
+      plateNumber: json['plateNumber'] as String? ?? '29B-123.45',
+      driverName: json['driverName'] as String?,
+      driverPhone: json['driverPhone'] as String?,
+      totalStudents: (json['totalStudents'] as num?)?.toInt() ?? 0,
+      onboardCount: (json['onboardCount'] as num?)?.toInt() ?? 0,
+      deboardedCount: (json['deboardedCount'] as num?)?.toInt() ?? 0,
+      remainingCount: (json['remainingCount'] as num?)?.toInt() ?? 0,
+      isSafetyClosed: json['isSafetyClosed'] as bool? ?? false,
+      stops: stopsList,
+    );
+  }
+}
+
 // ── Emergency Pickup Verification (G5-UC-06, BR-022) ──
 class EmergencyPickupInfo {
   final int authorizationId;
@@ -175,6 +275,72 @@ class EmergencyPickupInfo {
             : null,
         hasPickupPhoto: json['hasPickupPhoto'] as bool? ?? false,
       );
+  }
+
+/// Kết quả quét khuôn mặt phụ huynh khi đón trẻ (nhận diện phụ huynh trong lớp, cho đón con & ghi attendance)
+class ParentPickupRecognitionResult {
+  final bool matched;
+  final double? similarity;
+  final double? threshold;
+  final String? personType;
+  final String? personName;
+  final String? relationship;
+  final String? phoneNumber;
+  final String? photoUrl;
+  final String? capturedPhotoUrl;
+  final int? guardianId;
+  final String? studentId;
+  final String? studentName;
+  final String? studentCode;
+  final String? className;
+  final bool checkoutSuccess;
+  final bool alreadyCheckedOut;
+  final String? checkoutTime;
+  final String message;
+
+  const ParentPickupRecognitionResult({
+    required this.matched,
+    this.similarity,
+    this.threshold,
+    this.personType,
+    this.personName,
+    this.relationship,
+    this.phoneNumber,
+    this.photoUrl,
+    this.capturedPhotoUrl,
+    this.guardianId,
+    this.studentId,
+    this.studentName,
+    this.studentCode,
+    this.className,
+    required this.checkoutSuccess,
+    required this.alreadyCheckedOut,
+    this.checkoutTime,
+    required this.message,
+  });
+
+  factory ParentPickupRecognitionResult.fromJson(Map<String, dynamic> json) {
+    return ParentPickupRecognitionResult(
+      matched: json['matched'] as bool? ?? false,
+      similarity: (json['similarity'] as num?)?.toDouble(),
+      threshold: (json['threshold'] as num?)?.toDouble(),
+      personType: json['personType'] as String?,
+      personName: json['personName'] as String?,
+      relationship: json['relationship'] as String?,
+      phoneNumber: json['phoneNumber'] as String?,
+      photoUrl: json['photoUrl'] as String?,
+      capturedPhotoUrl: json['capturedPhotoUrl'] as String?,
+      guardianId: (json['guardianId'] as num?)?.toInt(),
+      studentId: json['studentId'] as String?,
+      studentName: json['studentName'] as String?,
+      studentCode: json['studentCode'] as String?,
+      className: json['className'] as String?,
+      checkoutSuccess: json['checkoutSuccess'] as bool? ?? false,
+      alreadyCheckedOut: json['alreadyCheckedOut'] as bool? ?? false,
+      checkoutTime: json['checkoutTime']?.toString(),
+      message: json['message'] as String? ?? '',
+    );
+  }
 }
 
 // ── Đón muộn tự động tính phí (G5-UC-05, BR-020) ──
@@ -424,16 +590,21 @@ class TeacherLeaveRequestItem {
     this.mealRefundEligible = false,
   });
 
-  factory TeacherLeaveRequestItem.fromJson(Map<String, dynamic> json) => TeacherLeaveRequestItem(
-        id: (json['id'] as num?)?.toInt() ?? 0,
-        studentId: (json['studentId'] ?? '').toString(),
-        studentName: json['studentName'] as String? ?? 'Học sinh',
-        startDate: json['startDate'] as String? ?? '',
-        endDate: json['endDate'] as String? ?? '',
-        reason: json['reason'] as String? ?? '',
-        status: json['status'] as String? ?? 'PENDING',
-        mealRefundEligible: json['mealRefundEligible'] as bool? ?? false,
-      );
+  factory TeacherLeaveRequestItem.fromJson(Map<String, dynamic> json) {
+    final rawId = json['leaveRequestId'] ?? json['id'];
+    final int parsedId = (rawId as num?)?.toInt() ?? int.tryParse(rawId?.toString() ?? '0') ?? 0;
+
+    return TeacherLeaveRequestItem(
+      id: parsedId,
+      studentId: (json['studentId'] ?? '').toString(),
+      studentName: json['studentName'] as String? ?? 'Học sinh',
+      startDate: json['startDate'] as String? ?? '',
+      endDate: json['endDate'] as String? ?? '',
+      reason: json['reason'] as String? ?? '',
+      status: json['status'] as String? ?? 'PENDING',
+      mealRefundEligible: json['mealRefundEligible'] as bool? ?? json['eligibleForMealRefund'] as bool? ?? false,
+    );
+  }
 }
 
 // ── Classroom Chat Message (G11-UC-04, BR-058, BR-059) ──

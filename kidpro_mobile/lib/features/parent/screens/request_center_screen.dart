@@ -326,9 +326,14 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
   void _showBusRegisterDialog(BuildContext context, ParentProvider prov) {
     String? selectedBusId =
         prov.availableBuses.isNotEmpty ? prov.availableBuses.first.id : null;
+    String? selectedStopId;
     String pickupType = 'TWO_WAY';
     final addressCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
+
+    if (selectedBusId != null) {
+      prov.loadBusStops(selectedBusId);
+    }
 
     showModalBottomSheet(
       context: context,
@@ -344,114 +349,189 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
             top: 20,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Đăng ký xe buýt đưa đón',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text('Chọn tuyến xe buýt *',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(height: 6),
-              if (prov.availableBuses.isEmpty)
-                const Text('Chưa có danh sách tuyến xe buýt', style: TextStyle(color: Colors.grey))
-              else
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Đăng ký xe buýt đưa đón',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text('Chọn tuyến xe buýt *',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
+                if (prov.availableBuses.isEmpty)
+                  const Text('Chưa có danh sách tuyến xe buýt', style: TextStyle(color: Colors.grey))
+                else
+                  DropdownButtonFormField<String>(
+                    value: selectedBusId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    items: prov.availableBuses
+                        .map((b) => DropdownMenuItem(
+                              value: b.id,
+                              child: Text(b.title, overflow: TextOverflow.ellipsis),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      setModalState(() {
+                        selectedBusId = v;
+                        selectedStopId = null;
+                      });
+                      if (v != null) {
+                        prov.loadBusStops(v).then((_) {
+                          if (ctx.mounted) {
+                            setModalState(() {});
+                          }
+                        });
+                      }
+                    },
+                  ),
+                const SizedBox(height: 12),
+
+                // Chọn điểm dừng (Bus Stop từ Database API)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Chọn điểm dừng đón/trả (Bus Stop) *',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    if (prov.loadingStops)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (prov.currentBusStops.isEmpty && !prov.loadingStops)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.shade300),
+                    ),
+                    child: const Text(
+                      'Tuyến xe chưa cấu hình trạm dừng cố định trên hệ thống. Vui lòng nhập địa chỉ bên dưới.',
+                      style: TextStyle(fontSize: 12, color: Colors.brown),
+                    ),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    value: selectedStopId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      hintText: prov.loadingStops ? 'Đang tải điểm dừng...' : 'Chọn trạm đón/trả học sinh',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    items: prov.currentBusStops
+                        .map((s) => DropdownMenuItem(
+                              value: s.stopId,
+                              child: Text(
+                                'Trạm ${s.stopOrder}: ${s.stopName} (${s.estimatedTime})',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      setModalState(() => selectedStopId = v);
+                      if (v != null) {
+                        final found = prov.currentBusStops.firstWhere(
+                          (s) => s.stopId == v,
+                          orElse: () => prov.currentBusStops.first,
+                        );
+                        if (found.stopAddress.isNotEmpty) {
+                          addressCtrl.text = '${found.stopName} - ${found.stopAddress}';
+                        }
+                      }
+                    },
+                  ),
+                const SizedBox(height: 12),
+
+                const Text('Hình thức đưa đón *',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: selectedBusId,
-                  isExpanded: true,
+                  value: pickupType,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  items: prov.availableBuses
-                      .map((b) => DropdownMenuItem(
-                            value: b.id,
-                            child: Text(b.title, overflow: TextOverflow.ellipsis),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setModalState(() => selectedBusId = v),
+                  items: const [
+                    DropdownMenuItem(value: 'TWO_WAY', child: Text('Hai chiều (Đưa & Đón)')),
+                    DropdownMenuItem(value: 'ONE_WAY_MORNING', child: Text('Một chiều (Chỉ đón sáng)')),
+                    DropdownMenuItem(value: 'ONE_WAY_AFTERNOON', child: Text('Một chiều (Chỉ trả chiều)')),
+                  ],
+                  onChanged: (v) => setModalState(() => pickupType = v ?? 'TWO_WAY'),
                 ),
-              const SizedBox(height: 12),
-              const Text('Hình thức đưa đón *',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(height: 6),
-              DropdownButtonFormField<String>(
-                value: pickupType,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'TWO_WAY', child: Text('Hai chiều (Đưa & Đón)')),
-                  DropdownMenuItem(value: 'ONE_WAY_MORNING', child: Text('Một chiều (Chỉ đón sáng)')),
-                  DropdownMenuItem(value: 'ONE_WAY_AFTERNOON', child: Text('Một chiều (Chỉ trả chiều)')),
-                ],
-                onChanged: (v) => setModalState(() => pickupType = v ?? 'TWO_WAY'),
-              ),
-              const SizedBox(height: 12),
-              const Text('Địa chỉ đón/trả trẻ tận nơi *',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(height: 6),
-              TextField(
-                controller: addressCtrl,
-                decoration: InputDecoration(
-                  hintText: 'Số nhà, tên đường, phường/xã...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text('Ghi chú dặn dò lái xe / phụ xe',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(height: 6),
-              TextField(
-                controller: noteCtrl,
-                decoration: InputDecoration(
-                  hintText: 'Bé say xe, cần đón sớm...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                const SizedBox(height: 12),
+                const Text('Địa chỉ đón/trả trẻ tận nơi *',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: addressCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Số nhà, tên đường, phường/xã...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  onPressed: () async {
-                    if (selectedBusId == null || addressCtrl.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Vui lòng chọn tuyến xe và nhập địa chỉ đón!')),
-                      );
-                      return;
-                    }
-                    Navigator.pop(ctx);
-                    final success = await prov.submitBusRegister(
-                      studentId: prov.selectedStudentId,
-                      busId: selectedBusId!,
-                      pickupAddress: addressCtrl.text.trim(),
-                      pickupType: pickupType,
-                      note: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : null,
-                    );
-                    if (success && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đăng ký xe buýt thành công!')),
-                      );
-                      context.pop();
-                    }
-                  },
-                  child: const Text('Gửi đăng ký xe buýt',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                const Text('Ghi chú dặn dò lái xe / phụ xe',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: noteCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Bé say xe, cần đón sớm...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () async {
+                      if (selectedBusId == null || addressCtrl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Vui lòng chọn tuyến xe và nhập địa chỉ đón!')),
+                        );
+                        return;
+                      }
+                      Navigator.pop(ctx);
+                      final success = await prov.submitBusRegister(
+                        studentId: prov.selectedStudentId,
+                        busId: selectedBusId!,
+                        pickupAddress: addressCtrl.text.trim(),
+                        pickupType: pickupType,
+                        note: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : null,
+                      );
+                      if (success && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Đăng ký xe buýt thành công!')),
+                        );
+                        context.pop();
+                      }
+                    },
+                    child: const Text('Gửi đăng ký xe buýt',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

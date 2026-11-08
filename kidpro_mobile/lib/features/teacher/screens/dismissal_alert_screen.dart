@@ -7,6 +7,7 @@ import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/core/models/pickup_models.dart';
 import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
+import 'package:kidpro_mobile/features/teacher/screens/parent_pickup_camera_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/pickup_qr_scanner_screen.dart';
 import 'package:kidpro_mobile/features/teacher/widgets/pickup_face_check.dart';
 import 'package:kidpro_mobile/features/teacher/widgets/pickup_handover_sheet.dart';
@@ -239,6 +240,32 @@ class _DismissalAlertScreenState extends State<DismissalAlertScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tan học & Đón trả trẻ'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.face_retouching_natural_rounded, color: Color(0xFFE11D48)),
+            tooltip: 'Quét mặt phụ huynh đón trẻ',
+            onPressed: () {
+              final cId = teacherProv.currentClassId;
+              if (cId.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Vui lòng chọn lớp học trước khi quét.')),
+                );
+                return;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ParentPickupCameraScreen(
+                    classId: cId,
+                    className: teacherProv.currentClassName.isNotEmpty
+                        ? teacherProv.currentClassName
+                        : 'Lớp học',
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -388,6 +415,32 @@ class _DismissalAlertScreenState extends State<DismissalAlertScreen>
           // ── Tab 4: Đón muộn tự động tính phí (G5-UC-05, BR-020) ──
           _buildLatePickupTab(),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFFE11D48),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.face_retouching_natural_rounded),
+        label: const Text('Quét mặt đón trẻ', style: TextStyle(fontWeight: FontWeight.bold)),
+        onPressed: () {
+          final cId = teacherProv.currentClassId;
+          if (cId.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Vui lòng chọn lớp học trước khi quét mặt.')),
+            );
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ParentPickupCameraScreen(
+                classId: cId,
+                className: teacherProv.currentClassName.isNotEmpty
+                    ? teacherProv.currentClassName
+                    : 'Lớp học',
+              ),
+            ),
+          );
+        },
       ),
     );
   }

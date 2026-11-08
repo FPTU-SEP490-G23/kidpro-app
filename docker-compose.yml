@@ -1,0 +1,58 @@
+services:
+  backend:
+    build:
+      context: ../KidPro/KidPro_BE/kidpro-be
+      dockerfile: Dockerfile
+    container_name: kidpro-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../KidPro/KidPro_BE/kidpro-be/.env
+    environment:
+      - SERVER_PORT=8080
+      - AI_SERVICE_URL=http://ai-service:8000
+      - APP_AI_INTERNAL_SERVICE_KEY=kidpro_internal_secret_key_2026
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - kidpro-network
+
+  frontend:
+    build:
+      context: ../KidPro/KidPro_FE/kidpro-fe
+      dockerfile: Dockerfile
+    container_name: kidpro-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - kidpro-network
+
+  ai-service:
+    build:
+      context: ./ai_backend
+      dockerfile: Dockerfile
+    container_name: kidpro-ai-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - SIMILARITY_THRESHOLD=0.65
+      - BLUR_THRESHOLD=80.0
+      - INTERNAL_SERVICE_KEY=kidpro_internal_secret_key_2026
+    volumes:
+      - ai_cache:/root/.insightface
+    networks:
+      - kidpro-network
+
+volumes:
+  uploads_data:
+  ai_cache:
+
+networks:
+  kidpro-network:
+    driver: bridge
+

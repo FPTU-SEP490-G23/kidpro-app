@@ -202,6 +202,27 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+    /// Gửi yêu cầu quên mật khẩu đến máy chủ
+  Future<String> forgotPassword(String email) async {
+    try {
+      final res = await _dio.post(
+        ApiEndpoints.forgotPassword,
+        data: {'email': email.trim()},
+      );
+      if (res.data is Map && res.data['message'] != null) {
+        return res.data['message'].toString();
+      }
+      return 'Mật khẩu ngẫu nhiên mới đã được gửi tới email của bạn. Vui lòng kiểm tra hộp thư.';
+    } on DioException catch (e) {
+      if (e.response?.data is Map && e.response?.data['message'] != null) {
+        throw e.response?.data['message']?.toString() ?? 'Không thể gửi yêu cầu cấp lại mật khẩu.';
+      }
+      throw 'Không thể gửi yêu cầu cấp lại mật khẩu. Vui lòng kiểm tra địa chỉ email.';
+    } catch (e) {
+      throw 'Đã có lỗi xảy ra: $e';
+    }
+  }
+
   Future<void> logout() async {
     await SecureStorageHelper.clearAll();
     _user = null;
