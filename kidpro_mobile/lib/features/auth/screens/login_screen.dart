@@ -122,7 +122,28 @@ class _LoginScreenState extends State<LoginScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
+
+                  // Nút Quên mật khẩu
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => _showForgotPasswordDialog(context),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                      ),
+                      child: const Text(
+                        'Quên mật khẩu?',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
 
                   // Error message
                   if (auth.error != null)
@@ -477,6 +498,140 @@ class _LoginScreenState extends State<LoginScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  void _showForgotPasswordDialog(BuildContext context) {
+    final emailCtrl = TextEditingController(text: _emailCtrl.text.trim());
+    bool isSubmitting = false;
+    String? localError;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.lock_reset, color: AppColors.primary, size: 26),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Khôi phục mật khẩu',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Nhập địa chỉ Gmail tài khoản của bạn. Hệ thống sẽ tạo một mật khẩu ngẫu nhiên mới và gửi trực tiếp vào hộp thư của bạn.',
+                style: TextStyle(color: Colors.black87, fontSize: 13.5, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Email tài khoản *',
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  errorText: localError,
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final mail = emailCtrl.text.trim();
+                          if (mail.isEmpty || !mail.contains('@')) {
+                            setModalState(() => localError = 'Vui lòng nhập đúng định dạng email');
+                            return;
+                          }
+                          setModalState(() {
+                            isSubmitting = true;
+                            localError = null;
+                          });
+
+                          try {
+                            final auth = context.read<AuthProvider>();
+                            final msg = await auth.forgotPassword(mail);
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                            }
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(
+                                    children: [
+                                      const Icon(Icons.check_circle, color: Colors.white),
+                                      const SizedBox(width: 10),
+                                      Expanded(child: Text(msg)),
+                                    ],
+                                  ),
+                                  backgroundColor: Colors.green.shade700,
+                                  duration: const Duration(seconds: 5),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            setModalState(() {
+                              isSubmitting = false;
+                              localError = e.toString();
+                            });
+                          }
+                        },
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text(
+                          'Gửi mật khẩu mới qua Gmail',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

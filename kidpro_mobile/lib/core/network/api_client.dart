@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:kidpro_mobile/core/storage/secure_storage_helper.dart';
 import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
@@ -8,7 +8,8 @@ class ApiClient {
   static ApiClient? _instance;
   late final Dio dio;
 
-  /// Ưu tiên `--dart-define=BASE_URL=http://<ip>:8080` (thiết bị thật qua Wi-Fi),
+  /// Ưu tiên `--dart-define=BASE_URL=...` (compile-time flag),
+  /// hoặc `http://<ip>:8080` (thiết bị thật qua Wi-Fi),
   /// mặc định 10.0.2.2 cho Android Emulator (trỏ về localhost của máy tính).
   static const _envBaseUrl = String.fromEnvironment('BASE_URL');
   static String get defaultHostUrl => _envBaseUrl.isNotEmpty
@@ -18,16 +19,21 @@ class ApiClient {
   String get baseUrl => dio.options.baseUrl;
   String get currentBaseUrl => dio.options.baseUrl;
 
-  /// Tự động lấy URL của AI Backend (cổng 8000) dựa theo Host của Backend (cổng 8080)
+  /// Tự động lấy URL của AI Backend từ môi trường hoặc theo Host của Backend
   String get aiBaseUrl {
+    const envAiUrl = String.fromEnvironment('AI_BASE_URL', defaultValue: '');
+    if (envAiUrl.isNotEmpty) {
+      return envAiUrl;
+    }
     try {
       final uri = Uri.parse(dio.options.baseUrl);
       if (uri.host.isNotEmpty) {
         final scheme = uri.scheme.isNotEmpty ? uri.scheme : 'http';
-        return '$scheme://${uri.host}:8000';
+        final port = (uri.port != 0 && uri.port != 80 && uri.port != 443) ? ':8000' : '';
+        return '$scheme://${uri.host}$port';
       }
     } catch (_) {}
-    return 'http://192.168.10.51:8000';
+    return 'https://ai.kidpro.edu.vn';
   }
 
   ApiClient._() {
@@ -45,7 +51,10 @@ class ApiClient {
 
   Future<void> _loadSavedBaseUrl() async {
     final saved = await SecureStorageHelper.getCustomBaseUrl();
-    if (saved != null && saved.isNotEmpty && saved != 'http://192.168.10.131:8080' && saved != 'http://192.168.10.125:8080' && saved != 'http://192.168.1.2:8080') {
+    if (saved != null &&
+        saved.isNotEmpty &&
+        !saved.contains('192.168.') &&
+        !saved.contains('10.0.2.2')) {
       dio.options.baseUrl = saved;
     } else {
       dio.options.baseUrl = defaultHostUrl;

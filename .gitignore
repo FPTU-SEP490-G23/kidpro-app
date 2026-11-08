@@ -1,3 +1,4 @@
+
 # Flutter / Dart
 **/.dart_tool/
 **/.flutter-plugins
@@ -25,6 +26,10 @@
 Thumbs.db
 
 # Python & AI weights / databases
+**/venv/
+**/.venv/
+**/env/
+ai_backend/venv/
 **/__pycache__/
 *.pyc
 *.pyo

@@ -946,6 +946,29 @@ class ParentProvider extends ChangeNotifier {
     }
   }
 
+    List<BusStopOption> _currentBusStops = [];
+  List<BusStopOption> get currentBusStops => _currentBusStops;
+  bool _loadingStops = false;
+  bool get loadingStops => _loadingStops;
+
+  Future<void> loadBusStops(String busId) async {
+    _loadingStops = true;
+    _currentBusStops = [];
+    notifyListeners();
+    try {
+      final res = await _dio.get(ApiEndpoints.parentBusStops(busId));
+      if (res.data is List) {
+        _currentBusStops = (res.data as List)
+            .map((e) => BusStopOption.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      }
+    } catch (e) {
+      if (kDebugMode) print('loadBusStops error: $e');
+    }
+    _loadingStops = false;
+    notifyListeners();
+  }
+
   Future<bool> submitBusRegister({
     required String studentId,
     required String busId,

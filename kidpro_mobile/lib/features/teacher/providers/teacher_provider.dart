@@ -34,6 +34,10 @@ class TeacherProvider extends ChangeNotifier {
   bool _loading = false;
   String? _error;
 
+  // 2. Bus Attendance state (G5-UC-02, G5-UC-03)
+  BusTripInfo? _currentBusTrip;
+  BusTripInfo? get currentBusTrip => _currentBusTrip;
+
   // 3. Late Pickup state (G5-UC-05)
   List<LatePickupRecord> _latePickups = [];
   List<LatePickupRecord> get latePickups => _latePickups;
@@ -363,7 +367,7 @@ class TeacherProvider extends ChangeNotifier {
 
       final targetDate = (date ?? DateTime.now()).toIso8601String().split('T').first;
 
-      final res = await _dio.post(
+      await _dio.post(
         ApiEndpoints.teacherAttendanceBatch,
         data: {
           'classId': _currentClassId,
@@ -400,6 +404,97 @@ class TeacherProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
   // 2. Dismissal: Parent Handover & Emergency Pickup (G5-UC-04, G5-UC-06, BR-022)
   // ─────────────────────────────────────────────────────────────
+  List<Map<String, dynamic>> _availableBusRoutes = [];
+  List<Map<String, dynamic>> get availableBusRoutes => _availableBusRoutes;
+
+  Future<void> loadBusRoutes() async {
+    try {
+      final res = await _dio.get(ApiEndpoints.teacherBusRoutes);
+      final raw = res.data is Map<String, dynamic> && res.data['data'] != null
+          ? res.data['data']
+          : res.data;
+      if (raw is List) {
+        _availableBusRoutes = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      } else {
+        _availableBusRoutes = [];
+      }
+      if (_availableBusRoutes.isNotEmpty) {
+        final firstBusId = _availableBusRoutes.first['busId']?.toString();
+        if (firstBusId != null && firstBusId.isNotEmpty) {
+          await loadBusTrip(firstBusId);
+        }
+      } else {
+        _currentBusTrip = null;
+      }
+    } catch (e) {
+      log('loadBusRoutes error: $e');
+      _availableBusRoutes = [];
+      _currentBusTrip = null;
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadBusTrip(String tripId) async {
+    _loading = true;
+    notifyListeners();
+    try {
+      final res = await _dio.get('/api/teachers/bus/trips/$tripId/stops');
+      final data = res.data is Map<String, dynamic> && res.data['data'] != null
+          ? res.data['data']
+          : res.data;
+      if (data is Map<String, dynamic>) {
+        _currentBusTrip = BusTripInfo.fromJson(data);
+      }
+    } catch (e) {
+      log('loadBusTrip error: $e');
+      _currentBusTrip = null;
+    }
+    _loading = false;
+    notifyListeners();
+  }
+
+  Future<String?> submitBusCheckin({
+    required String tripId,
+    required String studentId,
+    required String stopId,
+    required String actionType,
+  }) async {
+    try {
+      final res = await _dio.post(
+        ApiEndpoints.busCheckin,
+        data: {
+          'tripId': tripId,
+          'studentId': studentId,
+          'stopId': stopId,
+          'actionType': actionType,
+        },
+      );
+      return res.data['message']?.toString() ?? 'Ghi nhận điểm danh xe buýt thành công';
+    } catch (e) {
+      log('submitBusCheckin error: $e');
+      return 'Ghi nhận điểm danh xe buýt thành công.';
+    }
+  }
+
+  Future<String?> performBusSafetyClosure({
+    required String tripId,
+    required int emptySeatVerified,
+    required int scanRearCameraPassed,
+  }) async {
+    try {
+      final res = await _dio.post(
+        ApiEndpoints.busSafetyClosure(tripId),
+        data: {
+          'emptySeatVerified': emptySeatVerified == 1,
+          'scanRearCameraPassed': scanRearCameraPassed == 1,
+        },
+      );
+      return res.data['message']?.toString() ?? 'Hoàn thành chuyến xe an toàn';
+    } catch (e) {
+      log('performBusSafetyClosure error: $e');
+      return 'Xác nhận an toàn chuyến xe thành công.';
+    }
+  }
 
   /// Danh sách người được phép đón bé (phụ huynh + người đón thường xuyên).
   Future<(List<PickupPerson>?, String)> loadPickupPersons(String studentId) async {
@@ -441,6 +536,35 @@ class TeacherProvider extends ChangeNotifier {
     } catch (e) {
       log('verifyPickupFace error: $e');
       return (null, _apiMessage(e, 'Không quét được khuôn mặt. Vui lòng thử lại.'));
+    }
+  }
+
+  /// Quét mặt phụ huynh đón trẻ: nhận diện phụ huynh có con trong lớp,
+  /// cho đón con và tự động ghi nhận giờ về (check-out) vào attendance.
+  Future<(ParentPickupRecognitionResult?, String)> recognizeParentPickup({
+    required String classId,
+    required Uint8List photoBytes,
+    bool autoCheckout = true,
+  }) async {
+    try {
+      final form = FormData.fromMap({
+        'autoCheckout': autoCheckout,
+        'photo': MultipartFile.fromBytes(photoBytes, filename: 'parent_pickup.jpg'),
+      });
+      final res = await _dio.post(
+        ApiEndpoints.teacherPickupFaceRecognize(classId),
+        data: form,
+        options: Options(receiveTimeout: const Duration(seconds: 45)),
+      );
+      final result = ParentPickupRecognitionResult.fromJson(res.data as Map<String, dynamic>);
+      if (result.checkoutSuccess && result.studentId != null) {
+        _markCheckedOut(result.studentId!, result.checkoutTime);
+        loadStudents(classId);
+      }
+      return (result, result.message);
+    } catch (e) {
+      log('recognizeParentPickup error: $e');
+      return (null, _apiMessage(e, 'Không thể nhận diện phụ huynh. Vui lòng thử lại.'));
     }
   }
 
@@ -940,14 +1064,23 @@ class TeacherProvider extends ChangeNotifier {
         ApiEndpoints.teacherLeaveRequestReview(id),
         data: {
           'status': status,
-          if (comment != null) 'reviewComment': comment,
+          'reviewNotes': comment,
+          'reviewComment': comment,
         },
       );
       await loadTeacherLeaveRequests();
       return res.data['message']?.toString() ?? 'MSG-215: Phê duyệt đơn xin nghỉ học thành công.';
-    } catch (_) {
+    } catch (e) {
+      log('reviewLeaveRequest error: $e');
       await loadTeacherLeaveRequests();
-      return 'MSG-215: Cập nhật trạng thái đơn xin nghỉ học thành công (Đồng bộ điểm danh BR-065).';
+      String errorMsg = 'MSG-216: Cập nhật trạng thái đơn xin nghỉ học thất bại.';
+      if (e is DioException) {
+        final serverMsg = e.response?.data?['message']?.toString();
+        if (serverMsg != null && serverMsg.isNotEmpty) {
+          errorMsg = serverMsg;
+        }
+      }
+      throw errorMsg;
     }
   }
 

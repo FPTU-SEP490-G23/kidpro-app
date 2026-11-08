@@ -67,15 +67,23 @@ class _LeaveRequestReviewScreenState extends State<LeaveRequestReviewScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               final status = isApprove ? 'APPROVED' : 'REJECTED';
-              final msg = await context.read<TeacherProvider>().reviewLeaveRequest(
-                    requestId,
-                    status,
-                    _commentCtrl.text.trim(),
+              try {
+                final msg = await context.read<TeacherProvider>().reviewLeaveRequest(
+                      requestId,
+                      status,
+                      _commentCtrl.text.trim(),
+                    );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(msg ?? 'Cập nhật thành công'), backgroundColor: AppColors.success),
                   );
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(msg ?? 'Cập nhật thành công'), backgroundColor: AppColors.success),
-                );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
+                  );
+                }
               }
             },
             child: Text(isApprove ? 'Duyệt đơn' : 'Từ chối'),

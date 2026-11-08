@@ -8,6 +8,7 @@ class ApiEndpoints {
   static const register = '/api/auth/register';
   static const refreshToken = '/api/auth/refresh-token';
   static const userMe = '/api/auth/me';
+  static const forgotPassword = '/api/auth/forgot-password';
 
   // Parent - Students (Children)
   static const parentStudents = '/api/parents/students';
@@ -39,6 +40,7 @@ class ApiEndpoints {
   static const parentOtherRequest = '/api/parents/other-requests';
   static const parentAvailableClasses = '/api/parents/available-classes';
   static const parentAvailableBuses = '/api/parents/available-buses';
+  static String parentBusStops(String busId) => '/api/parents/buses/$busId/stops';
   static const parentAvailableExtracurricular = '/api/parents/available-extracurricular';
 
   // Parent - Invoices & Payment
@@ -96,6 +98,12 @@ class ApiEndpoints {
       '/api/attendance/class/$classId/daily-dismissal';
   static const teacherAttendanceCheckout = '/api/teachers/attendance/checkout';
 
+  // Bus Attendance (G5-UC-02, G5-UC-03, BR-024)
+  static const busCheckin = '/api/attendance/bus/stops/checkin';
+  static String busSafetyClosure(String tripId) =>
+      '/api/attendance/bus/trips/$tripId/safety-closure';
+  static const teacherBusRoutes = '/api/teachers/bus/routes';
+
   // Emergency Pickup Verification (G5-UC-06, BR-022)
   static const emergencyPickupVerify = '/api/academic/emergency-pickups/verify';
   static String emergencyPickupConfirm(int id) =>
@@ -105,6 +113,10 @@ class ApiEndpoints {
   static String teacherPickupPersons(String studentId) =>
       '/api/teachers/pickup/students/$studentId/persons';
   static const teacherPickupFaceVerify = '/api/teachers/pickup/face-verify';
+  static String teacherClassPickupFaces(String classId) =>
+      '/api/teachers/pickup/classes/$classId/pickup-faces';
+  static String teacherPickupFaceRecognize(String classId) =>
+      '/api/teachers/pickup/classes/$classId/face-recognize-pickup';
 
   // Pickup Face Registration - Parent (BR-022, NĐ 13/2023)
   static const parentPickupFaces = '/api/parents/pickup-faces';
