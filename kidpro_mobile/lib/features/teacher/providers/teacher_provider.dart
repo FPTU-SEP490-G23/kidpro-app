@@ -476,23 +476,29 @@ class TeacherProvider extends ChangeNotifier {
     }
   }
 
+  /// Body khớp `BusSafetyClosureDto` ở backend (photoUrl, qrTailScanToken bắt buộc).
   Future<String?> performBusSafetyClosure({
     required String tripId,
-    required int emptySeatVerified,
-    required int scanRearCameraPassed,
+    required String photoUrl,
+    required String qrTailScanToken,
   }) async {
     try {
       final res = await _dio.post(
         ApiEndpoints.busSafetyClosure(tripId),
         data: {
-          'emptySeatVerified': emptySeatVerified == 1,
-          'scanRearCameraPassed': scanRearCameraPassed == 1,
+          'tripId': tripId,
+          'photoUrl': photoUrl,
+          'qrTailScanToken': qrTailScanToken,
+          'remainingStudentsCount': _currentBusTrip?.remainingCount ?? 0,
         },
       );
       return res.data['message']?.toString() ?? 'Hoàn thành chuyến xe an toàn';
     } catch (e) {
       log('performBusSafetyClosure error: $e');
-      return 'Xác nhận an toàn chuyến xe thành công.';
+      if (e is DioException && e.response?.data is Map) {
+        return e.response?.data['message']?.toString() ?? 'Không thể đóng chuyến xe';
+      }
+      return 'Không thể đóng chuyến xe, vui lòng thử lại.';
     }
   }
 

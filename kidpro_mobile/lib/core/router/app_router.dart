@@ -26,6 +26,7 @@ import 'package:kidpro_mobile/features/teacher/screens/attendance_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/face_attendance_camera_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/dismissal_alert_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/medication_admin_screen.dart';
+import 'package:kidpro_mobile/features/teacher/screens/bus_attendance_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/health_metrics_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/health_incidents_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/daily_activity_screen.dart';
@@ -140,6 +141,9 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
                   GoRoute(
                       path: 'medication',
                       builder: (_, __) => const MedicationAdminScreen()),
+                  GoRoute(
+                      path: 'bus',
+                      builder: (_, __) => const BusAttendanceScreen()),
                   GoRoute(
                       path: 'health-metrics',
                       builder: (_, __) => const HealthMetricsScreen()),
