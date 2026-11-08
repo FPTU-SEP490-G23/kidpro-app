@@ -190,13 +190,42 @@ class _AuthorizedGuardiansScreenState extends State<AuthorizedGuardiansScreen> {
                         );
                         Navigator.pop(ctx);
                         final success = await prov.registerGuardian(guardian);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                        // Sheet đã đóng: dùng context của màn hình, không dùng context của StatefulBuilder
+                        final screenCtx = this.context;
+                        if (!screenCtx.mounted) return;
+                        if (!success) {
+                          ScaffoldMessenger.of(screenCtx).showSnackBar(
                             SnackBar(
-                              content: Text(success ? 'Thêm người đón thành công!' : 'Thất bại'),
-                              backgroundColor: success ? AppColors.success : AppColors.error,
+                              content: Text(prov.error ?? 'Thêm người đón thất bại'),
+                              backgroundColor: AppColors.error,
                             ),
                           );
+                          return;
+                        }
+                        // Mời phụ huynh chụp mặt người đón ngay để cô giáo quét đối chiếu khi trả trẻ
+                        final goScan = await showDialog<bool>(
+                          context: screenCtx,
+                          builder: (dCtx) => AlertDialog(
+                            title: const Text('Đã thêm người đón'),
+                            content: Text(
+                              'Chụp ảnh khuôn mặt của ${guardian.fullName} ngay bây giờ? '
+                              'Cô giáo sẽ quét mặt đối chiếu khi trả trẻ. Chưa có ảnh thì cô phải gọi điện xác minh với bố mẹ.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(dCtx, false),
+                                child: const Text('Để sau'),
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: () => Navigator.pop(dCtx, true),
+                                icon: const Icon(Icons.photo_camera_outlined),
+                                label: const Text('Chụp mặt ngay'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (goScan == true && screenCtx.mounted) {
+                          screenCtx.push('/parent/pickup-faces');
                         }
                       },
                       child: const Text('Xác nhận đăng ký người đón',

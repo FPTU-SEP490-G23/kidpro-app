@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -24,7 +24,7 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
   final _medicineNameCtrl = TextEditingController();
   final _dosageCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
-  String? _prescriptionImage;
+  Uint8List? _prescriptionBytes;
   bool _submitting = false;
 
   @override
@@ -45,48 +45,19 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
     super.dispose();
   }
 
+  /// Chỉ cho chụp trực tiếp bằng camera; ảnh được upload lên cloud khi gửi đơn.
   Future<void> _pickPrescriptionImage() async {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Chụp ảnh đơn thuốc bằng camera'),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final photo = await _picker.pickImage(
-                  source: ImageSource.camera,
-                  maxWidth: 1000,
-                  maxHeight: 1000,
-                  imageQuality: 85,
-                );
-                if (photo != null) {
-                  setState(() => _prescriptionImage = photo.path);
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Chọn ảnh từ thư viện'),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final photo = await _picker.pickImage(
-                  source: ImageSource.gallery,
-                  maxWidth: 1000,
-                  maxHeight: 1000,
-                  imageQuality: 85,
-                );
-                if (photo != null) {
-                  setState(() => _prescriptionImage = photo.path);
-                }
-              },
-            ),
-          ],
-        ),
-      ),
+    final photo = await _picker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.rear,
+      maxWidth: 1280,
+      maxHeight: 1280,
+      imageQuality: 85,
     );
+    if (photo == null) return;
+    final bytes = await photo.readAsBytes();
+    if (!mounted) return;
+    setState(() => _prescriptionBytes = bytes);
   }
 
   Future<void> _submit() async {
@@ -103,8 +74,8 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
         note: _noteCtrl.text.trim().isNotEmpty ? _noteCtrl.text.trim() : null,
         instructions:
             '${_medicineNameCtrl.text.trim()}: ${_dosageCtrl.text.trim()}. ${_noteCtrl.text.trim()}',
-        prescriptionImageUrl: _prescriptionImage,
       ),
+      prescriptionPhoto: _prescriptionBytes,
     );
     setState(() => _submitting = false);
 
@@ -119,7 +90,7 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
         _medicineNameCtrl.clear();
         _dosageCtrl.clear();
         _noteCtrl.clear();
-        setState(() => _prescriptionImage = null);
+        setState(() => _prescriptionBytes = null);
         _tabController.animateTo(1);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -250,17 +221,14 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
-                child: _prescriptionImage != null
+                child: _prescriptionBytes != null
                     ? Stack(
                         alignment: Alignment.center,
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: _prescriptionImage!.startsWith('http')
-                                ? Image.network(_prescriptionImage!,
-                                    fit: BoxFit.cover, width: double.infinity)
-                                : Image.file(File(_prescriptionImage!),
-                                    fit: BoxFit.cover, width: double.infinity),
+                            child: Image.memory(_prescriptionBytes!,
+                                fit: BoxFit.cover, width: double.infinity),
                           ),
                           Positioned(
                             top: 8,
@@ -271,7 +239,7 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
                               child: IconButton(
                                 padding: EdgeInsets.zero,
                                 icon: const Icon(Icons.close, color: Colors.white, size: 18),
-                                onPressed: () => setState(() => _prescriptionImage = null),
+                                onPressed: () => setState(() => _prescriptionBytes = null),
                               ),
                             ),
                           ),
@@ -283,7 +251,7 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
                           Icon(Icons.camera_alt_outlined, size: 36, color: Colors.grey.shade600),
                           const SizedBox(height: 8),
                           Text(
-                            'Nhấn để chụp hoặc tải ảnh đơn thuốc',
+                            'Nhấn để chụp ảnh đơn thuốc bằng camera',
                             style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                           ),
                         ],

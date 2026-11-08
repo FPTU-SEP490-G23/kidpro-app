@@ -124,6 +124,7 @@ class MedicationRequest {
   final DateTime startDate;
   final DateTime endDate;
   final String? prescriptionPhotoUrl;
+  final String? prescriptionPhotoId;
   final String status; // PENDING, ACCEPTED, COMPLETED, CANCELLED
   final String? medicineName;
   final String? dosage;
@@ -138,6 +139,7 @@ class MedicationRequest {
     DateTime? endDate,
     String? prescriptionPhotoUrl,
     String? prescriptionImageUrl,
+    this.prescriptionPhotoId,
     this.status = 'PENDING',
     this.medicineName,
     this.dosage,
@@ -150,11 +152,28 @@ class MedicationRequest {
 
   String? get prescriptionImageUrl => prescriptionPhotoUrl;
 
+  /// Bản sao gắn mã ảnh đơn thuốc đã upload lên cloud.
+  MedicationRequest copyWithPhotoId(String photoId) => MedicationRequest(
+        id: id,
+        studentId: studentId,
+        studentName: studentName,
+        instructions: instructions,
+        startDate: startDate,
+        endDate: endDate,
+        prescriptionPhotoUrl: prescriptionPhotoUrl,
+        prescriptionPhotoId: photoId,
+        status: status,
+        medicineName: medicineName,
+        dosage: dosage,
+        note: note,
+      );
+
   Map<String, dynamic> toJson() => {
         'studentId': studentId,
         'instructions': instructions,
         'startDate': startDate.toIso8601String().split('T').first,
         'endDate': endDate.toIso8601String().split('T').first,
+        if (prescriptionPhotoId != null) 'prescriptionPhotoId': prescriptionPhotoId,
       };
 
   factory MedicationRequest.fromJson(Map<String, dynamic> json) =>
@@ -169,6 +188,8 @@ class MedicationRequest {
         endDate: json['endDate'] != null
             ? DateTime.parse(json['endDate'] as String)
             : DateTime.now(),
+        prescriptionPhotoUrl: json['prescriptionPhotoUrl'] as String?,
+        prescriptionPhotoId: json['prescriptionPhotoId']?.toString(),
         status: json['status'] as String? ?? 'PENDING',
       );
 }
@@ -357,6 +378,40 @@ class ChatThread {
             ? DateTime.parse(json['lastMessageAt'] as String)
             : null,
         unreadCount: json['unreadCount'] as int? ?? 0,
+      );
+}
+
+/// Hội thoại nhắn riêng với giáo viên chủ nhiệm về 1 con.
+class PrivateChatThreadModel {
+  final String studentId;
+  final String studentName;
+  final String? className;
+  final String? teacherName;
+  final String? lastMessage;
+  final String? lastSenderType; // TEACHER, PARENT
+  final DateTime? lastMessageAt;
+  final int unreadCount;
+
+  const PrivateChatThreadModel({
+    required this.studentId,
+    required this.studentName,
+    this.className,
+    this.teacherName,
+    this.lastMessage,
+    this.lastSenderType,
+    this.lastMessageAt,
+    this.unreadCount = 0,
+  });
+
+  factory PrivateChatThreadModel.fromJson(Map<String, dynamic> json) => PrivateChatThreadModel(
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String? ?? 'Bé',
+        className: json['className'] as String?,
+        teacherName: json['teacherName'] as String?,
+        lastMessage: json['lastMessage'] as String?,
+        lastSenderType: json['lastSenderType'] as String?,
+        lastMessageAt: json['lastMessageAt'] != null ? DateTime.tryParse(json['lastMessageAt'].toString()) : null,
+        unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
       );
 }
 

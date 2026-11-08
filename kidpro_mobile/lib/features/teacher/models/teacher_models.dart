@@ -472,6 +472,37 @@ class ClassChatMessageItem {
       );
 }
 
+// ── Hội thoại nhắn riêng với phụ huynh của 1 bé ──
+class PrivateChatThread {
+  final String studentId;
+  final String studentName;
+  final String? parentName;
+  final String? lastMessage;
+  final String? lastSenderType; // TEACHER, PARENT
+  final DateTime? lastMessageAt;
+  final int unreadCount;
+
+  const PrivateChatThread({
+    required this.studentId,
+    required this.studentName,
+    this.parentName,
+    this.lastMessage,
+    this.lastSenderType,
+    this.lastMessageAt,
+    this.unreadCount = 0,
+  });
+
+  factory PrivateChatThread.fromJson(Map<String, dynamic> json) => PrivateChatThread(
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String? ?? 'Bé',
+        parentName: json['parentName'] as String?,
+        lastMessage: json['lastMessage'] as String?,
+        lastSenderType: json['lastSenderType'] as String?,
+        lastMessageAt: json['lastMessageAt'] != null ? DateTime.tryParse(json['lastMessageAt'].toString()) : null,
+        unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+      );
+}
+
 // ── Classroom Journal Post (G11-UC-05, BR-060) ──
 class ClassroomJournalItem {
   final int postId;

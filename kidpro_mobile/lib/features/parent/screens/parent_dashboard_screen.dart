@@ -681,6 +681,14 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                 ),
                 const Divider(height: 1),
                 ListTile(
+                  leading: const Icon(Icons.how_to_reg_outlined, color: Colors.teal),
+                  title: const Text('Quét khuôn mặt người đón'),
+                  subtitle: const Text('Bố mẹ và người đón thường xuyên (ông bà, cô chú…) để cô xác thực khi trả trẻ'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/parent/pickup-faces'),
+                ),
+                const Divider(height: 1),
+                ListTile(
                   leading: const Icon(Icons.warning_amber_rounded, color: AppColors.error),
                   title: const Text('Hồ sơ dị ứng thực phẩm/thuốc'),
                   trailing: const Icon(Icons.chevron_right),

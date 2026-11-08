@@ -451,9 +451,41 @@ class ParentProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> submitMedication(MedicationRequest req) async {
+  /// Upload ảnh đơn thuốc (chụp từ camera) lên cloud. Trả về fileId, hoặc null nếu lỗi (_error được gán).
+  Future<String?> uploadPrescriptionPhoto(Uint8List bytes, String filename) async {
     try {
-      await _dio.post(ApiEndpoints.parentMedications, data: req.toJson());
+      final form = FormData.fromMap({
+        'photo': MultipartFile.fromBytes(bytes, filename: filename, contentType: DioMediaType('image', 'jpeg')),
+      });
+      final res = await _dio.post(ApiEndpoints.parentPrescriptionPhoto,
+          data: form, options: Options(receiveTimeout: const Duration(seconds: 40)));
+      final data = res.data;
+      final fileId = data is Map ? data['fileId']?.toString() : null;
+      if (fileId == null || fileId.isEmpty) {
+        _error = 'Không nhận được mã ảnh đơn thuốc từ máy chủ';
+        return null;
+      }
+      return fileId;
+    } on DioException catch (e) {
+      logError('uploadPrescriptionPhoto', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Tải ảnh đơn thuốc thất bại';
+      return null;
+    }
+  }
+
+  Future<bool> submitMedication(MedicationRequest req, {Uint8List? prescriptionPhoto}) async {
+    try {
+      var payload = req;
+      if (prescriptionPhoto != null) {
+        final fileId = await uploadPrescriptionPhoto(
+            prescriptionPhoto, 'prescription_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        if (fileId == null) {
+          notifyListeners();
+          return false;
+        }
+        payload = req.copyWithPhotoId(fileId);
+      }
+      await _dio.post(ApiEndpoints.parentMedications, data: payload.toJson());
       await loadMedications(req.studentId);
       return true;
     } on DioException catch (e) {
@@ -651,6 +683,59 @@ class ParentProvider extends ChangeNotifier {
       return true;
     } on DioException catch (e) {
       logError('sendMessage', e);
+      return false;
+    }
+  }
+
+  // ── 8b. NHẮN RIÊNG VỚI GIÁO VIÊN (mỗi con 1 hội thoại) ──
+  List<PrivateChatThreadModel> _privateThreads = [];
+  List<PrivateChatThreadModel> get privateThreads => _privateThreads;
+  int get privateUnreadTotal => _privateThreads.fold(0, (sum, t) => sum + t.unreadCount);
+  String? _privateThreadsError;
+  String? get privateThreadsError => _privateThreadsError;
+
+  Future<void> loadPrivateThreads() async {
+    try {
+      final res = await _dio.get(ApiEndpoints.privateChatThreads);
+      _privateThreads = _extractList(res.data)
+          .map((e) => PrivateChatThreadModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _privateThreadsError = null;
+    } on DioException catch (e) {
+      logError('loadPrivateThreads', e);
+      _privateThreads = [];
+      final data = e.response?.data;
+      _privateThreadsError = data is Map && data['message'] != null
+          ? data['message'].toString()
+          : (e.response == null
+              ? 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng.'
+              : 'Không tải được tin nhắn riêng với cô.');
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadPrivateMessages(String studentId) async {
+    try {
+      final res = await _dio.get(ApiEndpoints.privateChatMessages(studentId));
+      _messages = _extractList(res.data)
+          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      logError('loadPrivateMessages', e);
+      _messages = [];
+    }
+    notifyListeners();
+  }
+
+  Future<bool> sendPrivateMessage(String studentId, String content) async {
+    try {
+      final res = await _dio.post(ApiEndpoints.privateChatMessages(studentId), data: {'content': content});
+      final rawData = (res.data is Map && res.data['data'] != null) ? res.data['data'] : res.data;
+      _messages.add(ChatMessage.fromJson(rawData as Map<String, dynamic>));
+      notifyListeners();
+      return true;
+    } on DioException catch (e) {
+      logError('sendPrivateMessage', e);
       return false;
     }
   }

@@ -6,9 +6,12 @@ import 'package:kidpro_mobile/features/auth/providers/auth_provider.dart';
 import 'package:kidpro_mobile/features/parent/providers/parent_provider.dart';
 
 class ChatDetailScreen extends StatefulWidget {
+  /// Nhóm lớp: classId. Nhắn riêng: studentId.
   final String threadId;
+  final bool isPrivate;
+  final String? title;
 
-  const ChatDetailScreen({super.key, required this.threadId});
+  const ChatDetailScreen({super.key, required this.threadId, this.isPrivate = false, this.title});
 
   @override
   State<ChatDetailScreen> createState() => _ChatDetailScreenState();
@@ -23,7 +26,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ParentProvider>().loadMessages(widget.threadId);
+      final prov = context.read<ParentProvider>();
+      widget.isPrivate ? prov.loadPrivateMessages(widget.threadId) : prov.loadMessages(widget.threadId);
     });
   }
 
@@ -42,9 +46,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _messageCtrl.clear();
 
     final prov = context.read<ParentProvider>();
-    await prov.sendMessage(widget.threadId, text);
+    final ok = widget.isPrivate
+        ? await prov.sendPrivateMessage(widget.threadId, text)
+        : await prov.sendMessage(widget.threadId, text);
 
+    if (!mounted) return;
     setState(() => _sending = false);
+    if (!ok) {
+      _messageCtrl.text = text;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gửi tin nhắn thất bại. Vui lòng thử lại.')),
+      );
+    }
     if (_scrollCtrl.hasClients) {
       _scrollCtrl.animateTo(
         _scrollCtrl.position.maxScrollExtent + 60,
@@ -62,7 +75,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Giáo viên chủ nhiệm'),
+        title: Text(widget.title ?? (widget.isPrivate ? 'Nhắn riêng với cô' : 'Nhóm lớp')),
       ),
       body: Column(
         children: [
