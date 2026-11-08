@@ -264,24 +264,10 @@ class _FaceUploadSheetState extends State<_FaceUploadSheet> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : () => _pick(ImageSource.camera),
-                  icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('Chụp ảnh'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : () => _pick(ImageSource.gallery),
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('Thư viện'),
-                ),
-              ),
-            ],
+          OutlinedButton.icon(
+            onPressed: _saving ? null : () => _pick(ImageSource.camera),
+            icon: const Icon(Icons.photo_camera_outlined),
+            label: Text(_bytes == null ? 'Chụp ảnh bằng camera' : 'Chụp lại'),
           ),
           const SizedBox(height: 12),
           BiometricConsentTile(

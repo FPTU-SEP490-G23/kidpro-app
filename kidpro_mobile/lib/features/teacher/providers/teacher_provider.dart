@@ -1006,6 +1006,89 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // 13b. Nhắn tin riêng với phụ huynh (mỗi bé 1 hội thoại)
+  // ─────────────────────────────────────────────────────────────
+
+  List<PrivateChatThread> _privateThreads = [];
+  List<PrivateChatThread> get privateThreads => _privateThreads;
+  int get privateUnreadTotal => _privateThreads.fold(0, (sum, t) => sum + t.unreadCount);
+  bool _privateThreadsLoading = false;
+  bool get privateThreadsLoading => _privateThreadsLoading;
+  String? _privateThreadsError;
+  String? get privateThreadsError => _privateThreadsError;
+
+  // Tin nhắn của hội thoại đang mở (theo studentId)
+  String? _openPrivateStudentId;
+  List<ClassChatMessageItem> _privateMessages = [];
+  List<ClassChatMessageItem> get privateMessages => _privateMessages;
+
+  Future<void> loadPrivateThreads() async {
+    if (_currentClassId.isEmpty) return;
+    _privateThreadsLoading = true;
+    notifyListeners();
+    try {
+      final res = await _dio.get(ApiEndpoints.privateChatThreads, queryParameters: {'classId': _currentClassId});
+      final data = res.data;
+      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
+      _privateThreads = list.map((e) => PrivateChatThread.fromJson(e as Map<String, dynamic>)).toList();
+      _privateThreadsError = null;
+    } catch (e) {
+      log('loadPrivateThreads error: $e');
+      _privateThreadsError = _apiMessage(e, 'Không tải được danh sách tin nhắn phụ huynh.');
+    }
+    _privateThreadsLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> loadPrivateMessages(String studentId) async {
+    if (_openPrivateStudentId != studentId) {
+      _openPrivateStudentId = studentId;
+      _privateMessages = [];
+      notifyListeners();
+    }
+    try {
+      final res = await _dio.get(ApiEndpoints.privateChatMessages(studentId));
+      final data = res.data;
+      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
+      if (_openPrivateStudentId != studentId) return; // đã chuyển sang hội thoại khác
+      _privateMessages = list.map((e) => ClassChatMessageItem.fromJson(e as Map<String, dynamic>)).toList();
+      // Mở hội thoại = đã đọc tin của phụ huynh
+      _privateThreads = _privateThreads
+          .map((t) => t.studentId == studentId
+              ? PrivateChatThread(
+                  studentId: t.studentId,
+                  studentName: t.studentName,
+                  parentName: t.parentName,
+                  lastMessage: t.lastMessage,
+                  lastSenderType: t.lastSenderType,
+                  lastMessageAt: t.lastMessageAt,
+                )
+              : t)
+          .toList();
+      notifyListeners();
+    } catch (e) {
+      log('loadPrivateMessages error: $e');
+    }
+  }
+
+  /// Trả về null nếu gửi thành công, ngược lại là thông báo lỗi.
+  Future<String?> sendPrivateMessage(String studentId, String content) async {
+    try {
+      await _dio.post(ApiEndpoints.privateChatMessages(studentId), data: {'content': content});
+      await loadPrivateMessages(studentId);
+      return null;
+    } catch (e) {
+      log('sendPrivateMessage error: $e');
+      return _apiMessage(e, 'Gửi tin nhắn thất bại. Vui lòng thử lại.');
+    }
+  }
+
+  void closePrivateChat() {
+    _openPrivateStudentId = null;
+    _privateMessages = [];
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // 14. Classroom Journal (G11-UC-05, BR-060)
   // ─────────────────────────────────────────────────────────────
 

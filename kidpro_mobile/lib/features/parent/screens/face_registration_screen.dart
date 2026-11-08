@@ -24,6 +24,8 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
     try {
       final XFile? photo = await _picker.pickImage(
         source: source,
+        // Phụ huynh chụp cho bé nên mặc định dùng camera sau
+        preferredCameraDevice: CameraDevice.rear,
         maxWidth: 640,
         maxHeight: 640,
         imageQuality: 88,
@@ -40,7 +42,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Không thể chụp/chọn ảnh: $e'),
+            content: Text('Không mở được camera: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -52,7 +54,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
     if (_capturedImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Vui lòng chụp hoặc chọn ảnh chân dung của bé trước!'),
+          content: Text('Vui lòng chụp ảnh chân dung của bé trước!'),
           backgroundColor: AppColors.warning,
         ),
       );
@@ -270,95 +272,30 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 3. Khung chụp / xem trước ảnh mới
-                  const Text(
-                    'Chụp hoặc tải ảnh chân dung mới của bé:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                  const SizedBox(height: 10),
-
-                  Container(
-                    width: double.infinity,
-                    height: 250,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.grey.shade300, width: 1.5),
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        if (_capturedImageBytes != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(18),
-                            child: Image.memory(
-                              _capturedImageBytes!,
-                              width: double.infinity,
-                              height: 250,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        else
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.add_a_photo_outlined, size: 52, color: Colors.grey.shade500),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Bấm vào nút chụp ảnh bên dưới',
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                              ),
-                            ],
-                          ),
-
-                        // Khung oval hướng dẫn vị trí mặt bé
-                        Container(
-                          width: 170,
-                          height: 220,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: _capturedImageBytes != null
-                                  ? AppColors.primary
-                                  : Colors.black26,
-                              width: 2.5,
-                            ),
-                            borderRadius: BorderRadius.circular(85),
-                          ),
-                        ),
-                      ],
+                  // 3. Khung chụp / xem trước ảnh mới (căn giữa, chạm để mở camera)
+                  const Center(
+                    child: Text(
+                      'Ảnh chân dung mới của bé',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  Center(
+                    child: Text(
+                      'Đưa mặt bé vào giữa khung oval rồi chụp',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildCaptureFrame(),
                   const SizedBox(height: 14),
 
-                  // 4. Các nút thao tác chọn ảnh
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: () => _pickPhoto(ImageSource.camera),
-                          icon: const Icon(Icons.camera_alt),
-                          label: const Text('Chụp từ Camera'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: () => _pickPhoto(ImageSource.gallery),
-                          icon: const Icon(Icons.photo_library),
-                          label: const Text('Chọn từ Thư viện'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
+                  // 4. Sau khi chụp: nút Chụp lại / Bỏ ảnh (trước khi chụp thì chạm vào khung để mở camera)
+                  if (_capturedImageBytes != null) ...[
+                    _buildCaptureActions(),
+                    const SizedBox(height: 18),
+                  ] else
+                    const SizedBox(height: 4),
 
                   // 5. Hướng dẫn chụp ảnh đạt chuẩn
                   Container(
@@ -424,6 +361,153 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  /// Khung xem trước tỉ lệ chân dung 3:4, căn giữa màn hình, có oval hướng dẫn vị trí mặt.
+  Widget _buildCaptureFrame() {
+    final hasPhoto = _capturedImageBytes != null;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300),
+        child: AspectRatio(
+          aspectRatio: 3 / 4,
+          child: Material(
+            color: hasPhoto ? Colors.black : AppColors.primary.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(24),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: _submitting ? null : () => _pickPhoto(ImageSource.camera),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: hasPhoto ? AppColors.primary : AppColors.primary.withValues(alpha: 0.3),
+                    width: hasPhoto ? 2.5 : 1.5,
+                  ),
+                ),
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    // Oval chiếm ~62% chiều rộng, tỉ lệ 3:4 giống khuôn mặt
+                    final ovalW = box.maxWidth * 0.62;
+                    final ovalH = ovalW * 4 / 3;
+                    return Stack(
+                      fit: StackFit.expand,
+                      alignment: Alignment.center,
+                      children: [
+                        if (hasPhoto)
+                          Image.memory(_capturedImageBytes!, fit: BoxFit.cover)
+                        else
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Icon(Icons.photo_camera_outlined,
+                                  size: 30, color: AppColors.primary.withValues(alpha: 0.7)),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Chạm để mở camera',
+                                style: TextStyle(
+                                  color: AppColors.primary.withValues(alpha: 0.85),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                            ],
+                          ),
+                        Center(
+                          child: Container(
+                            width: ovalW,
+                            height: ovalH,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.all(Radius.elliptical(ovalW / 2, ovalH / 2)),
+                              border: Border.all(
+                                color: hasPhoto ? Colors.white : AppColors.primary.withValues(alpha: 0.45),
+                                width: 2.5,
+                              ),
+                            ),
+                            child: hasPhoto
+                                ? null
+                                : Icon(Icons.face_outlined,
+                                    size: ovalW * 0.45, color: AppColors.primary.withValues(alpha: 0.25)),
+                          ),
+                        ),
+                        if (hasPhoto)
+                          Positioned(
+                            top: 10,
+                            left: 10,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.success,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check, color: Colors.white, size: 14),
+                                  SizedBox(width: 4),
+                                  Text('Đã chụp',
+                                      style: TextStyle(
+                                          color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Hai nút "Chụp lại" / "Bỏ ảnh", chỉ hiện sau khi đã chụp.
+  Widget _buildCaptureActions() {
+    final buttonShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary, width: 1.4),
+                shape: buttonShape,
+              ),
+              onPressed: _submitting ? null : () => _pickPhoto(ImageSource.camera),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Chụp lại', style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: BorderSide(color: AppColors.error.withValues(alpha: 0.6), width: 1.4),
+                shape: buttonShape,
+              ),
+              onPressed: _submitting
+                  ? null
+                  : () => setState(() {
+                        _capturedImageBytes = null;
+                        _capturedFilename = null;
+                      }),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Bỏ ảnh', style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

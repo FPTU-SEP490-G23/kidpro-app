@@ -398,11 +398,6 @@ class _EmergencyPickupScreenState extends State<EmergencyPickupScreen>
                         icon: const Icon(Icons.photo_camera_outlined, size: 18),
                         label: const Text('Chụp ảnh'),
                       ),
-                      OutlinedButton.icon(
-                        onPressed: _submitting ? null : () => _pickPhoto(ImageSource.gallery),
-                        icon: const Icon(Icons.photo_library_outlined, size: 18),
-                        label: const Text('Chọn từ thư viện'),
-                      ),
                       if (_photoBytes != null)
                         TextButton(
                           onPressed: _submitting

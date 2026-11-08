@@ -13,7 +13,10 @@ class TeacherShellScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final strangerAlerts = context.watch<TeacherProvider>().strangerAlerts.length;
+    final teacherProv = context.watch<TeacherProvider>();
+    final strangerAlerts = teacherProv.strangerAlerts.length;
+    // Số tin nhắn riêng của phụ huynh chưa đọc
+    final privateUnread = teacherProv.privateUnreadTotal;
     final index = navigationShell.currentIndex;
 
     return PopScope(
@@ -57,10 +60,18 @@ class TeacherShellScreen extends StatelessWidget {
               ),
               label: 'Tan học',
             ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.forum_outlined),
-              activeIcon: Icon(Icons.forum_rounded),
-              label: 'Nhóm lớp',
+            BottomNavigationBarItem(
+              icon: Badge(
+                isLabelVisible: privateUnread > 0,
+                label: Text('$privateUnread'),
+                child: const Icon(Icons.forum_outlined),
+              ),
+              activeIcon: Badge(
+                isLabelVisible: privateUnread > 0,
+                label: Text('$privateUnread'),
+                child: const Icon(Icons.forum_rounded),
+              ),
+              label: 'Tin nhắn',
             ),
             const BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),

@@ -71,6 +71,7 @@ class ApiEndpoints {
 
   // Parent - Medication Requests (G10-UC-01)
   static const parentMedications = '/api/parents/medications';
+  static const parentPrescriptionPhoto = '/api/parents/medications/prescription-photo';
   static String parentMedicationCancel(int id) =>
       '/api/parents/medications/$id';
 
@@ -161,6 +162,11 @@ class ApiEndpoints {
       '/api/comms/chat/rooms/$classId/messages';
   static String classChatLock(String classId) =>
       '/api/comms/chat/rooms/$classId/lock';
+
+  // Nhắn tin riêng giáo viên - phụ huynh theo từng bé
+  static const privateChatThreads = '/api/comms/chat/private/threads'; // giáo viên: ?classId=
+  static String privateChatMessages(String studentId) =>
+      '/api/comms/chat/private/$studentId/messages';
 
   // Attendance / Face Recognition
   static const faceLogs = '/api/attendance/face-logs';

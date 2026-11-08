@@ -79,9 +79,16 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
                 path: 'chat',
                 builder: (_, __) => const ChatListScreen()),
             GoRoute(
+                path: 'chat/private/:studentId',
+                builder: (_, state) => ChatDetailScreen(
+                    threadId: state.pathParameters['studentId']!,
+                    isPrivate: true,
+                    title: state.uri.queryParameters['title'])),
+            GoRoute(
                 path: 'chat/:threadId',
                 builder: (_, state) => ChatDetailScreen(
-                    threadId: state.pathParameters['threadId']!)),
+                    threadId: state.pathParameters['threadId']!,
+                    title: state.uri.queryParameters['title'])),
             GoRoute(
                 path: 'emergency-pickup',
                 builder: (_, __) => const EmergencyPickupScreen()),

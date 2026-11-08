@@ -496,6 +496,18 @@
 - **Nguyên nhân:** `main.dart` gọi `appRouter(auth)` trong `build` với `context.watch<AuthProvider>()`, nên mỗi khi AuthProvider thay đổi lại tạo GoRouter mới, dùng chung `_rootNavigatorKey` (trùng GlobalKey) và mất trạng thái điều hướng, khung `StatefulShellRoute` (thanh 5 tab) có thể bị dựng sai hoặc mất.
 - **Mô tả:** `KidProApp` chuyển sang StatefulWidget, tạo router đúng 1 lần (`late final`), dispose khi hủy; đăng nhập/đăng xuất vẫn chuyển trang nhờ `refreshListenable`. `flutter analyze` không lỗi.
 
+## 2026-11-08: Tin Nhắn Giáo Viên: Nhóm Lớp + Nhắn Riêng Với Phụ Huynh
+- **Task:** Tab chat của giáo viên có nhóm chat chung của lớp và phần nhắn riêng với từng phụ huynh.
+- **Database:** thêm cột `communication.daily_message.chat_type` (CLASS / PRIVATE), file `kidpro-be/docs/migration_daily_message_chat_type.sql` (chạy 1 lần trên Supabase). Tin cũ để NULL được tính là nhóm lớp.
+- **Backend:** `PrivateChatController` (`GET /api/comms/chat/private/threads?classId=`, `GET|POST /api/comms/chat/private/{studentId}/messages`), `PrivateChatServiceImpl`: mỗi bé 1 hội thoại; phụ huynh chỉ nhắn về con mình, giáo viên đã phân lớp chỉ nhắn với phụ huynh lớp mình; mở hội thoại thì đánh dấu đã đọc tin bên kia; đếm tin chưa đọc. Nhóm lớp (`ClassChatServiceImpl`) chỉ lấy tin CLASS, tin phụ huynh gắn đúng con của họ (trước gắn bé đầu lớp), tên người gửi là họ tên (`ChatNameResolver`). Test: `PrivateChatServiceImplTest` 7, `ClassChatServiceImplTest` 7 đều qua.
+- **Mobile giáo viên:** tab dưới đổi tên "Tin nhắn" (badge số tin riêng chưa đọc); màn có 2 tab "Nhóm lớp" (khóa/mở chat phụ huynh như cũ) và "Phụ huynh" (danh sách theo bé, tìm kiếm, tin chưa đọc lên đầu); màn nhắn riêng tự cập nhật mỗi 10 giây. Sửa lỗi tính giờ yên tĩnh 21:30-07:00.
+- **Mobile phụ huynh:** màn Tin nhắn chia "Nhóm lớp" và "Nhắn riêng với cô" (theo từng con, tên giáo viên chủ nhiệm, tin chưa đọc).
+
 ## 2026-11-07: Khắc phục lỗi "Không thể kết nối đến máy chủ" trên Android Emulator
 - **Task:** Sửa địa chỉ backend mặc định trong `api_client.dart` bị gán cứng `http://192.168.10.51:8080` (IP mạng Wi-Fi khác, không phải máy đang chạy backend).
 - **Mô tả:** `defaultHostUrl` ưu tiên `--dart-define=BASE_URL=...` (dùng cho điện thoại thật qua Wi-Fi); nếu không truyền thì Android dùng `http://10.0.2.2:8080`, nền tảng khác dùng `http://127.0.0.1:8080`. Bật `adb reverse tcp:8080` và `tcp:8000` cho máy ảo.
+
+## 2026-11-08: Sửa lỗi chat "Không tìm thấy tài khoản đăng nhập"
+- Nguyên nhân: JWT lưu email làm tên đăng nhập (UserDetailsImpl.getUsername trả về email), còn PrivateChatServiceImpl/ClassChatServiceImpl chỉ tìm theo username.
+- Sửa: tìm tài khoản theo email trước, rồi đến username.
+- App phụ huynh: hiện lỗi khi không tải được mục "Nhắn riêng với cô" thay vì để trống.
