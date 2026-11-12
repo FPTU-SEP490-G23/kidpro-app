@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
@@ -14,9 +15,8 @@ class ClassroomJournalScreen extends StatefulWidget {
 class _ClassroomJournalScreenState extends State<ClassroomJournalScreen> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  final _photosCtrl = TextEditingController(
-    text: 'https://images.unsplash.com/photo-1587654780291-39c9404d746b?w=600\nhttps://images.unsplash.com/photo-1544717305-2782549b5136?w=600',
-  );
+  // Danh sách đường dẫn ảnh đã chọn (mỗi dòng 1 ảnh), tải lên server khi đăng album
+  final _photosCtrl = TextEditingController();
   final Set<String> _taggedStudentIds = {};
 
   @override
@@ -38,8 +38,9 @@ class _ClassroomJournalScreenState extends State<ClassroomJournalScreen> {
   }
 
   void _showCreateAlbumModal() {
-    _titleCtrl.text = '🎨 Giờ học Tạo hình: Bé làm bưu thiếp tặng mẹ';
-    _descCtrl.text = 'Các con được hướng dẫn xé dán hoa ngũ sắc, phối màu tự do và hào hứng khoe thành phẩm của mình.';
+    _titleCtrl.clear();
+    _descCtrl.clear();
+    _photosCtrl.clear();
     _taggedStudentIds.clear();
 
     showModalBottomSheet(
@@ -107,14 +108,22 @@ class _ClassroomJournalScreenState extends State<ClassroomJournalScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  TextField(
-                    controller: _photosCtrl,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Danh sách URL ảnh (mỗi dòng một ảnh, tối đa 50 ảnh)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
+                  Builder(builder: (_) {
+                    final count = _photosCtrl.text.split('\n').where((u) => u.trim().isNotEmpty).length;
+                    return OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                      icon: Icon(count > 0 ? Icons.check_circle : Icons.photo_library,
+                          color: count > 0 ? AppColors.success : null),
+                      label: Text(count > 0
+                          ? 'Đã chọn $count ảnh (chạm để chọn lại, tối đa 50)'
+                          : 'Chọn ảnh hoạt động (tối đa 50 ảnh)'),
+                      onPressed: () async {
+                        final photos = await ImagePicker().pickMultiImage(maxWidth: 1280, imageQuality: 85);
+                        if (photos.isEmpty) return;
+                        setModalState(() => _photosCtrl.text = photos.map((p) => p.path).join('\n'));
+                      },
+                    );
+                  }),
                   const SizedBox(height: 16),
 
                   Row(
@@ -177,6 +186,15 @@ class _ClassroomJournalScreenState extends State<ClassroomJournalScreen> {
                             .where((u) => u.isNotEmpty)
                             .toList();
 
+                        if (rawUrls.isEmpty || _titleCtrl.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('Vui lòng nhập tiêu đề và chọn ít nhất 1 ảnh!'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
                         if (rawUrls.length > 50) {
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             const SnackBar(
@@ -197,7 +215,7 @@ class _ClassroomJournalScreenState extends State<ClassroomJournalScreen> {
                         );
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(msg ?? 'Đăng album thành công'), backgroundColor: AppColors.success),
+                            SnackBar(content: Text(msg ?? 'Đăng album thành công'), backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success),
                           );
                         }
                       },

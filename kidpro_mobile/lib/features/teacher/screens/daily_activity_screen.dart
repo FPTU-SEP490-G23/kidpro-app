@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
@@ -27,10 +28,20 @@ class _DailyActivityScreenState extends State<DailyActivityScreen>
   String _consumptionLevel = 'ALL'; // ALL, HALF, LITTLE, NONE
   final _mealNoteCtrl = TextEditingController();
 
+  // UC-74: nhật ký vệ sinh
+  String? _selectedToiletStudentId;
+  int _toiletCount = 0;
+  final _toiletNoteCtrl = TextEditingController();
+
+  // UC-44: ảnh khay cơm của lớp
+  String _trayMealType = 'LUNCH';
+  final _trayNoteCtrl = TextEditingController();
+  bool _uploadingTray = false;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final prov = context.read<TeacherProvider>();
       prov.loadStudents(prov.currentClassId);
@@ -42,6 +53,8 @@ class _DailyActivityScreenState extends State<DailyActivityScreen>
     _tabController.dispose();
     _napNoteCtrl.dispose();
     _mealNoteCtrl.dispose();
+    _toiletNoteCtrl.dispose();
+    _trayNoteCtrl.dispose();
     super.dispose();
   }
 
@@ -52,12 +65,13 @@ class _DailyActivityScreenState extends State<DailyActivityScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nhật ký Hoạt động (Ăn & Ngủ)'),
+        title: const Text('Nhật ký Hoạt động (Ăn, Ngủ, Vệ sinh)'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
             Tab(icon: Icon(Icons.bedtime), text: 'Giấc ngủ trưa'),
             Tab(icon: Icon(Icons.restaurant), text: 'Khẩu phần ăn'),
+            Tab(icon: Icon(Icons.wc), text: 'Vệ sinh'),
           ],
         ),
       ),
@@ -142,6 +156,17 @@ class _DailyActivityScreenState extends State<DailyActivityScreen>
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              Builder(builder: (_) {
+                final minutes = (_napEnd.hour * 60 + _napEnd.minute) - (_napStart.hour * 60 + _napStart.minute);
+                return Text(
+                  minutes > 0 ? 'Thời lượng ngủ: $minutes phút' : 'Giờ thức dậy phải sau giờ bắt đầu ngủ',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: minutes > 0 ? AppColors.primary : AppColors.error,
+                  ),
+                );
+              }),
               const SizedBox(height: 16),
 
               const Text('Chất lượng giấc ngủ:', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -198,6 +223,16 @@ class _DailyActivityScreenState extends State<DailyActivityScreen>
                     );
                     return;
                   }
+                  // BR-032 (MSG-209): giờ thức dậy phải sau giờ bắt đầu ngủ
+                  if (_napEnd.hour * 60 + _napEnd.minute <= _napStart.hour * 60 + _napStart.minute) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('MSG-209: Thời lượng ngủ không hợp lệ (giờ thức dậy phải sau giờ bắt đầu ngủ).'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
                   final studentId = _selectedNapStudentId ?? students.first.id;
                   final startStr = '${_napStart.hour.toString().padLeft(2, '0')}:${_napStart.minute.toString().padLeft(2, '0')}';
                   final endStr = '${_napEnd.hour.toString().padLeft(2, '0')}:${_napEnd.minute.toString().padLeft(2, '0')}';
@@ -211,7 +246,7 @@ class _DailyActivityScreenState extends State<DailyActivityScreen>
                   );
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(msg ?? 'Lưu thành công'), backgroundColor: AppColors.success),
+                      SnackBar(content: Text(msg ?? 'Lưu thành công'), backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success),
                     );
                   }
                 },
@@ -350,9 +385,123 @@ class _DailyActivityScreenState extends State<DailyActivityScreen>
                   );
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(msg ?? 'Lưu thành công'), backgroundColor: AppColors.success),
+                      SnackBar(content: Text(msg ?? 'Lưu thành công'), backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success),
                     );
                   }
+                },
+              ),
+              const SizedBox(height: 28),
+              // ── UC-44: ảnh khay cơm thực tế của lớp để phụ huynh xem ──
+              Text('Ảnh khay cơm của lớp hôm nay', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: _trayMealType,
+                decoration: const InputDecoration(labelText: 'Bữa ăn', border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: 'BREAKFAST', child: Text('Bữa sáng')),
+                  DropdownMenuItem(value: 'MORNING_SNACK', child: Text('Bữa phụ sáng')),
+                  DropdownMenuItem(value: 'LUNCH', child: Text('Bữa trưa')),
+                  DropdownMenuItem(value: 'AFTERNOON_SNACK', child: Text('Bữa xế')),
+                ],
+                onChanged: (v) => setState(() => _trayMealType = v ?? 'LUNCH'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _trayNoteCtrl,
+                decoration: const InputDecoration(labelText: 'Ghi chú (tùy chọn)', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+                icon: _uploadingTray
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.photo_camera),
+                label: const Text('Chụp & đăng ảnh khay cơm'),
+                onPressed: _uploadingTray
+                    ? null
+                    : () async {
+                        final photo = await ImagePicker()
+                            .pickImage(source: ImageSource.camera, maxWidth: 1280, imageQuality: 85);
+                        if (photo == null || !mounted) return;
+                        setState(() => _uploadingTray = true);
+                        final msg = await context.read<TeacherProvider>().uploadMealTray(
+                              photoPath: photo.path,
+                              mealType: _trayMealType,
+                              note: _trayNoteCtrl.text.trim(),
+                            );
+                        if (!mounted) return;
+                        setState(() => _uploadingTray = false);
+                        final failed = context.read<TeacherProvider>().lastActionFailed;
+                        if (!failed) _trayNoteCtrl.clear();
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(msg),
+                          backgroundColor: failed ? AppColors.error : AppColors.success,
+                        ));
+                      },
+              ),
+            ],
+          ),
+
+          // ── Tab 3: Nhật ký vệ sinh (UC-74) ──
+          ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: _selectedToiletStudentId ?? (students.isNotEmpty ? students.first.id : null),
+                decoration: const InputDecoration(labelText: 'Học sinh', border: OutlineInputBorder()),
+                items: students.map((st) => DropdownMenuItem(value: st.id, child: Text(st.fullName))).toList(),
+                onChanged: (v) => setState(() => _selectedToiletStudentId = v),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Số lần đi vệ sinh hôm nay', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline),
+                    onPressed: _toiletCount > 0 ? () => setState(() => _toiletCount--) : null,
+                  ),
+                  Text('$_toiletCount', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: _toiletCount < 20 ? () => setState(() => _toiletCount++) : null,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _toiletNoteCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Ghi chú vệ sinh',
+                  hintText: 'VD: Đi ngoài phân lỏng 1 lần, đã thay quần...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                icon: const Icon(Icons.save),
+                label: const Text('Lưu nhật ký vệ sinh'),
+                onPressed: () async {
+                  if (students.isEmpty) return;
+                  final studentId = _selectedToiletStudentId ?? students.first.id;
+                  final msg = await context.read<TeacherProvider>().recordRestroom(
+                        studentId: studentId,
+                        count: _toiletCount,
+                        note: _toiletNoteCtrl.text.trim(),
+                      );
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(msg),
+                    backgroundColor:
+                        context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success,
+                  ));
                 },
               ),
             ],

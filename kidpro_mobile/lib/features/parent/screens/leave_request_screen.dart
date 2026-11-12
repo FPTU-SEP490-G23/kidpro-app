@@ -328,6 +328,9 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen>
               } else if (req.status == 'REJECTED') {
                 statusColor = AppColors.error;
                 statusText = 'TỪ CHỐI';
+              } else if (req.status == 'CANCELLED') {
+                statusColor = Colors.grey;
+                statusText = 'ĐÃ HỦY';
               }
 
               return Card(

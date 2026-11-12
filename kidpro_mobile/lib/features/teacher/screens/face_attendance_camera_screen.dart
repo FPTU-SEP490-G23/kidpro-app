@@ -449,11 +449,12 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     HapticFeedback.heavyImpact();
     setState(() => _isProcessing = true);
 
-    // Watchdog timer: Đảm bảo không bao giờ bị treo ở bước 'đang đối chiếu' quá 8 giây
+    // Watchdog: dài hơn tổng thời gian chờ mạng (connect 15 s + receive 15 s) để không reset
+    // khi request cũ còn chạy (tránh kết quả cũ ghi đè người quét kế tiếp)
     _autoResetTimer?.cancel();
-    _autoResetTimer = Timer(const Duration(seconds: 8), () {
+    _autoResetTimer = Timer(const Duration(seconds: 32), () {
       if (mounted && _isProcessing) {
-        debugPrint('⚠️ [Watchdog] Quá thời gian chờ nhận diện AI (8s). Tự động phục hồi...');
+        debugPrint('⚠️ [Watchdog] Quá thời gian chờ nhận diện AI (32s). Tự động phục hồi...');
         setState(() {
           _isProcessing = false;
           _statusMessage = 'Hết thời gian chờ nhận diện AI. Đang quét lại...';

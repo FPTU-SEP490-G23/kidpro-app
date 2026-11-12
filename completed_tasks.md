@@ -511,3 +511,17 @@
 - Nguyên nhân: JWT lưu email làm tên đăng nhập (UserDetailsImpl.getUsername trả về email), còn PrivateChatServiceImpl/ClassChatServiceImpl chỉ tìm theo username.
 - Sửa: tìm tài khoản theo email trước, rồi đến username.
 - App phụ huynh: hiện lỗi khi không tải được mục "Nhắn riêng với cô" thay vì để trống.
+
+## 2026-11-10: Validate form "Đơn xin chuyển lớp" (app phụ huynh)
+- Thiếu lớp/lý do → hiện "Vui lòng chọn lớp và nhập lý do!"; chọn trùng lớp hiện tại → "Chọn lớp khác lớp hiện tại"; lỗi hiển thị ngay trong bottom sheet (SnackBar trước đây bị sheet che).
+- Thành công → đóng form, hiện "Nộp đơn xin chuyển lớp thành công!"; thất bại → hiện lỗi từ server trong form.
+
+## 2026-11-11: Dashboard phụ huynh – "Sổ điện tử & Nhật ký" thành 1 hàng vuốt ngang
+- _buildRecordsGrid: đổi GridView 3 cột sang ListView ngang (ô 104×104), vuốt sang để xem thêm.
+
+## 2026-11-11: Chỉ giáo viên phụ trách xe buýt mới thấy mục Xe buýt
+- TeacherProvider: thêm hasBusAssignment (dựa trên /api/teachers/bus/routes, BE đã lọc theo finance.teacher_bus_assignment); initTeacherData tải thêm loadBusRoutes().
+- Dashboard giáo viên: ẩn nút nhanh "Xe buýt" và thẻ "Xe Buýt Đưa Đón & Quét Đuôi Xe" khi chưa được phân công.
+
+## 2026-11-11: Nhật ký giấc ngủ – hiện thời lượng ngủ (TC "Nap record outside standard time")
+- Màn Nhật ký giấc ngủ: hiện "Thời lượng ngủ: N phút" ngay dưới giờ ngủ/thức; lưu xong SnackBar kèm "(Thời lượng ngủ: N phút)" lấy từ napDurationMinutes backend tính.

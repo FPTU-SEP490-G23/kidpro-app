@@ -13,16 +13,23 @@ class LessonPlanScreen extends StatefulWidget {
 
 class _LessonPlanScreenState extends State<LessonPlanScreen> {
   final _titleCtrl = TextEditingController();
-  final _fileUrlCtrl = TextEditingController(
-      text: 'https://storage.kidpro.edu.vn/plans/giao_an_tuan_10_mam_1.pdf');
-  int _weekNumber = 10;
-  final List<TextEditingController> _dayControllers = [
-    TextEditingController(text: 'Thứ 2: Thơ "Cây bàng thời niên thiếu", GD thể chất bật xa'),
-    TextEditingController(text: 'Thứ 3: KPKH Tìm hiểu các loài hoa mùa xuân quanh vườn trường'),
-    TextEditingController(text: 'Thứ 4: Tạo hình Xé dán cánh hoa ngũ sắc'),
-    TextEditingController(text: 'Thứ 5: Làm quen chữ cái O, Ô, Ơ qua trò chơi xếp hạt gấc'),
-    TextEditingController(text: 'Thứ 6: Hoạt động âm nhạc Hát & Vận động bài "Màu hoa"'),
-  ];
+  final _fileUrlCtrl = TextEditingController();
+  // Giáo án soạn cho tuần kế tiếp: số tuần ISO của Thứ Hai tuần sau
+  late final int _weekNumber = _isoWeekOf(_nextMonday());
+  final List<TextEditingController> _dayControllers = List.generate(5, (_) => TextEditingController());
+
+  static DateTime _nextMonday() {
+    final now = DateTime.now();
+    final d = DateTime(now.year, now.month, now.day);
+    return d.add(Duration(days: 8 - d.weekday));
+  }
+
+  static int _isoWeekOf(DateTime date) {
+    final thursday = date.add(Duration(days: 4 - date.weekday));
+    final firstThursday = DateTime(thursday.year, 1, 4);
+    final firstWeekThursday = firstThursday.add(Duration(days: 4 - firstThursday.weekday));
+    return 1 + thursday.difference(firstWeekThursday).inDays ~/ 7;
+  }
 
   @override
   void initState() {
@@ -44,7 +51,11 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
   }
 
   void _showSubmitModal() {
-    _titleCtrl.text = 'Kế hoạch GD Tuần $_weekNumber: Khám phá Thế giới Thực vật';
+    _titleCtrl.clear();
+    _fileUrlCtrl.clear();
+    for (final c in _dayControllers) {
+      c.clear();
+    }
 
     showModalBottomSheet(
       context: context,
@@ -137,8 +148,17 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
                   icon: const Icon(Icons.cloud_upload),
                   label: const Text('Nộp Giáo Án Lên BGH (MSG-188)'),
                   onPressed: () async {
-                    Navigator.pop(ctx);
                     final activities = _dayControllers.map((c) => c.text.trim()).toList();
+                    if (_titleCtrl.text.trim().isEmpty || activities.any((a) => a.isEmpty)) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text('Vui lòng nhập tiêu đề và đủ hoạt động cho 5 ngày (Thứ 2 → Thứ 6)!'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    Navigator.pop(ctx);
                     final prov = context.read<TeacherProvider>();
                     final msg = await prov.submitLessonPlan(
                       classId: prov.currentClassId,
@@ -149,7 +169,7 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
                     );
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(msg ?? 'Nộp thành công'), backgroundColor: AppColors.success),
+                        SnackBar(content: Text(msg ?? 'Nộp thành công'), backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success),
                       );
                     }
                   },
@@ -195,6 +215,8 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
                   itemBuilder: (context, index) {
                     final item = plans[index];
                     final isApproved = item.status == 'APPROVED';
+                    final st = item.status.toUpperCase();
+                    final isRevision = st == 'REVISION_REQUESTED' || st == 'REJECTED';
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -221,16 +243,16 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: isApproved ? Colors.green.shade50 : Colors.amber.shade50,
+                                    color: isApproved ? Colors.green.shade50 : (isRevision ? Colors.red.shade50 : Colors.amber.shade50),
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: isApproved ? Colors.green : Colors.amber),
+                                    border: Border.all(color: isApproved ? Colors.green : (isRevision ? Colors.red : Colors.amber)),
                                   ),
                                   child: Text(
-                                    isApproved ? 'BGH ĐÃ DUYỆT' : 'CHỜ BGH DUYỆT',
+                                    isApproved ? 'BGH ĐÃ DUYỆT' : (isRevision ? 'YÊU CẦU CHỈNH SỬA' : 'CHỜ BGH DUYỆT'),
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 11,
-                                      color: isApproved ? Colors.green.shade800 : Colors.amber.shade900,
+                                      color: isApproved ? Colors.green.shade800 : (isRevision ? Colors.red.shade800 : Colors.amber.shade900),
                                     ),
                                   ),
                                 ),

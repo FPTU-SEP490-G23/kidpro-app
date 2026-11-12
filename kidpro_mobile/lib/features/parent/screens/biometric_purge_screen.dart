@@ -29,21 +29,22 @@ class _BiometricPurgeScreenState extends State<BiometricPurgeScreen> {
   Future<void> _handleRequestOtp() async {
     setState(() => _submitting = true);
     final prov = context.read<ParentProvider>();
-    await prov.requestPurgeOtp();
+    final (ok, demoOtp, err) = await prov.requestPurgeOtp();
+    if (!mounted) return;
     setState(() {
       _submitting = false;
-      _step = 2;
+      if (ok) _step = 2;
     });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Mã OTP xác thực đã được gửi tới số điện thoại phụ huynh'),
-          backgroundColor: AppColors.info,
-          duration: Duration(seconds: 4),
-        ),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok
+            ? 'Mã OTP xác thực đã được gửi tới số điện thoại phụ huynh'
+                '${demoOtp != null ? ' (môi trường thử nghiệm: $demoOtp)' : ''}'
+            : err ?? 'Không gửi được mã OTP'),
+        backgroundColor: ok ? AppColors.info : AppColors.error,
+        duration: const Duration(seconds: 6),
+      ),
+    );
   }
 
   Future<void> _handleConfirmPurge() async {
@@ -60,10 +61,19 @@ class _BiometricPurgeScreenState extends State<BiometricPurgeScreen> {
       _otpCtrl.text.trim(),
       _reasonCtrl.text.trim(),
     );
+    if (!mounted) return;
     setState(() {
       _submitting = false;
       if (success) _step = 3;
     });
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(prov.error ?? 'Xác nhận xóa dữ liệu thất bại. Vui lòng kiểm tra mã OTP.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   @override
