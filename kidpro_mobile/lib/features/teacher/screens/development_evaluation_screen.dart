@@ -13,16 +13,21 @@ class DevelopmentEvaluationScreen extends StatefulWidget {
 
 class _DevelopmentEvaluationScreenState extends State<DevelopmentEvaluationScreen> {
   String? _selectedStudentId;
-  String _period = 'HỌC KỲ I - 2025-2026';
-  double _physical = 8.5;
-  double _cognitive = 8.0;
-  double _language = 9.0;
-  double _social = 8.5;
-  double _aesthetic = 8.0;
+  // Năm học bắt đầu từ tháng 9: 11/2026 -> '2026-2027'
+  static final String _schoolYear = () {
+    final now = DateTime.now();
+    final start = now.month >= 9 ? now.year : now.year - 1;
+    return '$start-${start + 1}';
+  }();
+  String _period = 'HỌC KỲ I - $_schoolYear';
+  // Điểm khởi tạo trung tính; giáo viên tự chấm theo quan sát
+  double _physical = 5.0;
+  double _cognitive = 5.0;
+  double _language = 5.0;
+  double _social = 5.0;
+  double _aesthetic = 5.0;
 
-  final _commentCtrl = TextEditingController(
-    text: 'Bé rất ngoan ngoãn và lễ phép với cô giáo. Trong các giờ hoạt động thể chất ngoài trời bé tham gia rất nhiệt tình và hòa đồng vui vẻ cùng các bạn trong lớp. Về mặt ngôn ngữ bé phát âm rõ ràng, diễn đạt câu gãy gọn mạch lạc, thích tham gia kể chuyện và đóng kịch sáng tạo.',
-  );
+  final _commentCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -111,12 +116,12 @@ class _DevelopmentEvaluationScreenState extends State<DevelopmentEvaluationScree
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.calendar_today),
             ),
-            items: const [
-              DropdownMenuItem(value: 'HỌC KỲ I - 2025-2026', child: Text('Học kỳ I (2025-2026)')),
-              DropdownMenuItem(value: 'HỌC KỲ II - 2025-2026', child: Text('Học kỳ II (2025-2026)')),
-              DropdownMenuItem(value: 'CUỐI NĂM HỌC', child: Text('Tổng kết cuối năm học')),
+            items: [
+              DropdownMenuItem(value: 'HỌC KỲ I - $_schoolYear', child: Text('Học kỳ I ($_schoolYear)')),
+              DropdownMenuItem(value: 'HỌC KỲ II - $_schoolYear', child: Text('Học kỳ II ($_schoolYear)')),
+              DropdownMenuItem(value: 'CUỐI NĂM HỌC - $_schoolYear', child: Text('Tổng kết cuối năm học ($_schoolYear)')),
             ],
-            onChanged: (val) => setState(() => _period = val ?? 'HỌC KỲ I - 2025-2026'),
+            onChanged: (val) => setState(() => _period = val ?? 'HỌC KỲ I - $_schoolYear'),
           ),
           const SizedBox(height: 20),
 
@@ -216,14 +221,53 @@ class _DevelopmentEvaluationScreenState extends State<DevelopmentEvaluationScree
               final msg = await prov.submitEvaluation(item);
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(msg ?? 'Lưu thành công'), backgroundColor: AppColors.success),
+                  SnackBar(content: Text(msg ?? 'Lưu thành công'), backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success),
                 );
               }
             },
           ),
+          const SizedBox(height: 28),
+          Text('Phiếu đánh giá đã lưu của lớp (${prov.evaluations.length})',
+              style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          if (prov.evaluations.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('Chưa có phiếu đánh giá nào.', style: TextStyle(color: Colors.grey)),
+            )
+          else
+            ...prov.evaluations.map((e) {
+              final (label, color) = _statusLabel(e.status);
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  title: Text(e.studentName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('${e.evaluationPeriod}\n'
+                      'TC ${e.physicalScore} · NT ${e.cognitiveScore} · NN ${e.languageScore} · '
+                      'XH ${e.socialEmotionalScore} · TM ${e.aestheticScore}'),
+                  isThreeLine: true,
+                  trailing: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+              );
+            }),
         ],
       ),
     );
+  }
+
+  (String, Color) _statusLabel(String status) {
+    switch (status.toUpperCase()) {
+      case 'APPROVED':
+      case 'PUBLISHED':
+        return ('ĐÃ DUYỆT', AppColors.success);
+      case 'REVISION_REQUESTED':
+      case 'REJECTED':
+        return ('YÊU CẦU SỬA', AppColors.error);
+      case 'DRAFT':
+        return ('BẢN NHÁP', Colors.grey);
+      default:
+        return ('CHỜ BGH DUYỆT', AppColors.warning);
+    }
   }
 
   Widget _buildDomainSlider(String title, double value, ValueChanged<double> onChanged) {

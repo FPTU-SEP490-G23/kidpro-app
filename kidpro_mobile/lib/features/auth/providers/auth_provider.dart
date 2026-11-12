@@ -10,6 +10,18 @@ enum AuthStatus { unknown, authenticated, unauthenticated }
 class AuthProvider extends ChangeNotifier {
   final Dio _dio = ApiClient().dio;
 
+  AuthProvider() {
+    // Interceptor xóa token khi phiên hết hạn -> cập nhật trạng thái để router đưa về /login
+    AuthInterceptor.onSessionExpired = () {
+      if (_status == AuthStatus.authenticated) {
+        _user = null;
+        _status = AuthStatus.unauthenticated;
+        _error = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+        notifyListeners();
+      }
+    };
+  }
+
   AuthStatus _status = AuthStatus.unauthenticated;
   UserProfile? _user;
   String? _error;
@@ -43,7 +55,15 @@ class AuthProvider extends ChangeNotifier {
       final res = await _dio.get(ApiEndpoints.userMe);
       _user = UserProfile.fromJson(res.data);
       _status = AuthStatus.authenticated;
-    } catch (_) {
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      if (code == 401 || code == 403) {
+        await SecureStorageHelper.clearAll();
+        _user = null;
+        _status = AuthStatus.unauthenticated;
+        notifyListeners();
+        return;
+      }
       final savedRole = await SecureStorageHelper.getRole();
       final savedUserId = await SecureStorageHelper.getUserId();
       if (savedRole != null && savedUserId != null) {
@@ -96,24 +116,24 @@ class AuthProvider extends ChangeNotifier {
         // Giữ _user đã trích xuất từ loginResp
       }
 
+      if (!isParent && !isTeacher) {
+        // App mobile chỉ dành cho Giáo viên và Phụ huynh; các vai trò khác dùng web
+        final role = _user?.role ?? '';
+        await SecureStorageHelper.clearAll();
+        _user = null;
+        _status = AuthStatus.unauthenticated;
+        _loading = false;
+        _error = 'Tài khoản vai trò $role vui lòng đăng nhập trên web KidPro.';
+        notifyListeners();
+        return false;
+      }
+
       _status = AuthStatus.authenticated;
       _loading = false;
       notifyListeners();
       return true;
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
-      if (statusCode == 401 || statusCode == 400 || statusCode == 403) {
-        // Fallback tự động: nếu đăng nhập mật khẩu test thất bại, thử Google/demo auth
-        if (email.contains('teacher') || email.contains('parent')) {
-          final isTeacherRole = email.contains('teacher');
-          final ok = await loginWithGoogleEmail(
-            email: email,
-            fullName: isTeacherRole ? 'Giáo Viên' : 'Phụ Huynh',
-          );
-          if (ok) return true;
-        }
-      }
-
       _loading = false;
       String msg = 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra địa chỉ IP backend.';
       if (statusCode == 401 || statusCode == 400 || statusCode == 403) {
@@ -133,69 +153,6 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       _loading = false;
       _error = 'Đã có lỗi xảy ra: $e';
-      _status = AuthStatus.unauthenticated;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  /// Quick login / Google auth - tự động cấp phát token hợp lệ từ Spring Boot
-  Future<bool> loginWithGoogleEmail({
-    required String email,
-    required String fullName,
-  }) async {
-    _loading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      final res = await _dio.post(
-        ApiEndpoints.googleLogin,
-        data: {
-          'email': email,
-          'fullName': fullName,
-          'avatarUrl': '',
-        },
-      );
-      final loginResp = LoginResponse.fromJson(res.data);
-
-      await SecureStorageHelper.saveAccessToken(loginResp.token);
-      await SecureStorageHelper.saveRole(loginResp.role);
-      await SecureStorageHelper.saveUserId(loginResp.userId);
-
-      _user = UserProfile(
-        id: loginResp.userId,
-        email: loginResp.email,
-        role: loginResp.role,
-        fullName: loginResp.fullName,
-        status: 'ACTIVE',
-      );
-
-      _status = AuthStatus.authenticated;
-      _loading = false;
-      notifyListeners();
-      return true;
-    } on DioException catch (e) {
-      _loading = false;
-      final statusCode = e.response?.statusCode;
-      String msg = 'Tài khoản không chính xác hoặc chưa được khởi tạo trên máy chủ';
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.receiveTimeout) {
-        msg = 'Không thể kết nối đến máy chủ (${_dio.options.baseUrl}). Vui lòng kiểm tra địa chỉ IP backend.';
-      } else if (e.response?.data is Map && e.response?.data['message'] != null) {
-        msg = '${e.response?.data['message']}';
-      } else if (statusCode == 401 || statusCode == 403 || statusCode == 400) {
-        msg = 'Tài khoản hoặc mật khẩu không chính xác ($statusCode)';
-      }
-      _error = msg;
-      _status = AuthStatus.unauthenticated;
-      _user = null;
-      notifyListeners();
-      return false;
-    } catch (e) {
-      _loading = false;
-      _error = 'Lỗi kết nối: $e';
       _status = AuthStatus.unauthenticated;
       notifyListeners();
       return false;

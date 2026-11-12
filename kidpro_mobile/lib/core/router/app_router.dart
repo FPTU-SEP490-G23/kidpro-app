@@ -36,6 +36,11 @@ import 'package:kidpro_mobile/features/teacher/screens/equipment_incident_screen
 import 'package:kidpro_mobile/features/teacher/screens/leave_request_review_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/class_chat_room_screen.dart';
 import 'package:kidpro_mobile/features/teacher/screens/classroom_journal_screen.dart';
+import 'package:kidpro_mobile/features/teacher/screens/extracurricular_attendance_screen.dart';
+import 'package:kidpro_mobile/features/teacher/screens/class_announcement_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/daily_menu_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/class_announcements_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/withdrawal_request_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -53,6 +58,10 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
         if (loggedIn && isLoginRoute) {
           return auth.isParent ? '/parent' : '/teacher';
         }
+        // Chặn truy cập chéo khu vực theo vai trò (RBAC phía app)
+        final loc = state.matchedLocation;
+        if (loggedIn && auth.isParent && loc.startsWith('/teacher')) return '/parent';
+        if (loggedIn && !auth.isParent && loc.startsWith('/parent')) return '/teacher';
         return null;
       },
       routes: [
@@ -120,6 +129,15 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
             GoRoute(
                 path: 'pickup-faces',
                 builder: (_, __) => const PickupFaceRegistrationScreen()),
+            GoRoute(
+                path: 'daily-menu',
+                builder: (_, __) => const DailyMenuScreen()),
+            GoRoute(
+                path: 'class-announcements',
+                builder: (_, __) => const ClassAnnouncementsScreen()),
+            GoRoute(
+                path: 'withdrawal',
+                builder: (_, __) => const WithdrawalRequestScreen()),
           ],
         ),
 
@@ -168,6 +186,12 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
                   GoRoute(
                       path: 'journal',
                       builder: (_, __) => const ClassroomJournalScreen()),
+                  GoRoute(
+                      path: 'class-announcements',
+                      builder: (_, __) => const ClassAnnouncementScreen()),
+                  GoRoute(
+                      path: 'extracurricular-attendance',
+                      builder: (_, __) => const ExtracurricularAttendanceScreen()),
                 ],
               ),
             ]),

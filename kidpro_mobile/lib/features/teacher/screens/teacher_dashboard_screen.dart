@@ -132,7 +132,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     ],
 
                     // Quick Action 1-Tap Hub
-                    _buildQuickActionHub(),
+                    _buildQuickActionHub(teacherProv),
                     const SizedBox(height: 20),
 
                     // Category Selector Pills
@@ -861,7 +861,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
-  Widget _buildQuickActionHub() {
+  Widget _buildQuickActionHub(TeacherProvider prov) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -875,51 +875,81 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickActionButton(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const gap = 10.0;
+            final actions = <Widget>[
+              _buildQuickActionButton(
                 title: 'Điểm danh',
                 subtitle: 'Thủ công',
                 icon: Icons.how_to_reg_rounded,
                 color: AppColors.primary,
                 onTap: () => context.go('/teacher/attendance'),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildQuickActionButton(
+              _buildQuickActionButton(
                 title: 'Quét mặt AI',
                 subtitle: 'Tự động',
                 icon: Icons.camera_front_rounded,
                 color: const Color(0xFF7C3AED),
                 onTap: () => context.push('/teacher/face-attendance'),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildQuickActionButton(
-                title: 'Xe buýt',
-                subtitle: 'Đóng chuyến',
-                icon: Icons.directions_bus_rounded,
-                color: const Color(0xFFEA580C),
-                onTap: () => context.go('/teacher/bus'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildQuickActionButton(
+              // Chỉ giáo viên được phân công lớp năng khiếu mới thấy nút này
+              if (prov.hasExtracurricularClasses)
+                _buildQuickActionButton(
+                  title: 'Năng khiếu',
+                  subtitle: _extracurricularProgress(prov),
+                  icon: Icons.palette_rounded,
+                  color: const Color(0xFFC026D3),
+                  onTap: () => context.go('/teacher/extracurricular-attendance'),
+                ),
+              // Chỉ giáo viên được phân công phụ trách xe buýt mới thấy nút này
+              if (prov.hasBusAssignment)
+                _buildQuickActionButton(
+                  title: 'Xe buýt',
+                  subtitle: 'Đóng chuyến',
+                  icon: Icons.directions_bus_rounded,
+                  color: const Color(0xFFEA580C),
+                  onTap: () => context.go('/teacher/bus'),
+                ),
+              _buildQuickActionButton(
                 title: 'Tan học',
                 subtitle: 'Trả trẻ',
                 icon: Icons.family_restroom_rounded,
                 color: const Color(0xFF0D9488),
                 onTap: () => context.go('/teacher/dismissal'),
               ),
-            ),
-          ],
+            ];
+
+            // ≤ 4 nút: chia đều cả hàng. > 4 nút: hiện ~4.4 nút, phần còn lại kéo ngang.
+            final visible = actions.length <= 4 ? actions.length.toDouble() : 4.4;
+            final itemWidth = (constraints.maxWidth - gap * (visible.ceil() - 1)) / visible;
+
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: actions.length <= 4
+                  ? const NeverScrollableScrollPhysics()
+                  : const BouncingScrollPhysics(),
+              clipBehavior: Clip.none,
+              child: Row(
+                children: [
+                  for (var i = 0; i < actions.length; i++) ...[
+                    if (i > 0) const SizedBox(width: gap),
+                    SizedBox(width: itemWidth, child: actions[i]),
+                  ],
+                ],
+              ),
+            );
+          },
         ),
       ],
     );
+  }
+
+  String _extracurricularProgress(TeacherProvider prov) {
+    final classes = prov.extracurricularClasses;
+    final int marked = classes.fold<int>(0, (s, c) => s + ((c['markedCount'] as num?)?.toInt() ?? 0));
+    final int total = classes.fold<int>(0, (s, c) => s + ((c['studentCount'] as num?)?.toInt() ?? 0));
+    return '$marked/$total bé';
   }
 
   Widget _buildQuickActionButton({
@@ -1036,6 +1066,22 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         onTap: () => context.go('/teacher/attendance'),
       ));
       widgets.add(const SizedBox(height: 10));
+      // Chỉ giáo viên được phân công lớp năng khiếu mới thấy mục này
+      if (prov.hasExtracurricularClasses) {
+        final extra = prov.extracurricularClasses;
+        final int marked = extra.fold<int>(0, (s, c) => s + ((c['markedCount'] as num?)?.toInt() ?? 0));
+        final int total = extra.fold<int>(0, (s, c) => s + ((c['studentCount'] as num?)?.toInt() ?? 0));
+        final names = extra.map((c) => c['className']?.toString() ?? '').where((n) => n.isNotEmpty).join(', ');
+        widgets.add(_ModernActionCard(
+          title: 'Điểm danh Lớp Năng Khiếu',
+          subtitle: '$names · hôm nay đã điểm danh $marked/$total bé',
+          tag: 'Bấm nút',
+          icon: Icons.palette_rounded,
+          color: const Color(0xFFC026D3),
+          onTap: () => context.go('/teacher/extracurricular-attendance'),
+        ));
+        widgets.add(const SizedBox(height: 10));
+      }
       widgets.add(_ModernActionCard(
         title: 'Camera AI Nhận Diện Khuôn Mặt',
         subtitle: 'Quét tự động qua AI Server mầm non',
@@ -1045,15 +1091,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         onTap: () => context.push('/teacher/face-attendance'),
       ));
       widgets.add(const SizedBox(height: 10));
-      widgets.add(_ModernActionCard(
-        title: 'Xe Buýt Đưa Đón & Quét Đuôi Xe',
-        subtitle: 'Quét QR đuôi xe (BR-024) đảm bảo không bỏ quên bé',
-        tag: 'G5-UC-02, 03',
-        icon: Icons.directions_bus_rounded,
-        color: const Color(0xFFEA580C),
-        onTap: () => context.go('/teacher/bus'),
-      ));
-      widgets.add(const SizedBox(height: 10));
+      // Chỉ giáo viên được phân công phụ trách xe buýt mới thấy mục này
+      if (prov.hasBusAssignment) {
+        widgets.add(_ModernActionCard(
+          title: 'Xe Buýt Đưa Đón & Quét Đuôi Xe',
+          subtitle: 'Quét QR đuôi xe (BR-024) đảm bảo không bỏ quên bé',
+          tag: 'G5-UC-02, 03',
+          icon: Icons.directions_bus_rounded,
+          color: const Color(0xFFEA580C),
+          onTap: () => context.go('/teacher/bus'),
+        ));
+        widgets.add(const SizedBox(height: 10));
+      }
       widgets.add(_ModernActionCard(
         title: 'Quét Mặt Phụ Huynh Đón Trẻ',
         subtitle: 'Đối chiếu phụ huynh trong lớp, cho đón & ghi nhận giờ về',
@@ -1197,6 +1246,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         icon: Icons.photo_library_rounded,
         color: const Color(0xFFDB2777),
         onTap: () => context.go('/teacher/journal'),
+      ));
+      widgets.add(const SizedBox(height: 10));
+      widgets.add(_ModernActionCard(
+        title: 'Thông Báo Cho Phụ Huynh Của Lớp',
+        subtitle: 'Gửi thông báo riêng cho phụ huynh lớp mình phụ trách',
+        tag: 'UC-81',
+        icon: Icons.campaign_rounded,
+        color: const Color(0xFF0EA5E9),
+        onTap: () => context.go('/teacher/class-announcements'),
       ));
       widgets.add(const SizedBox(height: 20));
     }

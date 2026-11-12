@@ -92,11 +92,17 @@ class ApiEndpoints {
   static String teacherClassStudents(String classId) =>
       '/api/teachers/classes/$classId/students';
   static const teacherAttendanceBatch = '/api/teachers/attendance/batch';
+  static const teacherUploadPhoto = '/api/teachers/uploads/photo';
   static String teacherDailyCheckin(String classId) =>
       '/api/attendance/class/$classId/daily-checkin';
   static String teacherDailyDismissal(String classId) =>
       '/api/attendance/class/$classId/daily-dismissal';
   static const teacherAttendanceCheckout = '/api/teachers/attendance/checkout';
+
+  // Teacher - Điểm danh lớp năng khiếu (chỉ GV được phân công)
+  static const teacherExtracurricularClasses = '/api/teachers/extracurricular/my-classes';
+  static String teacherExtracurricularAttendance(String extracurricularClassId) =>
+      '/api/teachers/extracurricular/classes/$extracurricularClassId/attendance';
 
   // Bus Attendance (G5-UC-02, G5-UC-03, BR-024)
   static const busCheckin = '/api/attendance/bus/stops/checkin';
@@ -139,6 +145,7 @@ class ApiEndpoints {
 
   // Health Incidents (G8-UC-04, BR-031)
   static const healthIncidents = '/api/health/incidents';
+  static String healthIncidentsByClass(String classId) => '/api/health/incidents/class/$classId';
   static String healthIncidentsByStudent(String studentId) =>
       '/api/health/incidents/student/$studentId';
   static String healthIncidentResolve(int id) =>
@@ -189,6 +196,20 @@ class ApiEndpoints {
 
   // Health
   static const medications = '/api/health/medications';
+  static const medicationProofPhoto = '/api/health/medications/proof-photo';
+  // UC-72: giáo viên tiếp nhận / từ chối thuốc phụ huynh gửi
+  static String medicationReceive(String id) => '/api/health/medications/$id/receive';
+  static String medicationReject(String id) => '/api/health/medications/$id/reject';
+  // UC-74: nhật ký vệ sinh
+  static const restroomRecords = '/api/health/restroom-records';
+  // UC-44: ảnh khay cơm & thực đơn ngày
+  static const teacherMealTrays = '/api/teachers/meal-trays';
+  static String parentDailyMenu(String studentId) => '/api/parents/students/$studentId/daily-menu';
+  // UC-81: thông báo theo lớp
+  static const teacherClassAnnouncements = '/api/teachers/class-announcements';
+  static String parentClassAnnouncements(String studentId) => '/api/parents/students/$studentId/class-announcements';
+  // UC-26: đơn thôi học / chuyển trường
+  static const parentWithdrawalRequests = '/api/parents/withdrawal-requests';
   static String medicationAdminister(String id) =>
       '/api/health/medications/$id/administer';
   static const mealRecords = '/api/health/meal-records';

@@ -107,6 +107,14 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
         onTap: () => _showOtherRequestDialog(context, prov),
       ),
       _RequestCategoryItem(
+        title: 'Đơn thôi học / chuyển trường',
+        subtitle: 'Gửi đơn rút hồ sơ, theo dõi giáo vụ xử lý',
+        icon: Icons.logout,
+        color: Colors.brown,
+        badge: 'UC-26',
+        onTap: () => context.push('/parent/withdrawal'),
+      ),
+      _RequestCategoryItem(
         title: 'Quyền riêng tư AI (NĐ 13)',
         subtitle: 'Yêu cầu xóa toàn bộ dữ liệu sinh trắc học khuôn mặt',
         icon: Icons.shield_outlined,
@@ -220,6 +228,7 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
     String? selectedToClassId =
         prov.availableClasses.isNotEmpty ? prov.availableClasses.first.id : null;
     final reasonCtrl = TextEditingController();
+    String? errorMsg;
 
     showModalBottomSheet(
       context: context,
@@ -279,6 +288,11 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
+              if (errorMsg != null) ...[
+                const SizedBox(height: 12),
+                Text(errorMsg!,
+                    style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w600)),
+              ],
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
@@ -290,23 +304,37 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () async {
+                    // Lỗi hiển thị ngay trong form vì SnackBar của màn hình bị bottom sheet che.
                     if (selectedToClassId == null || reasonCtrl.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Vui lòng chọn lớp và nhập lý do!')),
-                      );
+                      setModalState(() => errorMsg = 'Vui lòng chọn lớp và nhập lý do!');
                       return;
                     }
-                    Navigator.pop(ctx);
+                    final current = prov.selectedStudent;
+                    final toClass =
+                        prov.availableClasses.where((c) => c.id == selectedToClassId).firstOrNull;
+                    final sameClass = (current?.classId != null &&
+                            current!.classId == selectedToClassId) ||
+                        (current?.className != null && toClass?.title == current!.className);
+                    if (sameClass) {
+                      setModalState(() => errorMsg = 'Chọn lớp khác lớp hiện tại');
+                      return;
+                    }
+                    setModalState(() => errorMsg = null);
                     final success = await prov.submitClassTransfer(
                       studentId: prov.selectedStudentId,
                       toClassId: selectedToClassId!,
                       reason: reasonCtrl.text.trim(),
                     );
-                    if (success && context.mounted) {
+                    if (!ctx.mounted) return;
+                    if (!success) {
+                      setModalState(() => errorMsg = prov.error ?? 'Nộp đơn chuyển lớp thất bại');
+                      return;
+                    }
+                    Navigator.pop(ctx);
+                    if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Nộp đơn xin chuyển lớp thành công!')),
                       );
-                      context.pop();
                     }
                   },
                   child: const Text('Gửi đơn xin chuyển lớp',

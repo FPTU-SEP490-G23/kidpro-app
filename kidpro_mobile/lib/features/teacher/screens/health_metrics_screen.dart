@@ -259,7 +259,7 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(msg ?? 'Lưu thành công'),
-                              backgroundColor: AppColors.success,
+                              backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success,
                             ),
                           );
                         }
