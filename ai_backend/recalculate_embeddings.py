@@ -18,17 +18,17 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-# Ensure ai_backend is on path
+# Ensure ai_backend is on path for runtime execution
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 AI_BACKEND_DIR = os.path.join(SCRIPT_DIR, "..", "kidpro_app", "ai_backend")
 if os.path.exists(AI_BACKEND_DIR):
     sys.path.insert(0, os.path.abspath(AI_BACKEND_DIR))
 
 try:
-    from face_detector import align_face, YOLOFaceDetector
+    from kidpro_app.ai_backend.face_detector import align_face, YOLOFaceDetector  # type: ignore
 except (ImportError, ModuleNotFoundError):
     try:
-        from kidpro_app.ai_backend.face_detector import align_face, YOLOFaceDetector
+        from face_detector import align_face, YOLOFaceDetector  # type: ignore
     except (ImportError, ModuleNotFoundError) as e:
         print(f"❌ Missing face_detector: {e}")
         sys.exit(1)
