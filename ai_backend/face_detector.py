@@ -109,3 +109,50 @@ def align_face(img: np.ndarray, landmarks5: np.ndarray, size: int = 112) -> np.n
 
     aligned = cv2.warpAffine(img, M, (size, size), borderMode=cv2.BORDER_CONSTANT, borderValue=0)
     return aligned
+
+
+def estimate_head_yaw(landmarks5: np.ndarray) -> float:
+    """
+    OPT-004: Estimate head yaw angle (degrees) from 5 landmarks.
+    Landmarks order: [left_eye, right_eye, nose, left_mouth, right_mouth].
+    In image coordinates (origin top-left):
+    - Left eye has smaller x than right eye when viewed normally.
+    - When head turns to image-right, nose moves towards right eye -> ratio > 0.
+    - When head turns to image-left, nose moves towards left eye -> ratio < 0.
+    Returns estimated yaw angle in degrees (-60° to +60°).
+    """
+    if landmarks5 is None or len(landmarks5) < 3:
+        return 0.0
+    left_eye = landmarks5[0]
+    right_eye = landmarks5[1]
+    nose = landmarks5[2]
+    eye_mid_x = (left_eye[0] + right_eye[0]) / 2.0
+    eye_dist = abs(right_eye[0] - left_eye[0])
+    if eye_dist < 1e-4:
+        return 0.0
+    ratio = (nose[0] - eye_mid_x) / eye_dist
+    yaw_deg = float(np.clip(ratio * 70.0, -60.0, 60.0))
+    return yaw_deg
+
+
+class AntiSpoofResult:
+    def __init__(self, is_real: bool, score: float, details: Optional[dict] = None):
+        self.is_real = is_real
+        self.score = float(score)
+        self.details = details or {}
+
+
+class BaseAntiSpoofDetector(ABC):
+    @abstractmethod
+    def check_spoof(self, img: np.ndarray, face_box: Optional[np.ndarray] = None) -> AntiSpoofResult:
+        """Check if face is real or presentation attack (photo/screen/print)."""
+        pass
+
+
+class MockAntiSpoofDetector(BaseAntiSpoofDetector):
+    def __init__(self, passthrough: bool = True):
+        self.passthrough = passthrough
+
+    def check_spoof(self, img: np.ndarray, face_box: Optional[np.ndarray] = None) -> AntiSpoofResult:
+        return AntiSpoofResult(is_real=self.passthrough, score=0.99, details={"method": "mock_passthrough"})
+
