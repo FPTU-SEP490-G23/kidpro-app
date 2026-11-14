@@ -32,13 +32,21 @@ ONNX_INTER_THREADS = int(os.getenv("ONNX_INTER_THREADS", "1"))
 # CONFIGURATION & INITIALIZATION (WARN-01, WARN-02, WARN-06)
 # ==========================================
 DB_PATH = os.getenv("DB_PATH", "attendance.db")
-EMBEDDINGS_FILE = os.getenv("EMBEDDINGS_FILE", "embeddings.pkl")
+EMBEDDINGS_FILE = os.getenv("EMBEDDINGS_FILE", "embeddings.npz")
 PICKUP_CACHE_FILE = os.getenv("PICKUP_CACHE_FILE", "pickup_embeddings.pkl")
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.60"))
 BLUR_THRESHOLD = float(os.getenv("BLUR_THRESHOLD", "60.0"))
 INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "kidpro_internal_secret_key_2026")
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "face_yolov8n.pt")
+YOLO_FACE_MODEL_PATH = os.getenv("YOLO_FACE_MODEL_PATH", YOLO_MODEL_PATH)
 ARCFACE_MODEL_PATH = os.getenv("ARCFACE_MODEL_PATH", "arcface_w600k_r50.onnx")
+
+# Pipeline and Model Versioning Constants (OPT-001, OPT-007)
+PIPELINE_VERSION = "v2_umeyama_align"
+MODEL_NAME = "arcface_w600k_r50"
+EMBEDDING_DIM = 512
+
+from face_detector import align_face, ARCFACE_STANDARD_TEMPLATE_112, YOLOFaceDetector, BaseFaceDetector
 
 # Global in-memory cache for fast vector dot-product matching (thread-safe protected)
 embeddings_lock = threading.RLock()
@@ -46,6 +54,7 @@ pickup_lock = threading.RLock()
 
 registered_embeddings: Optional[np.ndarray] = None
 registered_student_ids: List[str] = []
+cached_pipeline_version: str = "v1_raw_crop"
 pickup_face_cache: dict = {}
 
 def get_embeddings_snapshot():
@@ -67,8 +76,70 @@ def update_pickup_cache_atomic(new_cache: dict):
     with pickup_lock:
         pickup_face_cache = dict(new_cache)
 
+def save_embeddings_to_npz(path: str, embeddings: np.ndarray, student_ids: List[str], metadata: dict):
+    tmp_path = f"{path}.tmp.npz"
+    meta_json = json.dumps(metadata)
+    np.savez(
+        tmp_path,
+        embeddings=embeddings.astype(np.float32),
+        student_ids=np.array([str(s) for s in student_ids], dtype=str),
+        metadata=np.array([meta_json], dtype=str)
+    )
+    if os.path.exists(path):
+        try:
+            os.replace(tmp_path, path)
+        except Exception:
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+            os.rename(tmp_path, path)
+    else:
+        os.rename(tmp_path, path)
+
+def load_embeddings_from_file(path: str):
+    # Try .npz first
+    npz_candidates = [path] if path.endswith(".npz") else [f"{os.path.splitext(path)[0]}.npz", path]
+    for npz_path in npz_candidates:
+        if os.path.exists(npz_path) and not npz_path.endswith(".pkl"):
+            try:
+                with np.load(npz_path, allow_pickle=False) as data:
+                    embeddings = data["embeddings"]
+                    student_ids = [str(s) for s in data["student_ids"]]
+                    meta_raw = data.get("metadata")
+                    if meta_raw is not None and len(meta_raw) > 0:
+                        metadata = json.loads(str(meta_raw[0]))
+                    else:
+                        metadata = {}
+                    return embeddings, student_ids, metadata
+            except Exception as e:
+                print(f"⚠️ Error reading npz vector store {npz_path}: {e}")
+
+    # Fallback to legacy .pkl
+    pkl_candidates = [path] if path.endswith(".pkl") else [f"{os.path.splitext(path)[0]}.pkl", "embeddings.pkl"]
+    for pkl_path in pkl_candidates:
+        if os.path.exists(pkl_path):
+            try:
+                with open(pkl_path, "rb") as f:
+                    data = pickle.load(f)
+                    embeddings = data.get("embeddings")
+                    student_ids = list(data.get("student_ids", []))
+                    metadata = {
+                        "model_name": MODEL_NAME,
+                        "pipeline_version": "v1_raw_crop",
+                        "dim": EMBEDDING_DIM,
+                        "created_at": "legacy_pickle"
+                    }
+                    print(f"⚠️ Đã nạp kho vector cũ (Pickle) từ {pkl_path}: gán mặc định pipeline_version='v1_raw_crop'")
+                    return embeddings, student_ids, metadata
+            except Exception as e:
+                print(f"⚠️ Error reading legacy pickle file {pkl_path}: {e}")
+
+    return None, [], {}
+
 # Model references initialized via FastAPI lifespan (WARN-01)
 yolo_detector = None
+face_detector: Optional[BaseFaceDetector] = None
 arcface_session = None
 arcface_input_name = None
 arcface_output_name = None
@@ -122,21 +193,27 @@ def check_image_blur(img: np.ndarray, threshold: float = BLUR_THRESHOLD) -> tupl
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global yolo_detector, arcface_session, arcface_input_name, arcface_output_name
+    global yolo_detector, face_detector, arcface_session, arcface_input_name, arcface_output_name
     print("🚀 [Lifespan] Khởi tạo AI Engine và nạp weights mô hình...")
     init_db()
     load_embeddings_cache()
     load_pickup_cache()
 
-    # 1. Load YOLOv8n-Face detector
+    # 1. Load YOLOv8-Face detector (OPT-001)
+    model_path_to_use = YOLO_FACE_MODEL_PATH if os.path.exists(YOLO_FACE_MODEL_PATH) else YOLO_MODEL_PATH
     ensure_model_file(
-        YOLO_MODEL_PATH,
+        model_path_to_use,
         "https://huggingface.co/Bingsu/adetailer/resolve/main/face_yolov8n.pt"
     )
-    print(f"🔄 Đang nạp mô hình YOLOv8n-Face detector từ {YOLO_MODEL_PATH}...")
-    yolo_detector = YOLO(YOLO_MODEL_PATH)
+    print(f"🔄 Đang nạp mô hình YOLOv8-Face detector từ {model_path_to_use}...")
+    yolo_detector = YOLO(model_path_to_use)
+    face_detector = YOLOFaceDetector(
+        yolo_detector,
+        simulate_landmarks_if_missing=bool(os.getenv("SIMULATE_LANDMARKS_IF_MISSING", "true").lower() in ("true", "1"))
+    )
     app.state.yolo_detector = yolo_detector
-    print("✅ YOLOv8n-Face detector đã sẵn sàng!")
+    app.state.face_detector = face_detector
+    print("✅ YOLOv8-Face detector đã sẵn sàng!")
 
     # 2. Load ArcFace ONNX feature extractor
     ensure_model_file(
@@ -210,28 +287,32 @@ def init_db():
 
 
 def load_embeddings_cache():
-    if os.path.exists(EMBEDDINGS_FILE):
-        try:
-            with open(EMBEDDINGS_FILE, "rb") as f:
-                data = pickle.load(f)
-                new_embeddings = data.get("embeddings")
-                new_student_ids = data.get("student_ids", [])
-                update_embeddings_atomic(new_embeddings, new_student_ids)
-                print(f"📦 Đã nạp {len(new_student_ids)} vector khuôn mặt từ cache {EMBEDDINGS_FILE}")
-        except Exception as e:
-            print(f"⚠️ Không thể đọc cache: {e}")
-            update_embeddings_atomic(None, [])
+    global cached_pipeline_version
+    emb, ids, meta = load_embeddings_from_file(EMBEDDINGS_FILE)
+    cached_pipeline_version = meta.get("pipeline_version", "v1_raw_crop")
+    update_embeddings_atomic(emb, ids)
+    if emb is not None and len(ids) > 0:
+        if cached_pipeline_version != PIPELINE_VERSION:
+            print(f"⚠️ CẢNH BÁO OPT-007: Kho vector đang ở phiên bản '{cached_pipeline_version}', khác với pipeline hiện tại '{PIPELINE_VERSION}'!")
+        else:
+            print(f"📦 Đã nạp {len(ids)} vector khuôn mặt chuẩn '{cached_pipeline_version}'")
     else:
-        update_embeddings_atomic(None, [])
+        print(f"📦 Kho vector rỗng. Sẵn sàng nhận đăng ký phiên bản '{PIPELINE_VERSION}'")
 
 
 def save_embeddings_cache():
+    global cached_pipeline_version
     snap_embeddings, snap_student_ids = get_embeddings_snapshot()
-    with open(EMBEDDINGS_FILE, "wb") as f:
-        pickle.dump({
-            "embeddings": snap_embeddings,
-            "student_ids": snap_student_ids
-        }, f)
+    if snap_embeddings is not None and len(snap_student_ids) > 0:
+        meta = {
+            "model_name": MODEL_NAME,
+            "pipeline_version": PIPELINE_VERSION,
+            "dim": EMBEDDING_DIM,
+            "created_at": datetime.now().isoformat()
+        }
+        npz_path = EMBEDDINGS_FILE if EMBEDDINGS_FILE.endswith(".npz") else f"{os.path.splitext(EMBEDDINGS_FILE)[0]}.npz"
+        save_embeddings_to_npz(npz_path, snap_embeddings, snap_student_ids, meta)
+        cached_pipeline_version = PIPELINE_VERSION
 
 
 def load_pickup_cache():
@@ -275,72 +356,51 @@ async def read_image_from_upload(upload_file: UploadFile) -> np.ndarray:
 
 def extract_l2_normalized_embedding(img: np.ndarray, require_face: bool = False) -> Optional[np.ndarray]:
     """
-    Pipeline 2 giai đoạn cải tiến (Khả năng chịu góc nghiêng & TTA):
-    1. YOLOv8n-Face phát hiện khuôn mặt & cắt theo tỉ lệ vuông 1:1 quanh tâm mặt.
-    2. Mở rộng lề 25% chống mất trán/tai khi nghiêng góc.
-    3. Đưa vào ArcFace trích xuất vector 512-dim kết hợp ảnh gốc + ảnh lật ngang (TTA - Test-Time Augmentation).
-    require_face=True: trả về None nếu không phát hiện khuôn mặt (dùng cho API so khớp 1-1 compare).
+    OPT-001: Pipeline Umeyama 5-Landmark Alignment + ArcFace ONNX (512-dim) + TTA.
+    Căn chỉnh khuôn mặt bằng Umeyama Similarity Transform dựa trên 5 điểm mốc
+    (mắt trái, mắt phải, mũi, khóe miệng trái, khóe miệng phải) về template ArcFace 112x112 chuẩn.
+    Nếu không phát hiện được khuôn mặt hoặc thiếu landmark, trả về None (không fallback crop thô).
     """
     if img is None or img.size == 0:
         return None
 
-    # 1. Phát hiện khuôn mặt bằng YOLOv8 (conf 0.35 -> fallback 0.12)
-    results = yolo_detector(img, conf=0.35, verbose=False)
-    boxes = results[0].boxes
-    if len(boxes) == 0:
-        results = yolo_detector(img, conf=0.12, verbose=False)
-        boxes = results[0].boxes
+    global face_detector, arcface_session, arcface_input_name, arcface_output_name
+    if face_detector is None:
+        # Fallback if accessed before lifespan
+        if yolo_detector is not None:
+            face_detector = YOLOFaceDetector(yolo_detector, simulate_landmarks_if_missing=True)
+        else:
+            return None
 
-    h, w = img.shape[:2]
-
-    if len(boxes) > 0:
-        # Chọn khuôn mặt lớn nhất trong khung hình (trọng tâm bức ảnh)
-        best_box = max(boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0]) * (b.xyxy[0][3] - b.xyxy[0][1]))
-        xyxy = best_box.xyxy[0].cpu().numpy().astype(int)
-
-        # Cắt theo hình vuông quanh tâm mặt (Square Crop 1:1) để không bị kéo méo khi nghiêng góc
-        cx = (xyxy[0] + xyxy[2]) / 2.0
-        cy = (xyxy[1] + xyxy[3]) / 2.0
-        box_w = xyxy[2] - xyxy[0]
-        box_h = xyxy[3] - xyxy[1]
-        max_side = max(box_w, box_h)
-        # Mở rộng 25% lề an toàn
-        side = int(max_side * 1.25)
-
-        x1 = max(0, int(cx - side / 2.0))
-        y1 = max(0, int(cy - side / 2.0))
-        x2 = min(w, int(cx + side / 2.0))
-        y2 = min(h, int(cy + side / 2.0))
-        face_crop = img[y1:y2, x1:x2]
-    elif require_face:
+    # 1. Phát hiện khuôn mặt lớn nhất & trích xuất 5 landmarks
+    det = face_detector.detect(img, conf=0.35)
+    if det is None or det.landmarks is None:
         return None
-    else:
-        # Fallback ảnh chân dung tự động cắt trung tâm
-        margin_x = int(w * 0.10)
-        margin_y = int(h * 0.10)
-        face_crop = img[margin_y:h-margin_y, margin_x:w-margin_x]
 
-    if face_crop is None or face_crop.size == 0:
-        face_crop = img
+    # 2. Căn chỉnh afin tương đồng Umeyama về chuẩn ArcFace 112x112
+    try:
+        face_aligned = align_face(img, det.landmarks, size=112)
+    except Exception as e:
+        print(f"⚠️ Umeyama alignment error: {e}")
+        return None
 
-    # 2. Tiền xử lý ảnh gốc đưa vào ArcFace ONNX
-    face_resized = cv2.resize(face_crop, (112, 112))
-    face_rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB)
+    # 3. Tiền xử lý ArcFace chuẩn (BGR -> RGB -> normalize [-1, 1] -> NCHW)
+    face_rgb = cv2.cvtColor(face_aligned, cv2.COLOR_BGR2RGB)
     face_norm = (face_rgb.astype(np.float32) - 127.5) / 128.0
     face_blob = np.transpose(face_norm, (2, 0, 1))
     face_blob = np.expand_dims(face_blob, axis=0)
 
-    # 3. Trích xuất đặc trưng ảnh gốc
+    # 4. Trích xuất đặc trưng ảnh gốc
     raw_emb1 = arcface_session.run([arcface_output_name], {arcface_input_name: face_blob})[0][0]
 
-    # 4. Kỹ thuật TTA (Test-Time Augmentation): trích xuất thêm ảnh lật ngang để chống sai lệch góc nghiêng
+    # 5. Kỹ thuật TTA (Test-Time Augmentation): trích xuất thêm ảnh lật ngang
     face_flip = cv2.flip(face_rgb, 1)
     face_flip_norm = (face_flip.astype(np.float32) - 127.5) / 128.0
     face_flip_blob = np.transpose(face_flip_norm, (2, 0, 1))
     face_flip_blob = np.expand_dims(face_flip_blob, axis=0)
     raw_emb2 = arcface_session.run([arcface_output_name], {arcface_input_name: face_flip_blob})[0][0]
 
-    # 5. Kết hợp 2 vector và chuẩn hóa L2 (tối ưu hóa độ tương đồng góc nghiêng)
+    # 6. Kết hợp 2 vector và chuẩn hóa L2
     combined_emb = raw_emb1 + raw_emb2
     norm = np.linalg.norm(combined_emb)
     if norm > 0:
@@ -352,15 +412,21 @@ def extract_l2_normalized_embedding(img: np.ndarray, require_face: bool = False)
 # ==========================================
 # API ENDPOINTS
 # ==========================================
+@app.get("/health")
 @app.get("/")
 def root():
+    snap_emb, snap_ids = get_embeddings_snapshot()
+    version_matched = (cached_pipeline_version == PIPELINE_VERSION) if (snap_emb is not None and len(snap_ids) > 0) else True
     return {
         "service": "KidPro Face Attendance AI",
-        "status": "ONLINE",
-        "registered_students_count": len(registered_student_ids),
+        "status": "ONLINE" if version_matched else "DEGRADED_VERSION_MISMATCH",
+        "pipeline_version": PIPELINE_VERSION,
+        "cached_pipeline_version": cached_pipeline_version,
+        "version_matched": version_matched,
+        "model_name": MODEL_NAME,
+        "registered_students_count": len(snap_ids),
         "similarity_threshold": SIMILARITY_THRESHOLD,
-        "model": "YOLOv8n-Face (Detection ~6MB) + ArcFace ONNX (Embedding 512-dim)",
-        "network": "Listening on 0.0.0.0:8000 (Supports Wi-Fi LAN & USB Reverse simultaneously)",
+        "network": "Internal server-to-server ready",
     }
 
 
@@ -401,6 +467,11 @@ async def register_student(
     # 3. Cập nhật Vector Cache trong RAM nguyên tử
     with embeddings_lock:
         snap_emb, snap_ids = get_embeddings_snapshot()
+        if len(snap_ids) > 0 and cached_pipeline_version != PIPELINE_VERSION:
+            raise HTTPException(
+                status_code=409,
+                detail=f"EMBEDDING_VERSION_MISMATCH: Kho vector đang ở phiên bản '{cached_pipeline_version}'. Không thể đăng ký mới khi chưa recalculate sang '{PIPELINE_VERSION}'."
+            )
         if student_id in snap_ids:
             idx = snap_ids.index(student_id)
             new_emb = snap_emb.copy()
@@ -558,6 +629,18 @@ def _sync_check_in(img_bytes: bytes, class_id: Optional[str]):
             "status": "UNKNOWN",
             "confidence_score": 0.0,
             "message": "Chưa có học sinh nào được đăng ký trong hệ thống",
+        }
+
+    # Guard lúc chạy OPT-007: Từ chối so khớp chéo phiên bản
+    if cached_pipeline_version != PIPELINE_VERSION:
+        print(f"🛑 [OPT-007] Từ chối so khớp chéo phiên bản: cached='{cached_pipeline_version}', current='{PIPELINE_VERSION}'")
+        return {
+            "status": "ERROR",
+            "error_code": "EMBEDDING_VERSION_MISMATCH",
+            "confidence_score": 0.0,
+            "message": f"EMBEDDING_VERSION_MISMATCH: Kho vector phiên bản '{cached_pipeline_version}' không tương thích với pipeline '{PIPELINE_VERSION}'. Vui lòng chạy recalculate_embeddings.py.",
+            "pipeline_version": PIPELINE_VERSION,
+            "cached_pipeline_version": cached_pipeline_version,
         }
 
     if class_id:
