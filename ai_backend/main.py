@@ -1,8 +1,10 @@
+import asyncio
 import io
 import json
 import os
 import pickle
 import sqlite3
+import threading
 import urllib.request
 from datetime import datetime
 from typing import List, Optional
@@ -14,6 +16,17 @@ import onnxruntime as ort
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
+
+# Limit PyTorch CPU threads to avoid CPU oversubscription
+TORCH_NUM_THREADS = int(os.getenv("TORCH_NUM_THREADS", "2"))
+try:
+    import torch
+    torch.set_num_threads(TORCH_NUM_THREADS)
+except Exception:
+    pass
+
+ONNX_INTRA_THREADS = int(os.getenv("ONNX_INTRA_THREADS", "2"))
+ONNX_INTER_THREADS = int(os.getenv("ONNX_INTER_THREADS", "1"))
 
 # ==========================================
 # CONFIGURATION & INITIALIZATION (WARN-01, WARN-02, WARN-06)
@@ -27,10 +40,32 @@ INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "kidpro_internal_secret
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "face_yolov8n.pt")
 ARCFACE_MODEL_PATH = os.getenv("ARCFACE_MODEL_PATH", "arcface_w600k_r50.onnx")
 
-# Global in-memory cache for fast vector dot-product matching
+# Global in-memory cache for fast vector dot-product matching (thread-safe protected)
+embeddings_lock = threading.RLock()
+pickup_lock = threading.RLock()
+
 registered_embeddings: Optional[np.ndarray] = None
 registered_student_ids: List[str] = []
 pickup_face_cache: dict = {}
+
+def get_embeddings_snapshot():
+    with embeddings_lock:
+        return registered_embeddings, list(registered_student_ids)
+
+def update_embeddings_atomic(new_embeddings: Optional[np.ndarray], new_student_ids: List[str]):
+    global registered_embeddings, registered_student_ids
+    with embeddings_lock:
+        registered_embeddings = new_embeddings
+        registered_student_ids = list(new_student_ids)
+
+def get_pickup_cache_snapshot():
+    with pickup_lock:
+        return dict(pickup_face_cache)
+
+def update_pickup_cache_atomic(new_cache: dict):
+    global pickup_face_cache
+    with pickup_lock:
+        pickup_face_cache = dict(new_cache)
 
 # Model references initialized via FastAPI lifespan (WARN-01)
 yolo_detector = None
@@ -109,8 +144,11 @@ async def lifespan(app: FastAPI):
         "https://huggingface.co/maze/faceX/resolve/main/w600k_r50.onnx",
         fallback_path=os.path.expanduser("~/.insightface/models/buffalo_l/w600k_r50.onnx")
     )
-    print(f"🔄 Đang nạp ArcFace ONNX feature extractor từ {ARCFACE_MODEL_PATH}...")
-    arcface_session = ort.InferenceSession(ARCFACE_MODEL_PATH, providers=["CPUExecutionProvider"])
+    print(f"🔄 Đang nạp ArcFace ONNX feature extractor từ {ARCFACE_MODEL_PATH} (intra_threads={ONNX_INTRA_THREADS}, inter_threads={ONNX_INTER_THREADS})...")
+    sess_options = ort.SessionOptions()
+    sess_options.intra_op_num_threads = ONNX_INTRA_THREADS
+    sess_options.inter_op_num_threads = ONNX_INTER_THREADS
+    arcface_session = ort.InferenceSession(ARCFACE_MODEL_PATH, sess_options=sess_options, providers=["CPUExecutionProvider"])
     arcface_input_name = arcface_session.get_inputs()[0].name
     arcface_output_name = arcface_session.get_outputs()[0].name
     app.state.arcface_session = arcface_session
@@ -172,51 +210,49 @@ def init_db():
 
 
 def load_embeddings_cache():
-    global registered_embeddings, registered_student_ids
     if os.path.exists(EMBEDDINGS_FILE):
         try:
             with open(EMBEDDINGS_FILE, "rb") as f:
                 data = pickle.load(f)
-                registered_embeddings = data.get("embeddings")
-                registered_student_ids = data.get("student_ids", [])
-                print(f"📦 Đã nạp {len(registered_student_ids)} vector khuôn mặt từ cache {EMBEDDINGS_FILE}")
+                new_embeddings = data.get("embeddings")
+                new_student_ids = data.get("student_ids", [])
+                update_embeddings_atomic(new_embeddings, new_student_ids)
+                print(f"📦 Đã nạp {len(new_student_ids)} vector khuôn mặt từ cache {EMBEDDINGS_FILE}")
         except Exception as e:
             print(f"⚠️ Không thể đọc cache: {e}")
-            registered_embeddings = None
-            registered_student_ids = []
+            update_embeddings_atomic(None, [])
     else:
-        registered_embeddings = None
-        registered_student_ids = []
+        update_embeddings_atomic(None, [])
 
 
 def save_embeddings_cache():
-    global registered_embeddings, registered_student_ids
+    snap_embeddings, snap_student_ids = get_embeddings_snapshot()
     with open(EMBEDDINGS_FILE, "wb") as f:
         pickle.dump({
-            "embeddings": registered_embeddings,
-            "student_ids": registered_student_ids
+            "embeddings": snap_embeddings,
+            "student_ids": snap_student_ids
         }, f)
 
 
 def load_pickup_cache():
-    global pickup_face_cache
     if os.path.exists(PICKUP_CACHE_FILE):
         try:
             with open(PICKUP_CACHE_FILE, "rb") as f:
-                pickup_face_cache = pickle.load(f)
-                print(f"📦 Đã nạp {len(pickup_face_cache)} vector khuôn mặt người đón từ cache {PICKUP_CACHE_FILE}")
+                new_cache = pickle.load(f)
+                update_pickup_cache_atomic(new_cache)
+                print(f"📦 Đã nạp {len(new_cache)} vector khuôn mặt người đón từ cache {PICKUP_CACHE_FILE}")
         except Exception as e:
             print(f"⚠️ Không thể đọc cache người đón: {e}")
-            pickup_face_cache = {}
+            update_pickup_cache_atomic({})
     else:
-        pickup_face_cache = {}
+        update_pickup_cache_atomic({})
 
 
 def save_pickup_cache():
-    global pickup_face_cache
+    snap_cache = get_pickup_cache_snapshot()
     try:
         with open(PICKUP_CACHE_FILE, "wb") as f:
-            pickle.dump(pickup_face_cache, f)
+            pickle.dump(snap_cache, f)
     except Exception as e:
         print(f"⚠️ Không thể ghi cache người đón: {e}")
 
@@ -224,13 +260,17 @@ def save_pickup_cache():
 # ==========================================
 # FACE EXTRACTION PIPELINE (YOLOv8 + ArcFace)
 # ==========================================
-async def read_image_from_upload(upload_file: UploadFile) -> np.ndarray:
-    contents = await upload_file.read()
+def decode_image_bytes(contents: bytes) -> np.ndarray:
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(status_code=400, detail="Không thể giải mã tệp ảnh.")
     return img
+
+
+async def read_image_from_upload(upload_file: UploadFile) -> np.ndarray:
+    contents = await upload_file.read()
+    return await asyncio.to_thread(decode_image_bytes, contents)
 
 
 def extract_l2_normalized_embedding(img: np.ndarray, require_face: bool = False) -> Optional[np.ndarray]:
@@ -332,20 +372,18 @@ async def register_student(
     class_id: Optional[str] = Form(None, description="Mã ID lớp học"),
     file: UploadFile = File(..., description="Ảnh chân dung học sinh"),
 ):
-    global registered_embeddings, registered_student_ids
-
-    # 1. Giải mã và trích xuất vector đặc trưng
-    img = await read_image_from_upload(file)
-
-    # 1b. Kiểm tra ảnh mờ (WARN-02)
-    is_blurred, blur_score = check_image_blur(img, BLUR_THRESHOLD)
-    if is_blurred:
+    contents = await file.read()
+    embedding, blur_score, err = await asyncio.to_thread(
+        _sync_extract_and_blur_check, contents, BLUR_THRESHOLD, False
+    )
+    if err == "DECODE_ERROR":
+        raise HTTPException(status_code=400, detail="Không thể giải mã tệp ảnh.")
+    elif err == "BLURRED":
         raise HTTPException(
             status_code=400,
             detail=f"Ảnh chân dung quá mờ hoặc rung lắc (độ nét {blur_score:.1f} < {BLUR_THRESHOLD}). Vui lòng chọn ảnh chụp rõ nét hơn."
         )
-    embedding = extract_l2_normalized_embedding(img)
-    if embedding is None:
+    elif err == "NO_FACE":
         raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh chân dung.")
 
     # 2. Lưu thông tin vào SQLite
@@ -360,16 +398,21 @@ async def register_student(
     finally:
         conn.close()
 
-    # 3. Cập nhật Vector Cache trong RAM
-    if student_id in registered_student_ids:
-        idx = registered_student_ids.index(student_id)
-        registered_embeddings[idx] = embedding
-    else:
-        registered_student_ids.append(student_id)
-        if registered_embeddings is None or len(registered_embeddings) == 0:
-            registered_embeddings = np.expand_dims(embedding, axis=0)
+    # 3. Cập nhật Vector Cache trong RAM nguyên tử
+    with embeddings_lock:
+        snap_emb, snap_ids = get_embeddings_snapshot()
+        if student_id in snap_ids:
+            idx = snap_ids.index(student_id)
+            new_emb = snap_emb.copy()
+            new_emb[idx] = embedding
+            new_ids = list(snap_ids)
         else:
-            registered_embeddings = np.vstack([registered_embeddings, embedding])
+            new_ids = list(snap_ids) + [student_id]
+            if snap_emb is None or len(snap_emb) == 0:
+                new_emb = np.expand_dims(embedding, axis=0)
+            else:
+                new_emb = np.vstack([snap_emb, embedding])
+        update_embeddings_atomic(new_emb, new_ids)
 
     # 4. Lưu ra đĩa
     save_embeddings_cache()
@@ -425,15 +468,20 @@ def sync_from_backend(backend_url: str = "http://127.0.0.1:8080", class_id: Opti
                 if emb is None:
                     continue
 
-                if sid in registered_student_ids:
-                    idx = registered_student_ids.index(sid)
-                    registered_embeddings[idx] = emb
-                else:
-                    registered_student_ids.append(sid)
-                    if registered_embeddings is None or len(registered_embeddings) == 0:
-                        registered_embeddings = np.expand_dims(emb, axis=0)
+                with embeddings_lock:
+                    snap_emb, snap_ids = get_embeddings_snapshot()
+                    if sid in snap_ids:
+                        idx = snap_ids.index(sid)
+                        new_emb = snap_emb.copy()
+                        new_emb[idx] = emb
+                        new_ids = list(snap_ids)
                     else:
-                        registered_embeddings = np.vstack([registered_embeddings, emb])
+                        new_ids = list(snap_ids) + [sid]
+                        if snap_emb is None or len(snap_emb) == 0:
+                            new_emb = np.expand_dims(emb, axis=0)
+                        else:
+                            new_emb = np.vstack([snap_emb, emb])
+                    update_embeddings_atomic(new_emb, new_ids)
 
                 conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
@@ -448,13 +496,108 @@ def sync_from_backend(backend_url: str = "http://127.0.0.1:8080", class_id: Opti
                 print(f"Lỗi tải ảnh bé {sid}: {e}")
 
         save_embeddings_cache()
+        _, snap_ids = get_embeddings_snapshot()
         return {
             "success": True,
             "synced_count": synced_count,
-            "total_registered": len(registered_student_ids),
+            "total_registered": len(snap_ids),
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def _sync_extract_and_blur_check(img_bytes: bytes, threshold: float, require_face: bool = False):
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return None, 0.0, "DECODE_ERROR"
+    is_blurred, blur_score = check_image_blur(img, threshold)
+    if is_blurred:
+        return None, blur_score, "BLURRED"
+    emb = extract_l2_normalized_embedding(img, require_face=require_face)
+    if emb is None:
+        return None, blur_score, "NO_FACE"
+    return emb, blur_score, None
+
+
+def _sync_check_in(img_bytes: bytes, class_id: Optional[str]):
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return {
+            "status": "ERROR",
+            "confidence_score": 0.0,
+            "message": "Không thể giải mã tệp ảnh.",
+        }
+
+    # 1b. Kiểm tra ảnh mờ / rung lắc trước khi nhận diện (WARN-02)
+    is_blurred, blur_score = check_image_blur(img, BLUR_THRESHOLD)
+    if is_blurred:
+        return {
+            "status": "BLURRED",
+            "confidence_score": 0.0,
+            "blur_score": round(blur_score, 2),
+            "message": f"Ảnh quá nhòe hoặc rung lắc (độ nét {blur_score:.1f} < {BLUR_THRESHOLD}). Vui lòng giữ yên điện thoại để nhận diện chính xác.",
+        }
+
+    # 2. Trích xuất embedding bằng YOLOv8n + ArcFace
+    target_embedding = extract_l2_normalized_embedding(img)
+    if target_embedding is None:
+        _log_attendance(None, "UNKNOWN", 0.0)
+        return {
+            "status": "UNKNOWN",
+            "confidence_score": 0.0,
+            "message": "Không phát hiện khuôn mặt trong khung hình",
+        }
+
+    # 3. Lấy snapshot an toàn luồng của danh sách học sinh
+    active_embeddings, active_student_ids = get_embeddings_snapshot()
+    if active_embeddings is None or len(active_student_ids) == 0:
+        _log_attendance(None, "UNKNOWN", 0.0)
+        return {
+            "status": "UNKNOWN",
+            "confidence_score": 0.0,
+            "message": "Chưa có học sinh nào được đăng ký trong hệ thống",
+        }
+
+    if class_id:
+        allowed_ids = set(_get_student_ids_by_class(class_id))
+        class_indices = [i for i, sid in enumerate(active_student_ids) if sid in allowed_ids]
+        if not class_indices:
+            _log_attendance(None, "UNKNOWN", 0.0)
+            return {
+                "status": "UNKNOWN",
+                "confidence_score": 0.0,
+                "message": "Chưa có học sinh nào trong lớp này được đăng ký trong hệ thống",
+            }
+        active_embeddings = active_embeddings[class_indices]
+        active_student_ids = [active_student_ids[i] for i in class_indices]
+
+    # 4. So khớp nhanh Cosine Similarity (np.dot) trong phạm vi lớp
+    scores = np.dot(active_embeddings, target_embedding)
+    best_idx = int(np.argmax(scores))
+    best_score = float(scores[best_idx])
+    matched_student_id = active_student_ids[best_idx]
+
+    # 5. Đánh giá ngưỡng nhận diện
+    if best_score >= SIMILARITY_THRESHOLD:
+        student = _get_student(matched_student_id)
+        _log_attendance(matched_student_id, "PRESENT", best_score)
+        return {
+            "status": "PRESENT",
+            "student_id": matched_student_id,
+            "name": student["name"] if student else "Học sinh",
+            "class_name": student["class_name"] if student else "",
+            "confidence_score": round(best_score, 4),
+            "checkin_time": datetime.now().strftime("%H:%M:%S - %d/%m/%Y"),
+        }
+    else:
+        _log_attendance(None, "UNKNOWN", best_score)
+        return {
+            "status": "UNKNOWN",
+            "confidence_score": round(best_score, 4),
+            "message": f"Không nhận diện được học sinh (Độ khớp {int(best_score * 100)}% thấp hơn ngưỡng {int(SIMILARITY_THRESHOLD * 100)}%)",
+        }
 
 
 @app.post("/api/v1/check-in")
@@ -462,83 +605,16 @@ async def check_in_face(
     file: UploadFile = File(..., description="Ảnh chụp khuôn mặt từ camera mobile"),
     class_id: Optional[str] = Form(None, description="Chỉ đối chiếu học sinh thuộc lớp này"),
 ):
-    global registered_embeddings, registered_student_ids
-
     try:
-        # 1. Giải mã ảnh
-        img = await read_image_from_upload(file)
-
-        # 1b. Kiểm tra ảnh mờ / rung lắc trước khi nhận diện (WARN-02)
-        is_blurred, blur_score = check_image_blur(img, BLUR_THRESHOLD)
-        if is_blurred:
-            return {
-                "status": "BLURRED",
-                "confidence_score": 0.0,
-                "blur_score": round(blur_score, 2),
-                "message": f"Ảnh quá nhòe hoặc rung lắc (độ nét {blur_score:.1f} < {BLUR_THRESHOLD}). Vui lòng giữ yên điện thoại để nhận diện chính xác.",
-            }
-
-        # 2. Trích xuất embedding bằng YOLOv8n + ArcFace
-        target_embedding = extract_l2_normalized_embedding(img)
-        if target_embedding is None:
-            _log_attendance(None, "UNKNOWN", 0.0)
-            return {
-                "status": "UNKNOWN",
-                "confidence_score": 0.0,
-                "message": "Không phát hiện khuôn mặt trong khung hình",
-            }
-
-        # 3. Kiểm tra danh sách học sinh đã đăng ký (hỗ trợ lọc theo lớp class_id)
-        if registered_embeddings is None or len(registered_student_ids) == 0:
-            _log_attendance(None, "UNKNOWN", 0.0)
-            return {
-                "status": "UNKNOWN",
-                "confidence_score": 0.0,
-                "message": "Chưa có học sinh nào được đăng ký trong hệ thống",
-            }
-
-        if class_id:
-            allowed_ids = set(_get_student_ids_by_class(class_id))
-            class_indices = [i for i, sid in enumerate(registered_student_ids) if sid in allowed_ids]
-            if not class_indices:
-                _log_attendance(None, "UNKNOWN", 0.0)
-                return {
-                    "status": "UNKNOWN",
-                    "confidence_score": 0.0,
-                    "message": "Chưa có học sinh nào trong lớp này được đăng ký trong hệ thống",
-                }
-            active_embeddings = registered_embeddings[class_indices]
-            active_student_ids = [registered_student_ids[i] for i in class_indices]
-        else:
-            active_embeddings = registered_embeddings
-            active_student_ids = registered_student_ids
-
-        # 4. So khớp nhanh Cosine Similarity (np.dot) trong phạm vi lớp
-        scores = np.dot(active_embeddings, target_embedding)
-        best_idx = int(np.argmax(scores))
-        best_score = float(scores[best_idx])
-        matched_student_id = active_student_ids[best_idx]
-
-        # 5. Đánh giá ngưỡng nhận diện
-        if best_score >= SIMILARITY_THRESHOLD:
-            student = _get_student(matched_student_id)
-            _log_attendance(matched_student_id, "PRESENT", best_score)
-            return {
-                "status": "PRESENT",
-                "student_id": matched_student_id,
-                "name": student["name"] if student else "Học sinh",
-                "class_name": student["class_name"] if student else "",
-                "confidence_score": round(best_score, 4),
-                "checkin_time": datetime.now().strftime("%H:%M:%S - %d/%m/%Y"),
-            }
-        else:
-            # Cảnh báo người lạ / chưa đăng ký
-            _log_attendance(None, "UNKNOWN", best_score)
-            return {
-                "status": "UNKNOWN",
-                "confidence_score": round(best_score, 4),
-                "message": f"Không nhận diện được học sinh (Độ khớp {int(best_score * 100)}% thấp hơn ngưỡng {int(SIMILARITY_THRESHOLD * 100)}%)",
-            }
+        img_bytes = await file.read()
+        return await asyncio.to_thread(_sync_check_in, img_bytes, class_id)
+    except Exception as e:
+        print(f"Lỗi xử lý check-in: {e}")
+        return {
+            "status": "UNKNOWN",
+            "confidence_score": 0.0,
+            "message": f"Lỗi xử lý AI: {str(e)}",
+        }
     except Exception as e:
         print(f"Lỗi xử lý check-in: {e}")
         return {
@@ -557,25 +633,26 @@ async def register_pickup_face(
     Trích xuất và lưu trước vector ArcFace embedding (512-dim) của phụ huynh/người giám hộ.
     Giúp việc quét mặt khi đón trẻ đạt tốc độ thời gian thực (< 30ms).
     """
-    global pickup_face_cache
-    img = await read_image_from_upload(file)
-
-    # 1. Kiểm tra ảnh mờ
-    is_blurred, blur_score = check_image_blur(img, BLUR_THRESHOLD)
-    if is_blurred:
+    contents = await file.read()
+    embedding, blur_score, err = await asyncio.to_thread(
+        _sync_extract_and_blur_check, contents, BLUR_THRESHOLD, True
+    )
+    if err == "DECODE_ERROR":
+        raise HTTPException(status_code=400, detail="Không thể giải mã tệp ảnh.")
+    elif err == "BLURRED":
         raise HTTPException(
             status_code=400,
             detail=f"Ảnh quá mờ hoặc rung lắc (độ nét {blur_score:.1f} < {BLUR_THRESHOLD}). Vui lòng chọn ảnh chụp rõ nét hơn."
         )
-
-    # 2. Trích xuất embedding
-    embedding = extract_l2_normalized_embedding(img, require_face=True)
-    if embedding is None:
+    elif err == "NO_FACE":
         raise HTTPException(status_code=400, detail="Không phát hiện khuôn mặt rõ ràng trong ảnh.")
 
     # 3. Lưu vào RAM cache và đĩa
     if photo_url:
-        pickup_face_cache[photo_url] = embedding
+        with pickup_lock:
+            snap_pickup = get_pickup_cache_snapshot()
+            snap_pickup[photo_url] = embedding
+            update_pickup_cache_atomic(snap_pickup)
         save_pickup_cache()
 
     return {
@@ -583,6 +660,128 @@ async def register_pickup_face(
         "embedding": embedding.tolist(),
         "photo_url": photo_url,
         "message": "Đã trích xuất và nạp cache vector đặc trưng người đón thành công."
+    }
+
+
+def _sync_recognize_pickup(img_bytes: bytes, class_id: Optional[str], candidates_json: str):
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    probe_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if probe_img is None:
+        return {
+            "matched": False,
+            "status": "ERROR",
+            "similarity": 0.0,
+            "message": "Không thể giải mã tệp ảnh.",
+        }
+
+    # 1. Kiểm tra mờ rung lắc
+    is_blurred, blur_score = check_image_blur(probe_img, BLUR_THRESHOLD)
+    if is_blurred:
+        return {
+            "matched": False,
+            "status": "BLURRED",
+            "similarity": 0.0,
+            "message": f"Ảnh quá nhòe hoặc rung lắc ({blur_score:.1f} < {BLUR_THRESHOLD}). Vui lòng giữ yên điện thoại.",
+        }
+
+    # 2. Trích xuất embedding người đón (1 lần duy nhất ~20ms)
+    probe_emb = extract_l2_normalized_embedding(probe_img, require_face=True)
+    if probe_emb is None:
+        return {
+            "matched": False,
+            "status": "NO_FACE",
+            "similarity": 0.0,
+            "message": "Không tìm thấy khuôn mặt rõ ràng trong khung hình.",
+        }
+
+    candidates = json.loads(candidates_json) if candidates_json else []
+    if not candidates:
+        return {
+            "matched": False,
+            "status": "NO_CANDIDATES",
+            "similarity": 0.0,
+            "message": "Lớp học chưa có phụ huynh nào đăng ký nhận diện khuôn mặt.",
+        }
+
+    valid_candidates = []
+    candidate_embeddings = []
+    cache_updated = False
+    pickup_snap = get_pickup_cache_snapshot()
+
+    # 3. Thu thập vector đặc trưng từ candidates
+    for cand in candidates:
+        photo_url = cand.get("photoUrl") or cand.get("photo_url")
+        raw_emb = cand.get("faceEmbedding") or cand.get("face_embedding")
+
+        ref_emb = None
+        if raw_emb:
+            try:
+                if isinstance(raw_emb, str):
+                    ref_emb = np.array(json.loads(raw_emb), dtype=np.float32)
+                elif isinstance(raw_emb, list):
+                    ref_emb = np.array(raw_emb, dtype=np.float32)
+                if photo_url and photo_url not in pickup_snap:
+                    pickup_snap[photo_url] = ref_emb
+                    cache_updated = True
+            except Exception:
+                ref_emb = None
+
+        if ref_emb is None and photo_url:
+            ref_emb = pickup_snap.get(photo_url)
+
+        if ref_emb is None and photo_url:
+            try:
+                ref_bytes = None
+                if photo_url.startswith("http"):
+                    headers = {'User-Agent': 'KidPro-AI-Engine', 'X-Internal-Service-Key': INTERNAL_SERVICE_KEY}
+                    req = urllib.request.Request(photo_url, headers=headers)
+                    with urllib.request.urlopen(req, timeout=4) as resp:
+                        ref_bytes = resp.read()
+                elif os.path.exists(photo_url.lstrip("/")):
+                    with open(photo_url.lstrip("/"), "rb") as f:
+                        ref_bytes = f.read()
+
+                if ref_bytes:
+                    nparr_ref = np.frombuffer(ref_bytes, np.uint8)
+                    ref_img = cv2.imdecode(nparr_ref, cv2.IMREAD_COLOR)
+                    if ref_img is not None:
+                        ref_emb = extract_l2_normalized_embedding(ref_img)
+                        if ref_emb is not None:
+                            pickup_snap[photo_url] = ref_emb
+                            cache_updated = True
+            except Exception as ex:
+                print(f"⚠️ Lỗi nạp ảnh phụ huynh {photo_url}: {ex}")
+
+        if ref_emb is not None:
+            valid_candidates.append(cand)
+            candidate_embeddings.append(ref_emb)
+
+    if cache_updated:
+        update_pickup_cache_atomic(pickup_snap)
+        save_pickup_cache()
+
+    if not candidate_embeddings:
+        return {
+            "matched": False,
+            "status": "NO_EMBEDDINGS",
+            "similarity": 0.0,
+            "message": "Không thể trích xuất vector khuôn mặt của danh sách phụ huynh trong lớp.",
+        }
+
+    # 4. So khớp ma trận Cosine Similarity
+    embs_matrix = np.vstack(candidate_embeddings)
+    scores = np.dot(embs_matrix, probe_emb)
+    best_idx = int(np.argmax(scores))
+    best_score = float(scores[best_idx])
+    best_candidate = valid_candidates[best_idx]
+
+    matched = best_score >= SIMILARITY_THRESHOLD
+    return {
+        "matched": matched,
+        "similarity": round(best_score, 4),
+        "threshold": SIMILARITY_THRESHOLD,
+        "best_candidate": best_candidate if matched else None,
+        "message": "Khớp phụ huynh thành công" if matched else "Không tìm thấy phụ huynh phù hợp trong lớp",
     }
 
 
@@ -596,117 +795,9 @@ async def recognize_pickup(
     Quét mặt phụ huynh đón trẻ: so khớp trực tiếp ảnh chụp với danh sách phụ huynh/người giám hộ có con trong lớp.
     Tối ưu tốc độ cực nhanh (~25-30ms) nhờ ma trận vector dot-product trên cache RAM.
     """
-    global pickup_face_cache
     try:
-        probe_img = await read_image_from_upload(file)
-
-        # 1. Kiểm tra mờ rung lắc
-        is_blurred, blur_score = check_image_blur(probe_img, BLUR_THRESHOLD)
-        if is_blurred:
-            return {
-                "matched": False,
-                "status": "BLURRED",
-                "similarity": 0.0,
-                "message": f"Ảnh quá nhòe hoặc rung lắc ({blur_score:.1f} < {BLUR_THRESHOLD}). Vui lòng giữ yên điện thoại.",
-            }
-
-        # 2. Trích xuất embedding người đón (1 lần duy nhất ~20ms)
-        probe_emb = extract_l2_normalized_embedding(probe_img, require_face=True)
-        if probe_emb is None:
-            return {
-                "matched": False,
-                "status": "NO_FACE",
-                "similarity": 0.0,
-                "message": "Không tìm thấy khuôn mặt rõ ràng trong khung hình.",
-            }
-
-        candidates = json.loads(candidates_json) if candidates_json else []
-        if not candidates:
-            return {
-                "matched": False,
-                "status": "NO_CANDIDATES",
-                "similarity": 0.0,
-                "message": "Lớp học chưa có phụ huynh nào đăng ký nhận diện khuôn mặt.",
-            }
-
-        valid_candidates = []
-        candidate_embeddings = []
-        cache_updated = False
-
-        # 3. Thu thập vector đặc trưng từ candidates (ưu tiên vector truyền sẵn hoặc cache RAM)
-        for cand in candidates:
-            photo_url = cand.get("photoUrl") or cand.get("photo_url")
-            raw_emb = cand.get("faceEmbedding") or cand.get("face_embedding")
-
-            ref_emb = None
-            if raw_emb:
-                try:
-                    if isinstance(raw_emb, str):
-                        ref_emb = np.array(json.loads(raw_emb), dtype=np.float32)
-                    elif isinstance(raw_emb, list):
-                        ref_emb = np.array(raw_emb, dtype=np.float32)
-                    if photo_url and photo_url not in pickup_face_cache:
-                        pickup_face_cache[photo_url] = ref_emb
-                        cache_updated = True
-                except Exception:
-                    ref_emb = None
-
-            if ref_emb is None and photo_url:
-                ref_emb = pickup_face_cache.get(photo_url)
-
-            if ref_emb is None and photo_url:
-                try:
-                    ref_bytes = None
-                    if photo_url.startswith("http"):
-                        headers = {'User-Agent': 'KidPro-AI-Engine', 'X-Internal-Service-Key': INTERNAL_SERVICE_KEY}
-                        req = urllib.request.Request(photo_url, headers=headers)
-                        with urllib.request.urlopen(req, timeout=4) as resp:
-                            ref_bytes = resp.read()
-                    elif os.path.exists(photo_url.lstrip("/")):
-                        with open(photo_url.lstrip("/"), "rb") as f:
-                            ref_bytes = f.read()
-
-                    if ref_bytes:
-                        nparr = np.frombuffer(ref_bytes, np.uint8)
-                        ref_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                        if ref_img is not None:
-                            ref_emb = extract_l2_normalized_embedding(ref_img)
-                            if ref_emb is not None:
-                                pickup_face_cache[photo_url] = ref_emb
-                                cache_updated = True
-                except Exception as ex:
-                    print(f"⚠️ Lỗi nạp ảnh phụ huynh {photo_url}: {ex}")
-
-            if ref_emb is not None:
-                valid_candidates.append(cand)
-                candidate_embeddings.append(ref_emb)
-
-        if cache_updated:
-            save_pickup_cache()
-
-        if not candidate_embeddings:
-            return {
-                "matched": False,
-                "status": "NO_EMBEDDINGS",
-                "similarity": 0.0,
-                "message": "Không thể trích xuất vector khuôn mặt của danh sách phụ huynh trong lớp.",
-            }
-
-        # 4. So khớp ma trận Cosine Similarity siêu tốc (np.dot trong < 0.1ms)
-        embs_matrix = np.vstack(candidate_embeddings)
-        scores = np.dot(embs_matrix, probe_emb)
-        best_idx = int(np.argmax(scores))
-        best_score = float(scores[best_idx])
-        best_candidate = valid_candidates[best_idx]
-
-        matched = best_score >= SIMILARITY_THRESHOLD
-        return {
-            "matched": matched,
-            "similarity": round(best_score, 4),
-            "threshold": SIMILARITY_THRESHOLD,
-            "best_candidate": best_candidate if matched else None,
-            "message": "Khớp phụ huynh thành công" if matched else "Không tìm thấy phụ huynh phù hợp trong lớp",
-        }
+        contents = await file.read()
+        return await asyncio.to_thread(_sync_recognize_pickup, contents, class_id, candidates_json)
     except Exception as e:
         print(f"Lỗi recognize-pickup: {e}")
         return {
@@ -717,14 +808,43 @@ async def recognize_pickup(
         }
 
 
+def _sync_detect_face(img_bytes: bytes):
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise HTTPException(status_code=400, detail="Không thể giải mã tệp ảnh.")
+    embedding = extract_l2_normalized_embedding(img, require_face=True)
+    return {"face_detected": embedding is not None}
+
+
 @app.post("/api/v1/detect")
 async def detect_face(
     file: UploadFile = File(..., description="Ảnh cần kiểm tra có khuôn mặt hay không"),
 ):
     """Kiểm tra ảnh chân dung người đón có khuôn mặt rõ ràng trước khi lưu làm ảnh tham chiếu."""
-    img = await read_image_from_upload(file)
-    embedding = extract_l2_normalized_embedding(img, require_face=True)
-    return {"face_detected": embedding is not None}
+    contents = await file.read()
+    return await asyncio.to_thread(_sync_detect_face, contents)
+
+
+def _sync_compare_faces(ref_bytes: bytes, probe_bytes: bytes):
+    nparr_ref = np.frombuffer(ref_bytes, np.uint8)
+    nparr_probe = np.frombuffer(probe_bytes, np.uint8)
+    reference_img = cv2.imdecode(nparr_ref, cv2.IMREAD_COLOR)
+    probe_img = cv2.imdecode(nparr_probe, cv2.IMREAD_COLOR)
+
+    if reference_img is None or probe_img is None:
+        raise HTTPException(status_code=400, detail="Không thể giải mã tệp ảnh.")
+
+    probe_emb = extract_l2_normalized_embedding(probe_img, require_face=True)
+    if probe_emb is None:
+        raise HTTPException(status_code=422, detail="PROBE_NO_FACE")
+
+    reference_emb = extract_l2_normalized_embedding(reference_img)
+    if reference_emb is None:
+        raise HTTPException(status_code=422, detail="REFERENCE_NO_FACE")
+
+    similarity = float(np.dot(reference_emb, probe_emb))
+    return {"similarity": round(similarity, 4)}
 
 
 @app.post("/api/v1/compare")
@@ -733,20 +853,9 @@ async def compare_faces(
     probe: UploadFile = File(..., description="Ảnh giáo viên chụp người đến đón"),
 ):
     """So khớp 1-1 khuôn mặt người đến đón với ảnh đã đăng ký (BR-022). Ngưỡng do backend quyết định."""
-    reference_img = await read_image_from_upload(reference)
-    probe_img = await read_image_from_upload(probe)
-
-    probe_emb = extract_l2_normalized_embedding(probe_img, require_face=True)
-    if probe_emb is None:
-        raise HTTPException(status_code=422, detail="PROBE_NO_FACE")
-
-    # Ảnh tham chiếu đã được kiểm tra lúc đăng ký nên cho phép fallback cắt trung tâm
-    reference_emb = extract_l2_normalized_embedding(reference_img)
-    if reference_emb is None:
-        raise HTTPException(status_code=422, detail="REFERENCE_NO_FACE")
-
-    similarity = float(np.dot(reference_emb, probe_emb))
-    return {"similarity": round(similarity, 4)}
+    ref_bytes = await reference.read()
+    probe_bytes = await probe.read()
+    return await asyncio.to_thread(_sync_compare_faces, ref_bytes, probe_bytes)
 
 
 @app.get("/api/v1/students")
