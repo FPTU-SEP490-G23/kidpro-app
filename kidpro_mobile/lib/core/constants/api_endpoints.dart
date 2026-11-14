@@ -187,7 +187,9 @@ class ApiEndpoints {
   static String privateChatMessages(String studentId) =>
       '/api/comms/chat/private/$studentId/messages';
 
-  // Attendance / Face Recognition
+  // Attendance / Face Recognition (OPT-003, OPT-004)
+  static const faceCheckIn = '/api/attendance/face-recognition/check-in';
+  static const faceChallenge = '/api/attendance/face-recognition/challenge';
   static const faceLogs = '/api/attendance/face-logs';
   static const faceLogsRegistered = '/api/attendance/face-logs/registered-faces';
   static const faceLogsUnresolved = '/api/attendance/face-logs/unresolved-alerts';

@@ -12,8 +12,9 @@ from typing import List, Optional
 import cv2
 import numpy as np
 from contextlib import asynccontextmanager
+import hmac
 import onnxruntime as ort
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 
@@ -34,7 +35,7 @@ ONNX_INTER_THREADS = int(os.getenv("ONNX_INTER_THREADS", "1"))
 DB_PATH = os.getenv("DB_PATH", "attendance.db")
 EMBEDDINGS_FILE = os.getenv("EMBEDDINGS_FILE", "embeddings.npz")
 PICKUP_CACHE_FILE = os.getenv("PICKUP_CACHE_FILE", "pickup_embeddings.pkl")
-SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.60"))
+# SIMILARITY_THRESHOLD removed in OPT-002: Single Source of Truth on Spring Boot
 BLUR_THRESHOLD = float(os.getenv("BLUR_THRESHOLD", "60.0"))
 INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "kidpro_internal_secret_key_2026")
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "face_yolov8n.pt")
@@ -46,7 +47,30 @@ PIPELINE_VERSION = "v2_umeyama_align"
 MODEL_NAME = "arcface_w600k_r50"
 EMBEDDING_DIM = 512
 
-from face_detector import align_face, ARCFACE_STANDARD_TEMPLATE_112, YOLOFaceDetector, BaseFaceDetector
+def verify_internal_key(x_internal_service_key: Optional[str] = Header(None, alias="X-Internal-Service-Key")):
+    """
+    OPT-003: Constant-time authentication for internal server-to-server calls.
+    Rejects unauthenticated direct client access.
+    """
+    if not x_internal_service_key or not hmac.compare_digest(x_internal_service_key, INTERNAL_SERVICE_KEY):
+        raise HTTPException(
+            status_code=401,
+            detail="UNAUTHORIZED: Missing or invalid X-Internal-Service-Key"
+        )
+
+from face_detector import (
+    align_face,
+    ARCFACE_STANDARD_TEMPLATE_112,
+    YOLOFaceDetector,
+    BaseFaceDetector,
+    estimate_head_yaw,
+    MockAntiSpoofDetector,
+    BaseAntiSpoofDetector,
+    AntiSpoofResult
+)
+
+ANTI_SPOOF_ENABLED = os.getenv("ANTI_SPOOF_ENABLED", "false").lower() in ("true", "1", "yes")
+anti_spoof_detector: BaseAntiSpoofDetector = MockAntiSpoofDetector(passthrough=True)
 
 # Global in-memory cache for fast vector dot-product matching (thread-safe protected)
 embeddings_lock = threading.RLock()
@@ -425,7 +449,7 @@ def root():
         "version_matched": version_matched,
         "model_name": MODEL_NAME,
         "registered_students_count": len(snap_ids),
-        "similarity_threshold": SIMILARITY_THRESHOLD,
+        "feature_extractor_mode": True,
         "network": "Internal server-to-server ready",
     }
 
@@ -591,119 +615,236 @@ def _sync_extract_and_blur_check(img_bytes: bytes, threshold: float, require_fac
     return emb, blur_score, None
 
 
-def _sync_check_in(img_bytes: bytes, class_id: Optional[str]):
+def _sync_estimate_yaw(img_bytes: bytes):
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return {"face_found": False, "error_code": "DECODE_ERROR", "yaw_estimate": 0.0}
+    global face_detector
+    if face_detector is None and yolo_detector is not None:
+        face_detector = YOLOFaceDetector(yolo_detector, simulate_landmarks_if_missing=True)
+    det = face_detector.detect(img, conf=0.25) if face_detector else None
+    if det is None or det.landmarks is None:
+        return {"face_found": False, "error_code": "NO_FACE", "yaw_estimate": 0.0}
+    yaw = estimate_head_yaw(det.landmarks)
+    return {"face_found": True, "yaw_estimate": round(yaw, 2)}
+
+
+def _sync_check_in(
+    img_bytes: bytes,
+    class_id: Optional[str] = None,
+    turn_bytes: Optional[bytes] = None,
+    expected_action: Optional[str] = None
+):
+    """
+    OPT-003 & OPT-002 & OPT-004:
+    FastAPI acts strictly as a feature extractor and returns:
+    - face_found: bool
+    - top1_student_id, top1_score
+    - top2_student_id, top2_score
+    - margin (top1_score - top2_score)
+    - pipeline_version, model_name
+    - blur_score
+    - turn_yaw_estimate, intra_similarity, turn_valid (if turn_bytes provided)
+    Does NOT make PRESENT / UNKNOWN decisions (Single Source of Truth on Spring Boot).
+    """
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         return {
-            "status": "ERROR",
-            "confidence_score": 0.0,
+            "face_found": False,
+            "error_code": "DECODE_ERROR",
             "message": "Không thể giải mã tệp ảnh.",
         }
 
-    # 1b. Kiểm tra ảnh mờ / rung lắc trước khi nhận diện (WARN-02)
+    # 1. Kiểm tra ảnh mờ / rung lắc (WARN-02)
     is_blurred, blur_score = check_image_blur(img, BLUR_THRESHOLD)
     if is_blurred:
         return {
-            "status": "BLURRED",
-            "confidence_score": 0.0,
+            "face_found": False,
+            "error_code": "BLURRED",
             "blur_score": round(blur_score, 2),
             "message": f"Ảnh quá nhòe hoặc rung lắc (độ nét {blur_score:.1f} < {BLUR_THRESHOLD}). Vui lòng giữ yên điện thoại để nhận diện chính xác.",
         }
 
-    # 2. Trích xuất embedding bằng YOLOv8n + ArcFace
+    # 2. Anti-spoofing check interface (OPT-004)
+    if ANTI_SPOOF_ENABLED:
+        spoof_res = anti_spoof_detector.check_spoof(img)
+        if not spoof_res.is_real:
+            return {
+                "face_found": False,
+                "error_code": "SPOOF_DETECTED",
+                "message": "Phát hiện giả mạo khuôn mặt (ảnh in hoặc màn hình phát lại).",
+                "spoof_score": round(spoof_res.score, 4),
+            }
+
+    # 3. Trích xuất embedding bằng YOLOv8-Face (5 keypoints) + Umeyama + ArcFace
     target_embedding = extract_l2_normalized_embedding(img)
     if target_embedding is None:
-        _log_attendance(None, "UNKNOWN", 0.0)
         return {
-            "status": "UNKNOWN",
-            "confidence_score": 0.0,
+            "face_found": False,
+            "error_code": "NO_FACE",
             "message": "Không phát hiện khuôn mặt trong khung hình",
-        }
-
-    # 3. Lấy snapshot an toàn luồng của danh sách học sinh
-    active_embeddings, active_student_ids = get_embeddings_snapshot()
-    if active_embeddings is None or len(active_student_ids) == 0:
-        _log_attendance(None, "UNKNOWN", 0.0)
-        return {
-            "status": "UNKNOWN",
-            "confidence_score": 0.0,
-            "message": "Chưa có học sinh nào được đăng ký trong hệ thống",
+            "blur_score": round(blur_score, 2),
         }
 
     # Guard lúc chạy OPT-007: Từ chối so khớp chéo phiên bản
     if cached_pipeline_version != PIPELINE_VERSION:
         print(f"🛑 [OPT-007] Từ chối so khớp chéo phiên bản: cached='{cached_pipeline_version}', current='{PIPELINE_VERSION}'")
         return {
-            "status": "ERROR",
+            "face_found": False,
             "error_code": "EMBEDDING_VERSION_MISMATCH",
-            "confidence_score": 0.0,
             "message": f"EMBEDDING_VERSION_MISMATCH: Kho vector phiên bản '{cached_pipeline_version}' không tương thích với pipeline '{PIPELINE_VERSION}'. Vui lòng chạy recalculate_embeddings.py.",
             "pipeline_version": PIPELINE_VERSION,
             "cached_pipeline_version": cached_pipeline_version,
+        }
+
+    # 4. Optional Turn Verification (OPT-004: Server-Challenged Liveness)
+    turn_valid = None
+    turn_yaw_estimate = None
+    intra_similarity = None
+
+    if turn_bytes is not None and len(turn_bytes) > 0:
+        turn_nparr = np.frombuffer(turn_bytes, np.uint8)
+        turn_img = cv2.imdecode(turn_nparr, cv2.IMREAD_COLOR)
+        if turn_img is None:
+            return {
+                "face_found": False,
+                "error_code": "TURN_DECODE_ERROR",
+                "message": "Không thể giải mã ảnh quay đầu cho thử thách liveness.",
+            }
+
+        global face_detector
+        if face_detector is None and yolo_detector is not None:
+            face_detector = YOLOFaceDetector(yolo_detector, simulate_landmarks_if_missing=True)
+
+        turn_det = face_detector.detect(turn_img, conf=0.25) if face_detector else None
+        if turn_det is None or turn_det.landmarks is None:
+            return {
+                "face_found": False,
+                "error_code": "TURN_NO_FACE",
+                "message": "Không phát hiện khuôn mặt trong ảnh quay đầu.",
+            }
+
+        turn_yaw_estimate = round(estimate_head_yaw(turn_det.landmarks), 2)
+        turn_embedding = extract_l2_normalized_embedding(turn_img)
+        if turn_embedding is not None:
+            intra_similarity = round(float(np.dot(target_embedding, turn_embedding)), 4)
+            # Two photos must belong to the same person (relaxed cosine threshold >= 0.65 due to pose variation)
+            if intra_similarity < 0.65:
+                return {
+                    "face_found": True,
+                    "error_code": "INTRA_IDENTITY_MISMATCH",
+                    "intra_similarity": intra_similarity,
+                    "message": f"Ảnh chính diện và ảnh quay đầu không cùng một người (độ khớp {intra_similarity:.2f} < 0.65).",
+                }
+
+        # Check turn direction if expected_action is provided
+        if expected_action in ("TURN_LEFT", "TURN_RIGHT"):
+            turn_valid = abs(turn_yaw_estimate) >= 7.0
+        else:
+            turn_valid = True
+
+    # 5. Lấy snapshot an toàn luồng của danh sách học sinh
+    active_embeddings, active_student_ids = get_embeddings_snapshot()
+    if active_embeddings is None or len(active_student_ids) == 0:
+        return {
+            "face_found": True,
+            "top1_student_id": None,
+            "top1_score": 0.0,
+            "top2_student_id": None,
+            "top2_score": 0.0,
+            "margin": 0.0,
+            "pipeline_version": PIPELINE_VERSION,
+            "model_name": MODEL_NAME,
+            "blur_score": round(blur_score, 2),
+            "message": "Chưa có học sinh nào được đăng ký trong hệ thống",
         }
 
     if class_id:
         allowed_ids = set(_get_student_ids_by_class(class_id))
         class_indices = [i for i, sid in enumerate(active_student_ids) if sid in allowed_ids]
         if not class_indices:
-            _log_attendance(None, "UNKNOWN", 0.0)
             return {
-                "status": "UNKNOWN",
-                "confidence_score": 0.0,
+                "face_found": True,
+                "top1_student_id": None,
+                "top1_score": 0.0,
+                "top2_student_id": None,
+                "top2_score": 0.0,
+                "margin": 0.0,
+                "pipeline_version": PIPELINE_VERSION,
+                "model_name": MODEL_NAME,
+                "blur_score": round(blur_score, 2),
                 "message": "Chưa có học sinh nào trong lớp này được đăng ký trong hệ thống",
             }
         active_embeddings = active_embeddings[class_indices]
         active_student_ids = [active_student_ids[i] for i in class_indices]
 
-    # 4. So khớp nhanh Cosine Similarity (np.dot) trong phạm vi lớp
+    # 6. Tính Cosine Similarity & Nhóm điểm cao nhất theo từng học sinh riêng biệt
     scores = np.dot(active_embeddings, target_embedding)
-    best_idx = int(np.argmax(scores))
-    best_score = float(scores[best_idx])
-    matched_student_id = active_student_ids[best_idx]
+    student_max_scores = {}
+    for sid, score in zip(active_student_ids, scores):
+        s_val = float(score)
+        if sid not in student_max_scores or s_val > student_max_scores[sid]:
+            student_max_scores[sid] = s_val
 
-    # 5. Đánh giá ngưỡng nhận diện
-    if best_score >= SIMILARITY_THRESHOLD:
-        student = _get_student(matched_student_id)
-        _log_attendance(matched_student_id, "PRESENT", best_score)
-        return {
-            "status": "PRESENT",
-            "student_id": matched_student_id,
-            "name": student["name"] if student else "Học sinh",
-            "class_name": student["class_name"] if student else "",
-            "confidence_score": round(best_score, 4),
-            "checkin_time": datetime.now().strftime("%H:%M:%S - %d/%m/%Y"),
-        }
-    else:
-        _log_attendance(None, "UNKNOWN", best_score)
-        return {
-            "status": "UNKNOWN",
-            "confidence_score": round(best_score, 4),
-            "message": f"Không nhận diện được học sinh (Độ khớp {int(best_score * 100)}% thấp hơn ngưỡng {int(SIMILARITY_THRESHOLD * 100)}%)",
-        }
+    # Sắp xếp các học sinh khác nhau theo điểm giảm dần
+    sorted_candidates = sorted(student_max_scores.items(), key=lambda x: x[1], reverse=True)
+    top1_id, top1_score = sorted_candidates[0] if len(sorted_candidates) > 0 else (None, 0.0)
+    top2_id, top2_score = sorted_candidates[1] if len(sorted_candidates) > 1 else (None, 0.0)
+    margin = top1_score - top2_score
+
+    res = {
+        "face_found": True,
+        "top1_student_id": top1_id,
+        "top1_score": round(float(top1_score), 4),
+        "top2_student_id": top2_id,
+        "top2_score": round(float(top2_score), 4),
+        "margin": round(float(margin), 4),
+        "pipeline_version": PIPELINE_VERSION,
+        "model_name": MODEL_NAME,
+        "blur_score": round(blur_score, 2),
+    }
+    if turn_bytes is not None:
+        res["turn_valid"] = turn_valid
+        res["turn_yaw_estimate"] = turn_yaw_estimate
+        res["intra_similarity"] = intra_similarity
+
+    return res
 
 
-@app.post("/api/v1/check-in")
+@app.post("/api/v1/check-in", dependencies=[Depends(verify_internal_key)])
 async def check_in_face(
-    file: UploadFile = File(..., description="Ảnh chụp khuôn mặt từ camera mobile"),
+    file: UploadFile = File(..., description="Ảnh chụp khuôn mặt chính diện từ camera"),
+    turn_file: Optional[UploadFile] = File(None, description="Ảnh quay đầu cho liveness challenge"),
     class_id: Optional[str] = Form(None, description="Chỉ đối chiếu học sinh thuộc lớp này"),
+    expected_action: Optional[str] = Form(None, description="Hướng quay yêu cầu TURN_LEFT hoặc TURN_RIGHT"),
 ):
     try:
         img_bytes = await file.read()
-        return await asyncio.to_thread(_sync_check_in, img_bytes, class_id)
+        turn_bytes = await turn_file.read() if turn_file is not None else None
+        return await asyncio.to_thread(_sync_check_in, img_bytes, class_id, turn_bytes, expected_action)
     except Exception as e:
         print(f"Lỗi xử lý check-in: {e}")
         return {
-            "status": "UNKNOWN",
-            "confidence_score": 0.0,
+            "face_found": False,
+            "error_code": "INTERNAL_ERROR",
             "message": f"Lỗi xử lý AI: {str(e)}",
         }
+
+
+@app.post("/api/v1/estimate-yaw", dependencies=[Depends(verify_internal_key)])
+async def estimate_yaw_endpoint(
+    file: UploadFile = File(..., description="Ảnh kiểm tra góc quay khuôn mặt"),
+):
+    try:
+        img_bytes = await file.read()
+        return await asyncio.to_thread(_sync_estimate_yaw, img_bytes)
     except Exception as e:
-        print(f"Lỗi xử lý check-in: {e}")
         return {
-            "status": "UNKNOWN",
-            "confidence_score": 0.0,
-            "message": f"Lỗi xử lý AI: {str(e)}",
+            "face_found": False,
+            "error_code": "INTERNAL_ERROR",
+            "message": f"Lỗi ước lượng góc quay: {str(e)}",
         }
 
 
