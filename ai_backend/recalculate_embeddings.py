@@ -26,6 +26,14 @@ if os.path.exists(AI_BACKEND_DIR):
 
 try:
     from face_detector import align_face, YOLOFaceDetector
+except (ImportError, ModuleNotFoundError):
+    try:
+        from kidpro_app.ai_backend.face_detector import align_face, YOLOFaceDetector
+    except (ImportError, ModuleNotFoundError) as e:
+        print(f"❌ Missing face_detector: {e}")
+        sys.exit(1)
+
+try:
     from ultralytics import YOLO
     import onnxruntime as ort
 except ImportError as e:
