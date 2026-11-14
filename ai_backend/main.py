@@ -36,6 +36,7 @@ DB_PATH = os.getenv("DB_PATH", "attendance.db")
 EMBEDDINGS_FILE = os.getenv("EMBEDDINGS_FILE", "embeddings.npz")
 PICKUP_CACHE_FILE = os.getenv("PICKUP_CACHE_FILE", "pickup_embeddings.pkl")
 # SIMILARITY_THRESHOLD removed in OPT-002: Single Source of Truth on Spring Boot
+PICKUP_FACE_THRESHOLD = float(os.getenv("PICKUP_FACE_THRESHOLD", "0.60"))
 BLUR_THRESHOLD = float(os.getenv("BLUR_THRESHOLD", "60.0"))
 INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "kidpro_internal_secret_key_2026")
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "face_yolov8n.pt")
@@ -58,16 +59,28 @@ def verify_internal_key(x_internal_service_key: Optional[str] = Header(None, ali
             detail="UNAUTHORIZED: Missing or invalid X-Internal-Service-Key"
         )
 
-from face_detector import (
-    align_face,
-    ARCFACE_STANDARD_TEMPLATE_112,
-    YOLOFaceDetector,
-    BaseFaceDetector,
-    estimate_head_yaw,
-    MockAntiSpoofDetector,
-    BaseAntiSpoofDetector,
-    AntiSpoofResult
-)
+try:
+    from face_detector import (
+        align_face,
+        ARCFACE_STANDARD_TEMPLATE_112,
+        YOLOFaceDetector,
+        BaseFaceDetector,
+        estimate_head_yaw,
+        MockAntiSpoofDetector,
+        BaseAntiSpoofDetector,
+        AntiSpoofResult
+    )
+except (ImportError, ModuleNotFoundError):
+    from kidpro_app.ai_backend.face_detector import (
+        align_face,
+        ARCFACE_STANDARD_TEMPLATE_112,
+        YOLOFaceDetector,
+        BaseFaceDetector,
+        estimate_head_yaw,
+        MockAntiSpoofDetector,
+        BaseAntiSpoofDetector,
+        AntiSpoofResult
+    )
 
 ANTI_SPOOF_ENABLED = os.getenv("ANTI_SPOOF_ENABLED", "false").lower() in ("true", "1", "yes")
 anti_spoof_detector: BaseAntiSpoofDetector = MockAntiSpoofDetector(passthrough=True)
@@ -999,11 +1012,11 @@ def _sync_recognize_pickup(img_bytes: bytes, class_id: Optional[str], candidates
     best_score = float(scores[best_idx])
     best_candidate = valid_candidates[best_idx]
 
-    matched = best_score >= SIMILARITY_THRESHOLD
+    matched = best_score >= PICKUP_FACE_THRESHOLD
     return {
         "matched": matched,
         "similarity": round(best_score, 4),
-        "threshold": SIMILARITY_THRESHOLD,
+        "threshold": PICKUP_FACE_THRESHOLD,
         "best_candidate": best_candidate if matched else None,
         "message": "Khớp phụ huynh thành công" if matched else "Không tìm thấy phụ huynh phù hợp trong lớp",
     }
