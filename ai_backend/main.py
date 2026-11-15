@@ -38,7 +38,7 @@ PICKUP_CACHE_FILE = os.getenv("PICKUP_CACHE_FILE", "pickup_embeddings.pkl")
 # SIMILARITY_THRESHOLD removed in OPT-002: Single Source of Truth on Spring Boot
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.60"))
 PICKUP_FACE_THRESHOLD = float(os.getenv("PICKUP_FACE_THRESHOLD", "0.60"))
-BLUR_THRESHOLD = float(os.getenv("BLUR_THRESHOLD", "80.0"))
+BLUR_THRESHOLD = float(os.getenv("BLUR_THRESHOLD", "60.0"))
 INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "kidpro_internal_secret_key_2026")
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "face_yolov8n.pt")
 YOLO_FACE_MODEL_PATH = os.getenv("YOLO_FACE_MODEL_PATH", YOLO_MODEL_PATH)
