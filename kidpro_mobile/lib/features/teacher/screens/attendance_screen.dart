@@ -1042,6 +1042,8 @@ class _StudentDetailSheetState extends State<_StudentDetailSheet> {
   late AttendanceStatus _status;
   late TextEditingController _notesCtrl;
   late TextEditingController _guardianCtrl;
+  // UC-33: triệu chứng khi khám sức khỏe buổi sáng
+  late TextEditingController _symptomsCtrl;
   late TextEditingController _tempCtrl;
   TimeOfDay _checkInTime = TimeOfDay.now();
   String? _capturedPhotoUrl;
@@ -1052,8 +1054,9 @@ class _StudentDetailSheetState extends State<_StudentDetailSheet> {
     _status = widget.student.status;
     _notesCtrl = TextEditingController(text: widget.student.notes ?? '');
     _guardianCtrl = TextEditingController(text: widget.student.guardianName ?? '');
+    _symptomsCtrl = TextEditingController(text: widget.student.symptoms ?? '');
     _tempCtrl = TextEditingController(
-      text: widget.student.temperature != null ? widget.student.temperature.toString() : '36.5',
+      text: widget.student.temperature != null ? widget.student.temperature.toString() : '',
     );
     _capturedPhotoUrl = widget.student.photoUrl;
 
@@ -1071,6 +1074,7 @@ class _StudentDetailSheetState extends State<_StudentDetailSheet> {
   void dispose() {
     _notesCtrl.dispose();
     _guardianCtrl.dispose();
+    _symptomsCtrl.dispose();
     _tempCtrl.dispose();
     super.dispose();
   }
@@ -1113,7 +1117,17 @@ class _StudentDetailSheetState extends State<_StudentDetailSheet> {
     final prov = context.read<TeacherProvider>();
     final formattedTime =
         '${_checkInTime.hour.toString().padLeft(2, '0')}:${_checkInTime.minute.toString().padLeft(2, '0')}';
-    final temp = double.tryParse(_tempCtrl.text.trim());
+    final tempText = _tempCtrl.text.trim().replaceAll(',', '.');
+    final temp = tempText.isEmpty ? null : double.tryParse(tempText);
+    if (tempText.isNotEmpty && (temp == null || temp < 34 || temp > 42)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Thân nhiệt không hợp lệ: nhập số từ 34.0 đến 42.0 °C'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
 
     prov.updateStudentDetails(
       index: widget.studentIndex,
@@ -1124,6 +1138,7 @@ class _StudentDetailSheetState extends State<_StudentDetailSheet> {
       notes: _notesCtrl.text.trim(),
       temperature: temp,
       guardianName: _guardianCtrl.text.trim(),
+      symptoms: _symptomsCtrl.text.trim(),
       photoUrl: _capturedPhotoUrl,
     );
 
@@ -1316,6 +1331,43 @@ class _StudentDetailSheetState extends State<_StudentDetailSheet> {
               ),
               const SizedBox(height: 14),
             ],
+
+            // ── UC-33: Khám sức khỏe buổi sáng ──
+            const Text(
+              'Triệu chứng khi khám sáng (nếu có)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              children: ['Ho', 'Sổ mũi', 'Sốt', 'Phát ban', 'Đau bụng', 'Mệt mỏi'].map((sym) {
+                return ActionChip(
+                  label: Text(sym, style: const TextStyle(fontSize: 12)),
+                  onPressed: () {
+                    final cur = _symptomsCtrl.text.trim();
+                    if (cur.toLowerCase().contains(sym.toLowerCase())) return;
+                    setState(() => _symptomsCtrl.text = cur.isEmpty ? sym : '$cur, $sym');
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _symptomsCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Không có triệu chứng bất thường',
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                prefixIcon: const Icon(Icons.healing, size: 18, color: Colors.redAccent),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
 
             // ── Người đưa trẻ đến lớp ──
             const Text(

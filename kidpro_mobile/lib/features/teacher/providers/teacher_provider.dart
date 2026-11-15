@@ -14,6 +14,10 @@ class TeacherProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get myClasses => _myClasses;
 
   String _currentClassId = '';
+
+  /// true khi thao tác ghi gần nhất (administerMedication, recordNap, ...) thất bại -> màn hình hiện SnackBar đỏ.
+  bool _lastActionFailed = false;
+  bool get lastActionFailed => _lastActionFailed;
   String get currentClassId => _currentClassId;
 
   String _currentClassName = 'Đang tải...';
@@ -76,6 +80,13 @@ class TeacherProvider extends ChangeNotifier {
   List<ClassroomJournalItem> _journalPosts = [];
   List<ClassroomJournalItem> get journalPosts => _journalPosts;
 
+  // 12. Lớp năng khiếu được phân công (rỗng => ẩn mục điểm danh năng khiếu)
+  List<Map<String, dynamic>> _extracurricularClasses = [];
+  List<Map<String, dynamic>> get extracurricularClasses => _extracurricularClasses;
+  bool get hasExtracurricularClasses => _extracurricularClasses.isNotEmpty;
+  /// Chỉ giáo viên được phân công phụ trách xe buýt (finance.teacher_bus_assignment) mới thấy mục xe buýt.
+  bool get hasBusAssignment => _availableBusRoutes.isNotEmpty;
+
   List<TeacherStudent> get students => _students;
   List<StrangerAlert> get strangerAlerts => _strangerAlerts;
   List<MedicationTask> get medications => _medications;
@@ -100,7 +111,7 @@ class TeacherProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
-      await loadMyClasses();
+      await Future.wait([loadMyClasses(), loadExtracurricularClasses(), loadBusRoutes()]);
       if (_currentClassId.isNotEmpty) {
         await Future.wait([
           loadStudents(_currentClassId),
@@ -139,6 +150,180 @@ class TeacherProvider extends ChangeNotifier {
     } catch (e) {
       log('loadMyClasses error: $e');
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Điểm danh lớp năng khiếu (bấm nút, không quét mặt)
+  // ─────────────────────────────────────────────────────────────
+
+  /// Chỉ trả về lớp năng khiếu mà giáo viên được phân công (đã duyệt).
+  Future<void> loadExtracurricularClasses([DateTime? date]) async {
+    try {
+      final res = await _dio.get(
+        ApiEndpoints.teacherExtracurricularClasses,
+        queryParameters: date != null ? {'date': _isoDate(date)} : null,
+      );
+      final data = res.data;
+      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
+      _extracurricularClasses = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (e) {
+      log('loadExtracurricularClasses error: $e');
+      _extracurricularClasses = [];
+    }
+    notifyListeners();
+  }
+
+  /// Bảng điểm danh 1 lớp năng khiếu theo ngày: {className, date, alreadyMarked, students: [...]}
+  Future<Map<String, dynamic>> fetchExtracurricularAttendance(String classId, DateTime date) async {
+    try {
+      final res = await _dio.get(
+        ApiEndpoints.teacherExtracurricularAttendance(classId),
+        queryParameters: {'date': _isoDate(date)},
+      );
+      final data = res.data;
+      final sheet = data is Map<String, dynamic> ? data['data'] : null;
+      return sheet is Map ? Map<String, dynamic>.from(sheet) : <String, dynamic>{};
+    } on DioException catch (e) {
+      throw Exception(_dioMessage(e, 'Không tải được danh sách lớp năng khiếu'));
+    }
+  }
+
+  /// Lưu điểm danh. records: [{studentId, status: PRESENT|ABSENT|EXCUSED, note}]. Trả về null nếu thành công.
+  Future<String?> saveExtracurricularAttendance(
+      String classId, DateTime date, List<Map<String, dynamic>> records) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.teacherExtracurricularAttendance(classId),
+        data: {'date': _isoDate(date), 'records': records},
+      );
+      // cập nhật số liệu "đã điểm danh" trên thẻ dashboard
+      await loadExtracurricularClasses();
+      return null;
+    } on DioException catch (e) {
+      return _dioMessage(e, 'Lưu điểm danh thất bại');
+    } catch (e) {
+      return 'Lưu điểm danh thất bại: $e';
+    }
+  }
+
+  /// UC-72: tiếp nhận thuốc sau khi đối chiếu với đơn của phụ huynh.
+  Future<String> receiveMedication(String id, String? notes) async {
+    _lastActionFailed = false;
+    try {
+      final res = await _dio.put(ApiEndpoints.medicationReceive(id),
+          data: {if (notes != null && notes.isNotEmpty) 'teacherNotes': notes});
+      await loadDailyMedications();
+      return res.data['message']?.toString() ?? 'Đã tiếp nhận thuốc.';
+    } catch (e) {
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không tiếp nhận được thuốc.');
+    }
+  }
+
+  /// UC-72: từ chối tiếp nhận thuốc (bắt buộc lý do).
+  Future<String> rejectMedication(String id, String reason) async {
+    _lastActionFailed = false;
+    try {
+      final res = await _dio.put(ApiEndpoints.medicationReject(id), data: {'rejectReason': reason});
+      await loadDailyMedications();
+      return res.data['message']?.toString() ?? 'Đã từ chối tiếp nhận thuốc.';
+    } catch (e) {
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không từ chối được đơn thuốc.');
+    }
+  }
+
+  /// UC-74: ghi nhận số lần đi vệ sinh và ghi chú trong ngày.
+  Future<String> recordRestroom({required String studentId, required int count, String? note}) async {
+    _lastActionFailed = false;
+    try {
+      final res = await _dio.post(ApiEndpoints.restroomRecords, data: {
+        'studentId': studentId,
+        'toiletCount': count,
+        if (note != null && note.isNotEmpty) 'notes': note,
+      });
+      return res.data['message']?.toString() ?? 'Đã lưu nhật ký vệ sinh.';
+    } catch (e) {
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không lưu được nhật ký vệ sinh.');
+    }
+  }
+
+  /// UC-44: chụp & đăng ảnh khay cơm của lớp theo bữa.
+  Future<String> uploadMealTray({required String photoPath, required String mealType, String? note}) async {
+    _lastActionFailed = false;
+    try {
+      final url = await uploadTeacherPhoto(photoPath, 'meal');
+      final res = await _dio.post(ApiEndpoints.teacherMealTrays, data: {
+        'classId': _currentClassId,
+        'mealType': mealType,
+        'photoUrl': url,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
+      return res.data['message']?.toString() ?? 'Đã đăng ảnh khay cơm.';
+    } catch (e) {
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không đăng được ảnh khay cơm.');
+    }
+  }
+
+  /// UC-81: thông báo theo lớp.
+  List<Map<String, dynamic>> _classAnnouncements = [];
+  List<Map<String, dynamic>> get classAnnouncements => _classAnnouncements;
+
+  Future<void> loadClassAnnouncements() async {
+    if (_currentClassId.isEmpty) await loadMyClasses();
+    if (_currentClassId.isEmpty) return;
+    try {
+      final res = await _dio.get(ApiEndpoints.teacherClassAnnouncements,
+          queryParameters: {'classId': _currentClassId});
+      final data = res.data is Map ? res.data['data'] : res.data;
+      _classAnnouncements = (data as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (e) {
+      log('loadClassAnnouncements error: $e');
+      _classAnnouncements = [];
+    }
+    notifyListeners();
+  }
+
+  Future<String> postClassAnnouncement(String title, String content) async {
+    _lastActionFailed = false;
+    try {
+      final res = await _dio.post(ApiEndpoints.teacherClassAnnouncements,
+          data: {'classId': _currentClassId, 'title': title, 'content': content});
+      await loadClassAnnouncements();
+      return res.data['message']?.toString() ?? 'Đã gửi thông báo cho phụ huynh lớp.';
+    } catch (e) {
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không gửi được thông báo.');
+    }
+  }
+
+  /// Tải ảnh chụp trên máy lên server (folder: attendance | bus-safety | journal | facility), trả về URL cloud.
+  /// Ảnh đã là URL http thì giữ nguyên.
+  Future<String> uploadTeacherPhoto(String pathOrUrl, String folder) async {
+    if (pathOrUrl.startsWith('http')) return pathOrUrl;
+    final form = FormData.fromMap({
+      'photo': await MultipartFile.fromFile(pathOrUrl, filename: '$folder.jpg'),
+    });
+    final res = await _dio.post(ApiEndpoints.teacherUploadPhoto,
+        data: form, queryParameters: {'folder': folder});
+    final data = res.data is Map && res.data['data'] is Map ? res.data['data'] as Map : res.data as Map;
+    final url = data['url']?.toString() ?? '';
+    if (url.isEmpty) throw Exception('Không nhận được URL ảnh từ máy chủ');
+    return url;
+  }
+
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  String _dioMessage(DioException e, String fallback) {
+    final resData = e.response?.data;
+    if (resData is Map && resData['message'] != null) return resData['message'].toString();
+    if (e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout) {
+      return 'Không kết nối được máy chủ';
+    }
+    return fallback;
   }
 
   Future<void> selectClass(String classId) async {
@@ -218,6 +403,18 @@ class TeacherProvider extends ChangeNotifier {
                 if (rec['notes'] != null) {
                   s.notes = rec['notes'].toString();
                 }
+                if (rec['temperature'] is num) {
+                  s.temperature = (rec['temperature'] as num).toDouble();
+                }
+                if (rec['guardianName'] != null) {
+                  s.guardianName = rec['guardianName'].toString();
+                }
+                if (rec['photoUrl'] != null) {
+                  s.photoUrl = rec['photoUrl'].toString();
+                }
+                if (rec['symptoms'] != null) {
+                  s.symptoms = rec['symptoms'].toString();
+                }
                 if (rec['checkInMethod'] != null) {
                   s.checkInMethod = rec['checkInMethod'].toString();
                 }
@@ -258,8 +455,10 @@ class TeacherProvider extends ChangeNotifier {
     double? temperature,
     String? guardianName,
     String? photoUrl,
+    String? symptoms,
   }) {
     if (index < 0 || index >= _students.length) return;
+    if (symptoms != null) _students[index].symptoms = symptoms;
     final s = _students[index];
     if (status != null) s.status = status;
     if (checkInTime != null) s.checkInTime = checkInTime;
@@ -275,6 +474,8 @@ class TeacherProvider extends ChangeNotifier {
     final timeStr =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     for (var s in _students) {
+      // Bé đã có đơn nghỉ phép được duyệt giữ nguyên 'Nghỉ phép'
+      if (s.status == AttendanceStatus.onLeave) continue;
       s.status = AttendanceStatus.present;
       s.checkInTime ??= timeStr;
     }
@@ -342,6 +543,13 @@ class TeacherProvider extends ChangeNotifier {
         return false;
       }
 
+      // Ảnh lúc đón chụp trên máy -> tải lên cloud trước khi lưu (để xem lại được sau khi tải lại)
+      for (final s in validStudents) {
+        if (s.photoUrl != null && s.photoUrl!.isNotEmpty && !s.photoUrl!.startsWith('http')) {
+          s.photoUrl = await uploadTeacherPhoto(s.photoUrl!, 'attendance');
+        }
+      }
+
       final records = validStudents.map((s) {
         String statusStr;
         switch (s.status) {
@@ -362,6 +570,12 @@ class TeacherProvider extends ChangeNotifier {
           'studentId': s.id,
           'status': statusStr,
           if (s.notes != null && s.notes!.isNotEmpty) 'notes': s.notes,
+          if (s.checkInTime != null && RegExp(r'^\d{2}:\d{2}').hasMatch(s.checkInTime!))
+            'checkInTime': s.checkInTime!.substring(0, 5),
+          if (s.temperature != null) 'temperature': s.temperature,
+          if (s.guardianName != null && s.guardianName!.isNotEmpty) 'guardianName': s.guardianName,
+          if (s.symptoms != null && s.symptoms!.isNotEmpty) 'symptoms': s.symptoms,
+          if (s.photoUrl != null && s.photoUrl!.startsWith('http')) 'photoUrl': s.photoUrl,
         };
       }).toList();
 
@@ -459,6 +673,7 @@ class TeacherProvider extends ChangeNotifier {
     required String stopId,
     required String actionType,
   }) async {
+    _lastActionFailed = false;
     try {
       final res = await _dio.post(
         ApiEndpoints.busCheckin,
@@ -466,13 +681,15 @@ class TeacherProvider extends ChangeNotifier {
           'tripId': tripId,
           'studentId': studentId,
           'stopId': stopId,
-          'actionType': actionType,
+          'action': actionType,
         },
       );
+      await loadBusTrip(tripId);
       return res.data['message']?.toString() ?? 'Ghi nhận điểm danh xe buýt thành công';
     } catch (e) {
       log('submitBusCheckin error: $e');
-      return 'Ghi nhận điểm danh xe buýt thành công.';
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không ghi nhận được điểm danh xe buýt.');
     }
   }
 
@@ -482,6 +699,7 @@ class TeacherProvider extends ChangeNotifier {
     required String photoUrl,
     required String qrTailScanToken,
   }) async {
+    _lastActionFailed = false;
     try {
       final res = await _dio.post(
         ApiEndpoints.busSafetyClosure(tripId),
@@ -492,13 +710,12 @@ class TeacherProvider extends ChangeNotifier {
           'remainingStudentsCount': _currentBusTrip?.remainingCount ?? 0,
         },
       );
+      await loadBusTrip(tripId);
       return res.data['message']?.toString() ?? 'Hoàn thành chuyến xe an toàn';
     } catch (e) {
       log('performBusSafetyClosure error: $e');
-      if (e is DioException && e.response?.data is Map) {
-        return e.response?.data['message']?.toString() ?? 'Không thể đóng chuyến xe';
-      }
-      return 'Không thể đóng chuyến xe, vui lòng thử lại.';
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không thể đóng chuyến xe, vui lòng thử lại.');
     }
   }
 
@@ -747,11 +964,25 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   Future<String?> administerMedication(String id, String proofImageUrl, String? note) async {
+    _lastActionFailed = false;
     try {
+      // Ảnh chụp từ camera là file trên máy -> tải lên server trước để lấy fileId/url thật (BR-030)
+      String? proofPhotoId;
+      String photoUrl = proofImageUrl;
+      if (!proofImageUrl.startsWith('http')) {
+        final form = FormData.fromMap({
+          'photo': await MultipartFile.fromFile(proofImageUrl, filename: 'medication_proof.jpg'),
+        });
+        final up = await _dio.post(ApiEndpoints.medicationProofPhoto, data: form);
+        final upData = up.data is Map && up.data['data'] is Map ? up.data['data'] as Map : up.data as Map;
+        proofPhotoId = upData['fileId']?.toString();
+        photoUrl = upData['url']?.toString() ?? '';
+      }
       final res = await _dio.post(
         ApiEndpoints.medicationAdminister(id),
         data: {
-          'proofPhotoUrl': proofImageUrl,
+          if (proofPhotoId != null) 'proofPhotoId': proofPhotoId,
+          'photoUrl': photoUrl,
           'administeredAt': DateTime.now().toIso8601String(),
           if (note != null) 'notes': note,
         },
@@ -760,7 +991,8 @@ class TeacherProvider extends ChangeNotifier {
       return res.data['message']?.toString() ?? 'MSG-205: Xác nhận đã cho trẻ uống thuốc thành công.';
     } catch (e) {
       await loadDailyMedications();
-      return 'MSG-205: Xác nhận đã cho trẻ uống thuốc thành công và gửi thông báo tới phụ huynh.';
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không xác nhận được lần uống thuốc.');
     }
   }
 
@@ -786,6 +1018,7 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   Future<String?> submitHealthMetricsBatch(List<Map<String, dynamic>> metrics) async {
+    _lastActionFailed = false;
     _loading = true;
     notifyListeners();
     try {
@@ -803,13 +1036,29 @@ class TeacherProvider extends ChangeNotifier {
     } catch (e) {
       _loading = false;
       notifyListeners();
-      return 'MSG-131: Lưu chỉ số phát triển thể chất định kỳ thành công theo tiêu chuẩn WHO.';
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không lưu được chỉ số thể chất.');
     }
   }
 
   // ─────────────────────────────────────────────────────────────
   // 7. Health Incidents (G8-UC-04, BR-031)
   // ─────────────────────────────────────────────────────────────
+
+  /// Sự cố y tế của cả lớp đang chọn (thay vì chỉ 1 học sinh).
+  Future<void> loadClassHealthIncidents() async {
+    if (_currentClassId.isEmpty) return;
+    try {
+      final res = await _dio.get(ApiEndpoints.healthIncidentsByClass(_currentClassId));
+      final data = res.data;
+      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
+      _healthIncidents = list.map((e) => HealthIncident.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (e) {
+      log('loadClassHealthIncidents error: $e');
+      _healthIncidents = [];
+    }
+    notifyListeners();
+  }
 
   Future<void> loadHealthIncidents(String studentId) async {
     if (studentId.isEmpty) return;
@@ -835,21 +1084,23 @@ class TeacherProvider extends ChangeNotifier {
     required String description,
     required String firstAidGiven,
   }) async {
+    _lastActionFailed = false;
     try {
       final res = await _dio.post(
         ApiEndpoints.healthIncidents,
         data: {
+          // Khớp HealthIncidentCreateDto: loại sự cố + mức độ ghi vào đầu mô tả triệu chứng
           'studentId': studentId,
-          'incidentType': incidentType,
-          'severity': severity,
-          'description': description,
-          'firstAidGiven': firstAidGiven,
+          'symptomDescription': '[$incidentType][$severity] $description',
+          'isSevere': severity == 'SEVERE',
+          if (firstAidGiven.isNotEmpty) 'firstAidGiven': firstAidGiven,
         },
       );
-      await loadHealthIncidents(studentId);
+      await loadClassHealthIncidents();
       return res.data['message']?.toString() ?? 'MSG-135: Ghi nhận sự cố y tế và gửi thông báo khẩn cấp tới phụ huynh thành công.';
-    } catch (_) {
-      return 'MSG-135: Ghi nhận sự cố y tế và phương án sơ cứu thành công.';
+    } catch (e) {
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không ghi nhận được sự cố y tế.');
     }
   }
 
@@ -864,20 +1115,31 @@ class TeacherProvider extends ChangeNotifier {
     required String sleepQuality,
     String? note,
   }) async {
+    _lastActionFailed = false;
     try {
       final res = await _dio.post(
         ApiEndpoints.napRecords,
         data: {
+          // Khớp DailyActivityRecordDto ở backend (startTime/endTime/notes, enum SleepQuality)
           'studentId': studentId,
-          'napStartTime': napStartTime,
-          'napEndTime': napEndTime,
-          'sleepQuality': sleepQuality,
-          if (note != null) 'note': note,
+          'startTime': napStartTime,
+          'endTime': napEndTime,
+          'sleepQuality': const {
+                'NGỦ SÂU': 'GOOD',
+                'HAY GIẬT MÌNH': 'RESTLESS',
+                'KHÓ VÀO GIẤC': 'DIFFICULT_TO_SLEEP',
+                'KHÓC KHI THỨC': 'WOKE_UP_CRYING',
+              }[sleepQuality] ??
+              sleepQuality,
+          if (note != null && note.isNotEmpty) 'notes': note,
         },
       );
-      return res.data['message']?.toString() ?? 'MSG-208: Ghi nhận nhật ký giấc ngủ của trẻ thành công.';
-    } catch (_) {
-      return 'MSG-208: Ghi nhận nhật ký giấc ngủ của trẻ thành công (BR-032).';
+      final msg = res.data['message']?.toString() ?? 'MSG-208: Ghi nhận nhật ký giấc ngủ của trẻ thành công.';
+      final minutes = (res.data['data'] is Map) ? res.data['data']['napDurationMinutes'] : null;
+      return minutes != null ? '$msg (Thời lượng ngủ: $minutes phút)' : msg;
+    } catch (e) {
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không lưu được nhật ký giấc ngủ.');
     }
   }
 
@@ -887,19 +1149,28 @@ class TeacherProvider extends ChangeNotifier {
     required String portionEaten,
     String? note,
   }) async {
+    _lastActionFailed = false;
     try {
       final res = await _dio.post(
         ApiEndpoints.mealRecords,
         data: {
+          // Khớp DailyActivityRecordDto ở backend (mealType, intakeLevel enum ConsumptionLevel, notes)
           'studentId': studentId,
-          'mealType': mealType,
-          'portionEaten': portionEaten,
-          if (note != null) 'note': note,
+          'mealType': const {
+                'BỮA SÁNG': 'BREAKFAST',
+                'BỮA PHỤ SÁNG': 'MORNING_SNACK',
+                'BỮA TRƯA': 'LUNCH',
+                'BỮA XẾ': 'AFTERNOON_SNACK',
+              }[mealType] ??
+              mealType,
+          'intakeLevel': portionEaten == 'NONE' ? 'REFUSED' : portionEaten,
+          if (note != null && note.isNotEmpty) 'notes': note,
         },
       );
       return res.data['message']?.toString() ?? 'MSG-211: Ghi nhận khẩu phần ăn của trẻ thành công.';
-    } catch (_) {
-      return 'MSG-211: Ghi nhận khẩu phần ăn của trẻ thành công.';
+    } catch (e) {
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không lưu được khẩu phần ăn.');
     }
   }
 
@@ -931,6 +1202,7 @@ class TeacherProvider extends ChangeNotifier {
     required String fileUrl,
     required List<String> activities,
   }) async {
+    _lastActionFailed = false;
     try {
       final res = await _dio.post(
         ApiEndpoints.lessonPlans,
@@ -938,15 +1210,17 @@ class TeacherProvider extends ChangeNotifier {
           'classId': classId,
           'weekNumber': weekNumber,
           'title': title,
-          'fileUrl': fileUrl,
-          'educationalActivities': activities,
+          if (fileUrl.isNotEmpty) 'fileUrl': fileUrl,
+          // Backend nhận 'activities' dạng chuỗi, mỗi dòng 1 ngày (Thứ 2 → Thứ 6)
+          'activities': activities.join('\n'),
         },
       );
       await loadLessonPlans(classId);
       return res.data['message']?.toString() ?? 'MSG-188: Nộp kế hoạch giáo dục tuần lên BGH thành công.';
-    } catch (_) {
+    } catch (e) {
       await loadLessonPlans(classId);
-      return 'MSG-188: Nộp kế hoạch giáo dục tuần lên BGH thành công (BR-053).';
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không nộp được kế hoạch giáo dục tuần.');
     }
   }
 
@@ -972,6 +1246,7 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   Future<String?> submitEvaluation(DevelopmentEvaluationItem item) async {
+    _lastActionFailed = false;
     try {
       final res = await _dio.post(
         ApiEndpoints.developmentEvaluations,
@@ -983,14 +1258,15 @@ class TeacherProvider extends ChangeNotifier {
           'languageScore': item.languageScore,
           'socialEmotionalScore': item.socialEmotionalScore,
           'aestheticScore': item.aestheticScore,
-          'teacherComment': item.teacherComment,
+          'comments': item.teacherComment,
         },
       );
       await loadDevelopmentEvaluations(_currentClassId);
       return res.data['message']?.toString() ?? 'MSG-181: Lưu phiếu đánh giá chuẩn phát triển 5 lĩnh vực của trẻ thành công.';
-    } catch (_) {
+    } catch (e) {
       await loadDevelopmentEvaluations(_currentClassId);
-      return 'MSG-181: Đã lưu đánh giá 5 lĩnh vực phát triển thành công (BR-049).';
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không lưu được phiếu đánh giá.');
     }
   }
 
@@ -1021,21 +1297,25 @@ class TeacherProvider extends ChangeNotifier {
     required String photoUrl,
     String? classroomId,
   }) async {
+    _lastActionFailed = false;
     try {
+      final uploadedUrl = await uploadTeacherPhoto(photoUrl, 'facility');
       final res = await _dio.post(
         ApiEndpoints.equipmentIncidents,
         data: {
           'equipmentName': equipmentName,
           'description': description,
-          'photoUrl': photoUrl,
+          'severity': 'NORMAL',
+          'photoUrl': uploadedUrl,
           'classroomId': classroomId ?? _currentClassId,
         },
       );
       await loadEquipmentIncidents(_currentClassId);
       return res.data['message']?.toString() ?? 'MSG-185: Báo cáo sự cố cơ sở vật chất lớp học thành công.';
-    } catch (_) {
+    } catch (e) {
       await loadEquipmentIncidents(_currentClassId);
-      return 'MSG-185: Báo cáo sự cố CSVC thành công (Kèm ảnh chụp hiện trường BR-051).';
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không gửi được báo cáo sự cố CSVC.');
     }
   }
 
@@ -1129,6 +1409,7 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   Future<String?> toggleChatLock(String classId, bool lockState) async {
+    _lastActionFailed = false;
     try {
       final res = await _dio.put(
         ApiEndpoints.classChatLock(classId),
@@ -1137,10 +1418,10 @@ class TeacherProvider extends ChangeNotifier {
       _isChatLocked = lockState;
       notifyListeners();
       return res.data['message']?.toString() ?? 'MSG-235: Cập nhật trạng thái điều hành nhóm chat lớp thành công.';
-    } catch (_) {
-      _isChatLocked = lockState;
+    } catch (e) {
       notifyListeners();
-      return 'MSG-235: Cập nhật trạng thái điều hành nhóm chat lớp thành công (BR-059).';
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không cập nhật được trạng thái nhóm chat.');
     }
   }
 
@@ -1254,22 +1535,29 @@ class TeacherProvider extends ChangeNotifier {
     required List<String> photoUrls,
     required List<String> taggedStudentIds,
   }) async {
+    _lastActionFailed = false;
     try {
+      // Ảnh chọn từ máy -> tải lên cloud trước
+      final uploaded = <String>[];
+      for (final p in photoUrls) {
+        uploaded.add(await uploadTeacherPhoto(p, 'journal'));
+      }
       final res = await _dio.post(
         ApiEndpoints.journalPosts,
         data: {
           'classId': _currentClassId,
           'title': title,
           'content': content,
-          'photoUrls': photoUrls,
+          'photoUrls': uploaded,
           'taggedStudentIds': taggedStudentIds,
         },
       );
       await loadClassroomJournal(_currentClassId);
       return res.data['message']?.toString() ?? 'MSG-238: Đăng tải album ảnh hoạt động lớp thành công.';
-    } catch (_) {
+    } catch (e) {
       await loadClassroomJournal(_currentClassId);
-      return 'MSG-238: Đăng tải album hoạt động lớp học thành công (BR-060).';
+      _lastActionFailed = true;
+      return _apiMessage(e, 'Không đăng được album.');
     }
   }
 }

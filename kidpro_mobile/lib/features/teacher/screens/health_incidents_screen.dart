@@ -24,9 +24,7 @@ class _HealthIncidentsScreenState extends State<HealthIncidentsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<TeacherProvider>();
       await prov.loadStudents(prov.currentClassId);
-      if (prov.students.isNotEmpty) {
-        prov.loadHealthIncidents(prov.students.first.id);
-      }
+      await prov.loadClassHealthIncidents();
     });
   }
 
@@ -202,7 +200,7 @@ class _HealthIncidentsScreenState extends State<HealthIncidentsScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(msg ?? 'Ghi nhận thành công'),
-                              backgroundColor: AppColors.success,
+                              backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success,
                             ),
                           );
                         }
@@ -230,11 +228,7 @@ class _HealthIncidentsScreenState extends State<HealthIncidentsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              if (prov.students.isNotEmpty) {
-                prov.loadHealthIncidents(prov.students.first.id);
-              }
-            },
+            onPressed: () => prov.loadClassHealthIncidents(),
           ),
         ],
       ),

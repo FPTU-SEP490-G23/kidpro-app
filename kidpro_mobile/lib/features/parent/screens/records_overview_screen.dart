@@ -164,14 +164,19 @@ class _RecordsOverviewScreenState extends State<RecordsOverviewScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Giấc ngủ trưa: ${act.napDurationMinutes ?? 120} phút',
+                                'Giấc ngủ trưa: ${act.napDurationMinutes != null ? '${act.napDurationMinutes} phút' : 'chưa ghi nhận'}',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo),
                               ),
                               Text(
-                                'Chất lượng: ${act.sleepQuality ?? "Ngủ ngon giấc"} ${act.napNote != null ? "• " + act.napNote! : ""}',
+                                'Chất lượng: ${act.sleepQuality ?? "chưa ghi nhận"} ${act.napNote != null ? "• " + act.napNote! : ""}',
                                 style: TextStyle(fontSize: 12, color: Colors.indigo.shade800),
                               ),
+                              if (act.toiletCount != null)
+                                Text(
+                                  'Vệ sinh: ${act.toiletCount} lần${act.toiletNote != null && act.toiletNote!.isNotEmpty ? ' • ${act.toiletNote}' : ''}',
+                                  style: TextStyle(fontSize: 12, color: Colors.teal.shade800),
+                                ),
                             ],
                           ),
                         ),

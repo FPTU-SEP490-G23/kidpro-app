@@ -16,6 +16,8 @@ class TeacherStudent {
   String? guardianName;
   String? photoUrl;
   String? checkInMethod;
+  /// UC-33: triệu chứng khi khám sức khỏe buổi sáng
+  String? symptoms;
 
   TeacherStudent({
     required this.id,
@@ -30,6 +32,7 @@ class TeacherStudent {
     this.guardianName,
     this.photoUrl,
     this.checkInMethod,
+    this.symptoms,
   });
 
   factory TeacherStudent.fromJson(Map<String, dynamic> json) => TeacherStudent(
@@ -114,8 +117,14 @@ class MedicationTask {
     this.administeredAt,
   });
 
-  bool get isPending => status == 'PENDING';
-  bool get isAdministered => status == 'ADMINISTERED';
+  // Backend: PENDING (chờ tiếp nhận), ACCEPTED (đã nhận thuốc), COMPLETED (đã cho uống), CANCELLED
+  bool get isPending => status == 'PENDING' || status == 'ACCEPTED';
+  /// UC-72: đơn mới, cô giáo chưa tiếp nhận & đối chiếu thuốc
+  bool get isAwaitingReceipt => status == 'PENDING';
+  /// Đã tiếp nhận thuốc, chờ cho uống
+  bool get isReceived => status == 'ACCEPTED';
+  bool get isAdministered => status == 'ADMINISTERED' || status == 'COMPLETED';
+  bool get isCancelled => status == 'CANCELLED';
 
   factory MedicationTask.fromJson(Map<String, dynamic> json) => MedicationTask(
         id: (json['id'] ?? json['requestId'] ?? '').toString(),
@@ -187,6 +196,8 @@ class BusTripInfo {
   final int remainingCount;
   final bool isSafetyClosed;
   final List<BusStopInfo> stops;
+  final List<BusStudentInfo> students;
+  final int waitingCount;
 
   const BusTripInfo({
     required this.tripId,
@@ -200,6 +211,8 @@ class BusTripInfo {
     required this.remainingCount,
     this.isSafetyClosed = false,
     this.stops = const [],
+    this.students = const [],
+    this.waitingCount = 0,
   });
 
   factory BusTripInfo.fromJson(Map<String, dynamic> json) {
@@ -218,7 +231,7 @@ class BusTripInfo {
     return BusTripInfo(
       tripId: (json['tripId'] ?? '').toString(),
       routeName: json['routeName'] as String? ?? 'Tuyến xe buýt KidPro',
-      plateNumber: json['plateNumber'] as String? ?? '29B-123.45',
+      plateNumber: json['plateNumber'] as String? ?? '',
       driverName: json['driverName'] as String?,
       driverPhone: json['driverPhone'] as String?,
       totalStudents: (json['totalStudents'] as num?)?.toInt() ?? 0,
@@ -227,8 +240,46 @@ class BusTripInfo {
       remainingCount: (json['remainingCount'] as num?)?.toInt() ?? 0,
       isSafetyClosed: json['isSafetyClosed'] as bool? ?? false,
       stops: stopsList,
+      students: (json['students'] is List)
+          ? (json['students'] as List)
+              .whereType<Map>()
+              .map((e) => BusStudentInfo.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      waitingCount: (json['waitingCount'] as num?)?.toInt() ?? 0,
     );
   }
+}
+
+/// Học sinh đăng ký (đã duyệt) đi chuyến xe: WAITING (chưa lên) / ONBOARD (trên xe) / DEBOARDED (đã xuống).
+class BusStudentInfo {
+  final String studentId;
+  final String studentName;
+  final String? className;
+  final String? pickupAddress;
+  final String status;
+  final String? lastTime;
+
+  const BusStudentInfo({
+    required this.studentId,
+    required this.studentName,
+    this.className,
+    this.pickupAddress,
+    this.status = 'WAITING',
+    this.lastTime,
+  });
+
+  bool get isOnboard => status == 'ONBOARD';
+  bool get isDeboarded => status == 'DEBOARDED';
+
+  factory BusStudentInfo.fromJson(Map<String, dynamic> json) => BusStudentInfo(
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String? ?? '',
+        className: json['className'] as String?,
+        pickupAddress: json['pickupAddress'] as String?,
+        status: json['status'] as String? ?? 'WAITING',
+        lastTime: json['lastTime'] as String?,
+      );
 }
 
 // ── Emergency Pickup Verification (G5-UC-06, BR-022) ──
@@ -441,19 +492,23 @@ class HealthIncident {
     required this.createdAt,
   });
 
-  factory HealthIncident.fromJson(Map<String, dynamic> json) => HealthIncident(
-        incidentId: (json['incidentId'] as num?)?.toInt() ?? 0,
-        studentId: (json['studentId'] ?? '').toString(),
-        studentName: json['studentName'] as String? ?? 'Bé',
-        incidentType: json['incidentType'] as String? ?? 'SỰ CỐ',
-        severity: json['severity'] as String? ?? 'MILD',
-        description: json['description'] as String? ?? '',
-        firstAidGiven: json['firstAidGiven'] as String?,
-        status: json['status'] as String? ?? 'REPORTED',
-        createdAt: json['createdAt'] != null
-            ? DateTime.parse(json['createdAt'] as String)
-            : DateTime.now(),
-      );
+  factory HealthIncident.fromJson(Map<String, dynamic> json) {
+    // Backend lưu '[LOẠI][MỨC ĐỘ] mô tả' trong symptomDescription
+    final raw = (json['symptomDescription'] ?? json['description'] ?? '').toString();
+    final m = RegExp(r'^\[([^\]]*)\]\[([^\]]*)\]\s*(.*)$', dotAll: true).firstMatch(raw);
+    final time = json['incidentTime'] ?? json['createdAt'];
+    return HealthIncident(
+      incidentId: (json['incidentId'] as num?)?.toInt() ?? 0,
+      studentId: (json['studentId'] ?? '').toString(),
+      studentName: json['studentName'] as String? ?? 'Bé',
+      incidentType: m?.group(1) ?? json['incidentType'] as String? ?? 'SỰ CỐ',
+      severity: m?.group(2) ?? json['severity'] as String? ?? 'MILD',
+      description: m?.group(3) ?? raw,
+      firstAidGiven: json['firstAidGiven'] as String?,
+      status: json['status'] as String? ?? 'REPORTED',
+      createdAt: time != null ? (DateTime.tryParse(time.toString()) ?? DateTime.now()) : DateTime.now(),
+    );
+  }
 }
 
 // ── Lesson Plan (G9-UC-01, BR-053) ──

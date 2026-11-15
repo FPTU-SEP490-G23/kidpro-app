@@ -176,59 +176,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
 
                   const SizedBox(height: 24),
-                  const Row(
-                    children: [
-                      Expanded(child: Divider()),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          'Đăng nhập nhanh thử nghiệm',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ),
-                      Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Quick login buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          icon: const Icon(Icons.school, size: 18),
-                          label: const Text('Giáo Viên', style: TextStyle(fontSize: 13)),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          onPressed: auth.loading
-                              ? null
-                              : () => auth.loginWithGoogleEmail(
-                                    email: 'teacher@kidpro.edu.vn',
-                                    fullName: 'Cô Mai Lan (Giáo Viên)',
-                                  ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          icon: const Icon(Icons.family_restroom, size: 18),
-                          label: const Text('Phụ Huynh', style: TextStyle(fontSize: 13)),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          onPressed: auth.loading
-                              ? null
-                              : () => auth.loginWithGoogleEmail(
-                                    email: 'parent@gmail.com',
-                                    fullName: 'Phụ Huynh Bé Bảo An',
-                                  ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
                   TextButton.icon(
                     icon: const Icon(Icons.settings_ethernet, size: 18),
                     label: Text(

@@ -79,6 +79,9 @@ class ApiClient {
 /// Injects JWT Bearer token into every request.
 /// On 401, attempts to refresh the token once before failing.
 class AuthInterceptor extends Interceptor {
+  /// Gọi khi phiên đăng nhập hết hạn (token bị xóa) để UI quay về màn đăng nhập.
+  static void Function()? onSessionExpired;
+
   final Dio _dio;
   bool _isRefreshing = false;
 
@@ -111,6 +114,7 @@ class AuthInterceptor extends Interceptor {
         final refreshToken = await SecureStorageHelper.getRefreshToken();
         if (refreshToken == null) {
           await SecureStorageHelper.clearAll();
+          onSessionExpired?.call();
           return handler.reject(err);
         }
 
@@ -131,6 +135,7 @@ class AuthInterceptor extends Interceptor {
       } on DioException {
         // Refresh failed — force logout
         await SecureStorageHelper.clearAll();
+        onSessionExpired?.call();
         return handler.reject(err);
       } finally {
         _isRefreshing = false;

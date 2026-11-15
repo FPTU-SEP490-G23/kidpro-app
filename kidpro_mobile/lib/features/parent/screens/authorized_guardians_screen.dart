@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/parent/models/parent_models.dart';
 import 'package:kidpro_mobile/features/parent/providers/parent_provider.dart';
@@ -243,7 +242,7 @@ class _AuthorizedGuardiansScreenState extends State<AuthorizedGuardiansScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('dd/MM/yyyy');
+
 
     return Scaffold(
       appBar: AppBar(

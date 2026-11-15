@@ -44,6 +44,13 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
   // Liveness / Trigger state
   bool _faceInFrame = false;
   DateTime? _faceDetectedTime;
+  // Liveness: phải thấy mắt mở -> nhắm -> mở (chớp mắt 80-1800 ms) mới chụp, chống dùng ảnh in/màn hình
+  bool _sawEyesOpen = false;
+  DateTime? _eyesClosedAt;
+  bool _livenessPassed = false;
+  // Ảnh đã chụp của lần nhận diện gần nhất, dùng lại khi cô giáo bấm xác nhận bàn giao
+  Uint8List? _lastPhotoBytes;
+  bool _confirming = false;
   String _statusMessage = 'Hướng camera về phía phụ huynh đến đón';
 
   late AnimationController _animCtrl;
@@ -243,20 +250,43 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
 
       final left = face.leftEyeOpenProbability;
       final right = face.rightEyeOpenProbability;
-      final bool hasEyes = (left != null && right != null && (left > 0.4 || right > 0.4));
+      if (left == null || right == null) return;
+      final avg = (left + right) / 2;
+      final bool eyesOpen = avg > 0.45 || left > 0.5 || right > 0.5;
+      final bool eyesClosed = avg < 0.35 && left < 0.3 && right < 0.3;
 
       if (!_faceInFrame) {
         setState(() {
           _faceInFrame = true;
           _faceDetectedTime = DateTime.now();
-          _statusMessage = 'Đã thấy phụ huynh! Đang giữ ổn định...';
+          _sawEyesOpen = false;
+          _eyesClosedAt = null;
+          _livenessPassed = false;
+          _statusMessage = 'Đã thấy phụ huynh! Vui lòng chớp mắt để xác thực...';
         });
-      } else if (_faceDetectedTime != null && hasEyes) {
-        // Giữ mặt ổn định khoảng 400ms -> Chụp và đối chiếu
-        final elapsed = DateTime.now().difference(_faceDetectedTime!).inMilliseconds;
-        if (elapsed >= 400) {
-          _triggerCaptureAndVerify();
+        return;
+      }
+
+      // Kiểm tra người thật bằng một lần chớp mắt
+      if (!_livenessPassed) {
+        if (eyesOpen && _eyesClosedAt == null) {
+          _sawEyesOpen = true;
+        } else if (eyesClosed && _sawEyesOpen && _eyesClosedAt == null) {
+          _eyesClosedAt = DateTime.now();
+        } else if (eyesOpen && _eyesClosedAt != null) {
+          final blinkMs = DateTime.now().difference(_eyesClosedAt!).inMilliseconds;
+          if (blinkMs >= 80 && blinkMs <= 1800) {
+            _livenessPassed = true;
+            setState(() => _statusMessage = 'Đã xác thực người thật. Đang chụp...');
+          } else {
+            _eyesClosedAt = null;
+          }
         }
+        return;
+      }
+
+      if (eyesOpen) {
+        _triggerCaptureAndVerify();
       }
     } catch (e) {
       debugPrint('Face detection error: $e');
@@ -339,9 +369,9 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
     });
     HapticFeedback.mediumImpact();
 
-    // Watchdog timer 10s
+    // Watchdog dài hơn thời gian chờ mạng (45 s) để không reset khi request cũ còn chạy
     _autoResetTimer?.cancel();
-    _autoResetTimer = Timer(const Duration(seconds: 10), () {
+    _autoResetTimer = Timer(const Duration(seconds: 50), () {
       if (mounted && _isProcessing) {
         setState(() {
           _isProcessing = false;
@@ -367,11 +397,13 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
       final XFile photo = await _cameraController!.takePicture();
       final bytes = await photo.readAsBytes();
       final compressed = _compressImage(bytes);
+      _lastPhotoBytes = compressed;
 
+      // Chỉ nhận diện; việc bàn giao bé phải do cô giáo bấm xác nhận
       final (result, errorMsg) = await provider.recognizeParentPickup(
             classId: widget.classId,
             photoBytes: compressed,
-            autoCheckout: true,
+            autoCheckout: false,
           );
 
       if (!mounted) return;
@@ -423,12 +455,39 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
     }
   }
 
+  /// Cô giáo xác nhận bàn giao: gửi lại đúng ảnh đã nhận diện với autoCheckout=true
+  /// (backend kiểm tra lại quyền đón trước khi ghi giờ rời lớp).
+  Future<void> _confirmHandover() async {
+    final bytes = _lastPhotoBytes;
+    if (bytes == null) return;
+    setState(() => _confirming = true);
+    final (result, msg) = await context.read<TeacherProvider>().recognizeParentPickup(
+          classId: widget.classId,
+          photoBytes: bytes,
+          autoCheckout: true,
+        );
+    if (!mounted) return;
+    setState(() {
+      _confirming = false;
+      if (result != null) _lastResult = result;
+    });
+    final ok = result != null && result.checkoutSuccess;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok ? 'Đã bàn giao bé ${result.studentName ?? ''} lúc ${result.checkoutTime ?? ''}' : msg),
+      backgroundColor: ok ? AppColors.success : AppColors.error,
+    ));
+  }
+
   void _resetForNextParent() async {
     _autoResetTimer?.cancel();
     setState(() {
       _lastResult = null;
       _faceInFrame = false;
       _faceDetectedTime = null;
+      _sawEyesOpen = false;
+      _eyesClosedAt = null;
+      _livenessPassed = false;
+      _lastPhotoBytes = null;
       _isProcessing = false;
       _statusMessage = 'Hướng camera về phía phụ huynh tiếp theo';
     });
@@ -753,6 +812,31 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
             ),
           ],
 
+          if (isSuccess && !result.checkoutSuccess && !result.alreadyCheckedOut && _lastPhotoBytes != null) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF7C3AED),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _confirming ? null : _confirmHandover,
+                icon: _confirming
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.how_to_reg_rounded, size: 20),
+                label: Text('Xác nhận bàn giao bé ${result.studentName ?? ''}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              ),
+            ),
+          ],
+          if (result.alreadyCheckedOut)
+            const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: Text('Bé đã được bàn giao trước đó.', style: TextStyle(color: Colors.orangeAccent)),
+            ),
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
@@ -795,17 +879,6 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
               onPressed: () => Navigator.pop(context),
               icon: const Icon(Icons.arrow_back_ios_rounded, size: 16),
               label: const Text('Quay lại'),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7C3AED),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: _triggerCaptureAndVerify,
-              icon: const Icon(Icons.camera_alt_rounded, size: 20),
-              label: const Text('Chụp ngay', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
