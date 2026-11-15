@@ -336,6 +336,8 @@ class _PickupFaceScanScreenState extends State<PickupFaceScanScreen> {
           Text(
             'Đang xác thực: ${widget.personName}',
             style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12.5),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 6),
           Row(
@@ -355,7 +357,9 @@ class _PickupFaceScanScreenState extends State<PickupFaceScanScreen> {
                 child: Text(
                   _message,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -366,10 +370,15 @@ class _PickupFaceScanScreenState extends State<PickupFaceScanScreen> {
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 side: const BorderSide(color: Colors.white54),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               ),
               onPressed: () => _capture(livenessVerified: false),
               icon: const Icon(Icons.camera_alt_outlined, size: 18),
-              label: const Text('Không nhận được chớp mắt? Chụp tay'),
+              label: const Text(
+                'Không nhận được chớp mắt? Chụp tay',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ],

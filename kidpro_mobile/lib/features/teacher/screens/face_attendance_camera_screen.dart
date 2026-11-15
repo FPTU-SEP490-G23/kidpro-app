@@ -743,15 +743,14 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStepItem(1, 'Tìm mặt', step1Done, _livenessStep == LivenessStep.searchingFace),
+              Expanded(child: _buildStepItem(1, 'Tìm mặt', step1Done, _livenessStep == LivenessStep.searchingFace)),
               _buildStepArrow(),
-              _buildStepItem(2, 'Mở mắt', step2Done, _livenessStep == LivenessStep.faceDetected),
+              Expanded(child: _buildStepItem(2, 'Mở mắt', step2Done, _livenessStep == LivenessStep.faceDetected)),
               _buildStepArrow(),
-              _buildStepItem(3, 'Chớp mắt', step3Done, _livenessStep == LivenessStep.waitingBlink || _livenessStep == LivenessStep.eyesClosed),
+              Expanded(child: _buildStepItem(3, 'Chớp mắt', step3Done, _livenessStep == LivenessStep.waitingBlink || _livenessStep == LivenessStep.eyesClosed)),
               _buildStepArrow(),
-              _buildStepItem(4, 'Xác thực', step4Done, _livenessStep == LivenessStep.passed),
+              Expanded(child: _buildStepItem(4, 'Xác thực', step4Done, _livenessStep == LivenessStep.passed)),
             ],
           ),
           if (_leftEyeOpen != null && _rightEyeOpen != null && _lastResult == null) ...[
@@ -808,6 +807,9 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
         const SizedBox(height: 4),
         Text(
           title,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: color,
             fontSize: 11,
@@ -953,18 +955,19 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                         ],
                       ),
 
-                    // Khung Oval định vị mặt bé (Tự động đổi màu theo 4 bước)
-                    Container(
-                      width: 220,
-                      height: 280,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: borderColor.withValues(alpha: 0.9),
-                          width: 3.0,
+                    // Khung Oval định vị mặt bé (Chỉ hiện khi chưa có kết quả)
+                    if (_lastResult == null)
+                      Container(
+                        width: 220,
+                        height: 280,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: borderColor.withValues(alpha: 0.9),
+                            width: 3.0,
+                          ),
+                          borderRadius: BorderRadius.circular(110),
                         ),
-                        borderRadius: BorderRadius.circular(110),
                       ),
-                    ),
 
                     // Hiệu ứng Quét Scanner khi đang xử lý
                     if (_isProcessing)
@@ -991,196 +994,232 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                         },
                       ),
 
-                    // Hướng dẫn trạng thái dạng Badge động
+                    // Hướng dẫn trạng thái dạng Badge động (Chống tràn viền)
                     Positioned(
                       top: 14,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: borderColor.withValues(alpha: 0.7)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _livenessStep == LivenessStep.passed
-                                  ? Icons.verified
-                                  : (_livenessStep == LivenessStep.eyesClosed
-                                      ? Icons.remove_red_eye_outlined
-                                      : Icons.face),
-                              color: borderColor,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _statusMessage,
-                              style: TextStyle(
-                                color: borderColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // RESULT SHEET (PRESENT - ĐIỂM DANH THÀNH CÔNG)
-                    if (isPresent)
-                      Positioned(
-                        bottom: 12,
-                        left: 12,
-                        right: 12,
+                      left: 14,
+                      right: 14,
+                      child: Center(
                         child: Container(
-                          padding: const EdgeInsets.all(14),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                           decoration: BoxDecoration(
-                            color: const Color(0xEE111827),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.success, width: 1.5),
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: borderColor.withValues(alpha: 0.7)),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.check_circle, color: AppColors.success, size: 22),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    'ĐIỂM DANH THÀNH CÔNG',
-                                    style: TextStyle(
-                                      color: AppColors.success,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.success.withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      'Khớp: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
-                                      style: const TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                ],
+                              Icon(
+                                _livenessStep == LivenessStep.passed
+                                    ? Icons.verified
+                                    : (_livenessStep == LivenessStep.eyesClosed
+                                        ? Icons.remove_red_eye_outlined
+                                        : Icons.face),
+                                color: borderColor,
+                                size: 16,
                               ),
-                              const Divider(color: Colors.white24, height: 14),
-                              Row(
-                                children: [
-                                  if (_capturedImageBytes != null) ...[
-                                    Column(
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: Image.memory(
-                                            _capturedImageBytes!,
-                                            width: 52,
-                                            height: 52,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        const Text('Ảnh lúc quét', style: TextStyle(color: Colors.white60, fontSize: 10)),
-                                      ],
-                                    ),
-                                    const SizedBox(width: 10),
-                                  ],
-                                  if (_lastResult!['registered_photo_url'] != null) ...[
-                                    Column(
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: Image.network(
-                                            _lastResult!['registered_photo_url'].toString().startsWith('http')
-                                                ? _lastResult!['registered_photo_url'].toString()
-                                                : '${ApiClient().baseUrl}${_lastResult!['registered_photo_url']}',
-                                            width: 52,
-                                            height: 52,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => Container(
-                                              width: 52,
-                                              height: 52,
-                                              color: Colors.white12,
-                                              child: const Icon(Icons.face, size: 24, color: Colors.white54),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        const Text('Ảnh PH đăng ký', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
-                                    const SizedBox(width: 12),
-                                  ],
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Học sinh: ${_lastResult!["name"]}',
-                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                                        ),
-                                        Text(
-                                          'Lớp: ${_lastResult!["class_name"]} • Mã: ${_lastResult!["student_id"]}',
-                                          style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                        ),
-                                      ],
-                                    ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  _statusMessage,
+                                  style: TextStyle(
+                                    color: borderColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(
-                                    _lastResult!['liveness_verified'] == true ? Icons.shield : Icons.shield_outlined,
-                                    color: _lastResult!['liveness_verified'] == true ? Colors.greenAccent : Colors.amberAccent,
-                                    size: 14,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _lastResult!['liveness_verified'] == true
-                                        ? 'Xác thực người thật: Đã qua (Chớp mắt)'
-                                        : 'Xác thực: Chụp thủ công',
-                                    style: TextStyle(
-                                      color: _lastResult!['liveness_verified'] == true ? Colors.greenAccent : Colors.amberAccent,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 38,
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.success,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                  onPressed: _resetForNextStudent,
-                                  icon: const Icon(Icons.arrow_forward, size: 18),
-                                  label: const Text('Điểm danh bé tiếp theo', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
+                    ),
 
-                    // RESULT SHEET (KHÔNG THÀNH CÔNG / ẢNH MỜ / CHƯA NHẬN DIỆN ĐƯỢC)
+                    // RESULT SHEET (PRESENT - ĐIỂM DANH THÀNH CÔNG - Scroll & Responsive chống tràn viền)
+                    if (isPresent)
+                      Positioned(
+                        bottom: 12,
+                        left: 12,
+                        right: 12,
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+                          ),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xEE111827),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.success, width: 1.5),
+                          ),
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.check_circle, color: AppColors.success, size: 22),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        'ĐIỂM DANH THÀNH CÔNG',
+                                        style: TextStyle(
+                                          color: AppColors.success,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.success.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'Khớp: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
+                                        style: const TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(color: Colors.white24, height: 14),
+                                Row(
+                                  children: [
+                                    if (_capturedImageBytes != null) ...[
+                                      Column(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Image.memory(
+                                              _capturedImageBytes!,
+                                              width: 50,
+                                              height: 50,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const Text('Ảnh lúc quét', style: TextStyle(color: Colors.white60, fontSize: 10)),
+                                        ],
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    if (_lastResult!['registered_photo_url'] != null) ...[
+                                      Column(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Image.network(
+                                              _lastResult!['registered_photo_url'].toString().startsWith('http')
+                                                  ? _lastResult!['registered_photo_url'].toString()
+                                                  : '${ApiClient().baseUrl}${_lastResult!['registered_photo_url']}',
+                                              width: 50,
+                                              height: 50,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => Container(
+                                                width: 50,
+                                                height: 50,
+                                                color: Colors.white12,
+                                                child: const Icon(Icons.face, size: 24, color: Colors.white54),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const Text('Ảnh PH đăng ký', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                      const SizedBox(width: 10),
+                                    ],
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Học sinh: ${_lastResult!["name"]}',
+                                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Lớp: ${_lastResult!["class_name"]} • Mã: ${_lastResult!["student_id"]}',
+                                            style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _lastResult!['liveness_verified'] == true ? Icons.shield : Icons.shield_outlined,
+                                      color: _lastResult!['liveness_verified'] == true ? Colors.greenAccent : Colors.amberAccent,
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        _lastResult!['liveness_verified'] == true
+                                            ? 'Xác thực người thật: Đã qua (Chớp mắt)'
+                                            : 'Xác thực: Chụp thủ công',
+                                        style: TextStyle(
+                                          color: _lastResult!['liveness_verified'] == true ? Colors.greenAccent : Colors.amberAccent,
+                                          fontSize: 11,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 38,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.success,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    ),
+                                    onPressed: _resetForNextStudent,
+                                    icon: const Icon(Icons.arrow_forward, size: 18),
+                                    label: const Text(
+                                      'Điểm danh bé tiếp theo',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // RESULT SHEET (KHÔNG THÀNH CÔNG / ẢNH MỜ / CHƯA NHẬN DIỆN ĐƯỢC - Scroll & Responsive)
                     if (isFailedOrUnknown)
                       Positioned(
                         bottom: 12,
                         left: 12,
                         right: 12,
                         child: Container(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+                          ),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: const Color(0xEE111827),
@@ -1190,74 +1229,103 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                               width: 1.5,
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    isBlurred ? Icons.motion_photos_off : Icons.warning_amber_rounded,
-                                    color: isBlurred ? AppColors.warning : AppColors.strangerAlert,
-                                    size: 22,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    isBlurred ? 'ẢNH BỊ MỜ / RUNG TAY' : 'CHƯA TRÙNG KHỚP KHUÔN MẶT',
-                                    style: TextStyle(
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      isBlurred ? Icons.motion_photos_off : Icons.warning_amber_rounded,
                                       color: isBlurred ? AppColors.warning : AppColors.strangerAlert,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
+                                      size: 20,
                                     ),
-                                  ),
-                                  const Spacer(),
-                                  if (_lastResult!["confidence_score"] != null && (_lastResult!["confidence_score"] as num) > 0)
-                                    Text(
-                                      'Điểm: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
-                                      style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                _lastResult!['message'] ?? (isBlurred ? 'Ảnh bị nhòe do rung lắc. Giữ yên máy để nhận diện rõ hơn.' : 'Khuôn mặt chưa trùng khớp với học sinh trong danh sách.'),
-                                style: const TextStyle(color: Colors.white70, fontSize: 12),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                '(Hệ thống sẽ tự động mở lại camera sau 4 giây)',
-                                style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic),
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: isBlurred ? AppColors.warning : Colors.white24,
-                                        foregroundColor: isBlurred ? Colors.black : Colors.white,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        isBlurred ? 'ẢNH BỊ MỜ / RUNG TAY' : 'CHƯA TRÙNG KHỚP KHUÔN MẶT',
+                                        style: TextStyle(
+                                          color: isBlurred ? AppColors.warning : AppColors.strangerAlert,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      onPressed: _resetForNextStudent,
-                                      icon: const Icon(Icons.refresh, size: 16),
-                                      label: const Text('Thử lại ngay', style: TextStyle(fontWeight: FontWeight.bold)),
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.white,
-                                        side: const BorderSide(color: Colors.white38),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    if (_lastResult!["confidence_score"] != null && (_lastResult!["confidence_score"] as num) > 0) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white12,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'Điểm: ${((_lastResult!["confidence_score"] as num) * 100).toStringAsFixed(1)}%',
+                                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                        ),
                                       ),
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text('Điểm danh thủ công', style: TextStyle(fontSize: 11)),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _lastResult!['message'] ?? (isBlurred ? 'Ảnh bị nhòe do rung lắc. Giữ yên máy để nhận diện rõ hơn.' : 'Khuôn mặt chưa trùng khớp với học sinh trong danh sách.'),
+                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  '(Hệ thống sẽ tự động mở lại camera sau 4 giây)',
+                                  style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: isBlurred ? AppColors.warning : Colors.white24,
+                                          foregroundColor: isBlurred ? Colors.black : Colors.white,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                        ),
+                                        onPressed: _resetForNextStudent,
+                                        icon: const Icon(Icons.refresh, size: 16),
+                                        label: const Text(
+                                          'Thử lại ngay',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.white,
+                                          side: const BorderSide(color: Colors.white38),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                        ),
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text(
+                                          'Điểm danh thủ công',
+                                          style: TextStyle(fontSize: 11),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1324,6 +1392,8 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
                   label: Text(
                     _isProcessing ? 'Đang phân tích...' : 'Chụp điểm danh thủ công (Dự phòng)',
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
