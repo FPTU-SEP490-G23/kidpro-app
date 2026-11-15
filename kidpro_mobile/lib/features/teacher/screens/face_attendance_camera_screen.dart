@@ -9,19 +9,20 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'dart:convert';
 import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
 import 'package:kidpro_mobile/core/network/api_client.dart';
 import 'package:kidpro_mobile/core/storage/secure_storage_helper.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
+import 'package:kidpro_mobile/features/teacher/utils/liveness_direction_mapper.dart';
 
 enum LivenessStep {
   searchingFace, // Bước 1: Đang tìm khuôn mặt
   faceDetected,  // Bước 2: Đã thấy mặt, kiểm tra mở mắt
   waitingBlink,  // Bước 3: Mắt đã mở, đang đợi bé chớp mắt
   eyesClosed,    // Bước 3b: Đang ghi nhận nhịp nhắm mắt
-  passed,        // Bước 4: Chớp mắt thành công -> Xác thực người thật!
+  waitingTurn,   // Bước 3c: Thử thách xoay đầu từ server (Active Liveness - OPT-004)
+  passed,        // Bước 4: Xác thực người thật hoàn tất
 }
 
 class FaceAttendanceCameraScreen extends StatefulWidget {
@@ -54,6 +55,11 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   double? _leftEyeOpen;
   double? _rightEyeOpen;
 
+  // Liveness Challenge Server-side State (OPT-004)
+  String? _activeChallengeId;
+  String? _activeChallengeAction; // 'TURN_LEFT' hoặc 'TURN_RIGHT'
+  Uint8List? _turnImageBytes;
+
   // Animation & Processing
   late AnimationController _animCtrl;
   bool _isProcessing = false;
@@ -61,6 +67,23 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   Map<String, dynamic>? _lastResult;
   Uint8List? _capturedImageBytes;
   final ImagePicker _picker = ImagePicker();
+
+  Future<void> _fetchServerChallenge() async {
+    try {
+      final res = await ApiClient().dio.post(ApiEndpoints.faceChallenge);
+      if (res.data != null && res.data['challenge_id'] != null) {
+        if (mounted) {
+          setState(() {
+            _activeChallengeId = res.data['challenge_id'];
+            _activeChallengeAction = res.data['action'];
+          });
+          debugPrint('🛡️ [OPT-004] Nhận challenge liveness: id=$_activeChallengeId, action=$_activeChallengeAction');
+        }
+      }
+    } catch (e) {
+      debugPrint('ℹ️ Không thể nạp server challenge (có thể offline hoặc bypass): $e');
+    }
+  }
 
   static final Map<DeviceOrientation, int> _orientations = {
     DeviceOrientation.portraitUp: 0,
@@ -97,6 +120,7 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       if (prov.students.isEmpty) {
         prov.loadStudents(prov.currentClassId);
       }
+      _fetchServerChallenge();
       _initCameras();
     });
   }
@@ -425,17 +449,44 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
               : 0;
 
           if (durationMs >= 80 && durationMs <= 1800) {
-            setState(() {
-              _livenessStep = LivenessStep.passed;
-              _statusMessage = '✅ Đã xác thực người thật! Đang đối chiếu AI...';
-            });
-            _onLivenessPassed();
+            if (_activeChallengeAction != null && _activeChallengeAction!.isNotEmpty) {
+              // OPT-004: Chuyển sang bước quay đầu theo thử thách ngẫu nhiên từ server
+              setState(() {
+                _livenessStep = LivenessStep.waitingTurn;
+                _statusMessage = LivenessDirectionMapper.getInstructionMessage(_activeChallengeAction!);
+              });
+            } else {
+              setState(() {
+                _livenessStep = LivenessStep.passed;
+                _statusMessage = '✅ Đã xác thực người thật! Đang đối chiếu AI...';
+              });
+              _onLivenessPassed();
+            }
           } else {
             setState(() {
               _livenessStep = LivenessStep.waitingBlink;
               _statusMessage = 'Bé hãy chớp mắt tự nhiên nhé!';
             });
           }
+        }
+        break;
+
+      case LivenessStep.waitingTurn:
+        final yaw = face.headEulerAngleY ?? 0.0;
+        final isFront = _cameras.isNotEmpty &&
+            _cameras[_selectedCameraIndex].lensDirection == CameraLensDirection.front;
+        final isTurned = LivenessDirectionMapper.isTurnDirectionSatisfied(
+          action: _activeChallengeAction ?? '',
+          headEulerAngleY: yaw,
+          isFrontCamera: isFront,
+        );
+
+        if (isTurned) {
+          setState(() {
+            _livenessStep = LivenessStep.passed;
+            _statusMessage = '✅ Đã hoàn thành thử thách! Đang đối chiếu AI...';
+          });
+          _onLivenessPassed();
         }
         break;
 
@@ -502,14 +553,9 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     }
   }
 
-  /// Gửi ảnh lên FastAPI AI Backend
+  /// OPT-003 & OPT-002: Điểm danh Server-to-Server qua Spring Boot Backend
   Future<void> _submitCheckinToServer(Uint8List bytes, {required bool isLivenessVerified}) async {
     try {
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 15),
-      ));
-
       final tProv = context.read<TeacherProvider>();
       final curClassId = tProv.currentClassId;
 
@@ -518,45 +564,30 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
           bytes,
           filename: 'face_checkin.jpg',
         ),
-        if (curClassId.isNotEmpty) 'class_id': curClassId,
+        if (_turnImageBytes != null)
+          'turnFile': MultipartFile.fromBytes(
+            _turnImageBytes!,
+            filename: 'face_turn.jpg',
+          ),
+        if (curClassId.isNotEmpty) 'classId': curClassId,
+        if (_activeChallengeId != null) 'challengeId': _activeChallengeId,
+        if (_activeChallengeAction != null) 'turnAction': _activeChallengeAction,
       });
 
-      final response = await dio.post(
-        '$_serverBaseUrl/api/v1/check-in',
+      // OPT-003: Gọi trực tiếp Spring Boot Backend với Bearer JWT token tự động
+      final response = await ApiClient().dio.post(
+        ApiEndpoints.faceCheckIn,
         data: formData,
       );
 
       final data = response.data as Map<String, dynamic>;
       data['liveness_verified'] = isLivenessVerified;
 
-      // Khi AI nhận diện thành công: Lưu vào Spring Boot (attendances, attendance_photos, face_recognition_logs)
-      if (data['status'] == 'PRESENT' && data['student_id'] != null) {
-        try {
-          final scannedBase64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-          final logPayload = {
-            'studentId': data['student_id'],
-            'confidenceScore': data['confidence_score'] ?? 0.85,
-            'photoUrl': scannedBase64,
-            'recognitionType': 'ATTENDANCE_CHECK_IN',
-            'personType': 'STUDENT',
-          };
-          final backendRes = await ApiClient().dio.post(
-            ApiEndpoints.faceLogs,
-            data: logPayload,
-          );
-          if (backendRes.data != null && backendRes.data['registeredPhotoUrl'] != null) {
-            data['registered_photo_url'] = backendRes.data['registeredPhotoUrl'];
-          }
-          if (mounted) {
-            final tProv = context.read<TeacherProvider>();
-            tProv.loadStudents(tProv.currentClassId);
-          }
-        } catch (backendErr) {
-          if (backendErr is DioException) {
-            debugPrint('❌ Lỗi đồng bộ backend face-logs (${backendErr.response?.statusCode}): ${backendErr.response?.data}');
-          } else {
-            debugPrint('❌ Lỗi đồng bộ backend face-logs: $backendErr');
-          }
+      // Khi Spring Boot xác nhận PRESENT: Cập nhật danh sách học sinh
+      if (data['status'] == 'PRESENT') {
+        if (mounted) {
+          final tProv = context.read<TeacherProvider>();
+          tProv.loadStudents(tProv.currentClassId);
         }
       }
 
@@ -581,11 +612,16 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       if (mounted) {
         setState(() {
           _isProcessing = false;
-          _statusMessage = 'Lỗi kết nối AI: ${e.message ?? "Timeout"}. Đang kết nối lại...';
+          _statusMessage = 'Lỗi kết nối điểm danh: ${e.response?.data?["message"] ?? e.message ?? "Timeout"}. Đang thử lại...';
+          _lastResult = {
+            'status': 'ERROR',
+            'confidence_score': 0.0,
+            'message': e.response?.data?['message'] ?? e.message ?? 'Lỗi kết nối máy chủ',
+          };
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi kết nối AI Server ($_serverBaseUrl): ${e.message ?? "Timeout"}'),
+            content: Text('Lỗi điểm danh: ${e.response?.data?["message"] ?? e.message ?? "Timeout"}'),
             backgroundColor: AppColors.error,
             duration: const Duration(seconds: 2),
           ),
@@ -600,6 +636,11 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
         setState(() {
           _isProcessing = false;
           _statusMessage = 'Lỗi xử lý: $e';
+          _lastResult = {
+            'status': 'ERROR',
+            'confidence_score': 0.0,
+            'message': 'Lỗi xử lý: $e',
+          };
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error, duration: const Duration(seconds: 2)),
@@ -647,10 +688,15 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     setState(() {
       _lastResult = null;
       _capturedImageBytes = null;
+      _turnImageBytes = null;
+      _activeChallengeId = null;
+      _activeChallengeAction = null;
       _livenessStep = LivenessStep.searchingFace;
       _statusMessage = 'Bé vui lòng nhìn vào camera';
       _isProcessing = false;
     });
+
+    _fetchServerChallenge();
 
     try {
       if (_cameraController != null &&
