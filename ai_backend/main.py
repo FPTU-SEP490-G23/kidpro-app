@@ -22,7 +22,7 @@ DB_PATH = os.getenv("DB_PATH", "attendance.db")
 EMBEDDINGS_FILE = os.getenv("EMBEDDINGS_FILE", "embeddings.pkl")
 PICKUP_CACHE_FILE = os.getenv("PICKUP_CACHE_FILE", "pickup_embeddings.pkl")
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.60"))
-BLUR_THRESHOLD = float(os.getenv("BLUR_THRESHOLD", "60.0"))
+BLUR_THRESHOLD = float(os.getenv("BLUR_THRESHOLD", "80.0"))
 INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "kidpro_internal_secret_key_2026")
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "face_yolov8n.pt")
 ARCFACE_MODEL_PATH = os.getenv("ARCFACE_MODEL_PATH", "arcface_w600k_r50.onnx")
@@ -414,7 +414,10 @@ def sync_from_backend(backend_url: str = "http://127.0.0.1:8080", class_id: Opti
             # Tải ảnh từ backend URL
             full_img_url = photo_url if photo_url.startswith("http") else f"{backend_url}{photo_url}"
             try:
-                img_req = urllib.request.Request(full_img_url, headers={'User-Agent': 'KidPro-AI-Engine'})
+                img_req = urllib.request.Request(
+                    full_img_url,
+                    headers={'User-Agent': 'KidPro-AI-Engine', 'X-Internal-Service-Key': INTERNAL_SERVICE_KEY}
+                )
                 with urllib.request.urlopen(img_req, timeout=5) as img_resp:
                     img_bytes = img_resp.read()
                 nparr = np.frombuffer(img_bytes, np.uint8)

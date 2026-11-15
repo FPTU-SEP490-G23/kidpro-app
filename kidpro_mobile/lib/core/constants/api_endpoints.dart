@@ -126,6 +126,9 @@ class ApiEndpoints {
   static String parentPickupFaceEmergency(int authorizationId) =>
       '/api/parents/pickup-faces/emergency-pickups/$authorizationId';
 
+  // Meal Registration - Parent (catering.student_meal_register)
+  static const parentMealRegisters = '/api/parents/meal-registers';
+
   // Late Pickup & Progressive Fee (G5-UC-05, BR-020)
   static const latePickups = '/api/attendance/late-pickups'; // ?classId=&date=
   static const latePickupRules = '/api/admin/late-pickup-rules';

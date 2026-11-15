@@ -244,6 +244,8 @@ class _RequestsOverviewScreenState extends State<RequestsOverviewScreen> {
         return Icons.warning_amber_rounded;
       case 'BUS':
         return Icons.directions_bus_outlined;
+      case 'MEAL':
+        return Icons.breakfast_dining_outlined;
       case 'EXTRACURRICULAR':
         return Icons.palette_outlined;
       case 'DISPUTE':

@@ -1019,6 +1019,29 @@ class ParentProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> submitMealRegister({
+    required String studentId,
+    required String startDate,
+    String? endDate,
+    String? note,
+  }) async {
+    try {
+      await _dio.post(ApiEndpoints.parentMealRegisters, data: {
+        'studentId': studentId,
+        'startDate': startDate,
+        if (endDate != null) 'endDate': endDate,
+        if (note != null) 'note': note,
+      });
+      await loadAllRequests(studentId);
+      return true;
+    } on DioException catch (e) {
+      logError('submitMealRegister', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Đăng ký ăn sáng thất bại';
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> submitOtherRequest({
     required String studentId,
     required String title,
