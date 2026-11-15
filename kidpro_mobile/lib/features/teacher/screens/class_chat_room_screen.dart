@@ -40,7 +40,7 @@ class _ClassChatRoomScreenState extends State<ClassChatRoomScreen> with SingleTi
     final msg = await prov.toggleChatLock(prov.currentClassId, !prov.isChatLocked);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg ?? 'Đã cập nhật trạng thái'), backgroundColor: AppColors.primary),
+      SnackBar(content: Text(msg ?? 'Đã cập nhật trạng thái'), backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success),
     );
   }
 

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
+import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
 
+/// Điểm danh xe buýt theo trạm (G5-UC-02) và chốt an toàn khoang xe (G5-UC-03, BR-024).
 class BusAttendanceScreen extends StatefulWidget {
   const BusAttendanceScreen({super.key});
 
@@ -11,9 +14,11 @@ class BusAttendanceScreen extends StatefulWidget {
 }
 
 class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
-  final _qrTokenCtrl = TextEditingController(text: 'BUS-TAIL-QR-2026-OK');
-  final _photoUrlCtrl = TextEditingController(
-      text: 'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?w=500');
+  final _qrTokenCtrl = TextEditingController();
+  final _photoUrlCtrl = TextEditingController();
+  String? _selectedStopId;
+  bool _uploadingPhoto = false;
+  final Set<String> _busyStudents = {};
 
   @override
   void initState() {
@@ -31,9 +36,40 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
     super.dispose();
   }
 
+  void _showResult(String? msg) {
+    if (!mounted || msg == null) return;
+    final failed = context.read<TeacherProvider>().lastActionFailed;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: failed ? AppColors.error : AppColors.success),
+    );
+  }
+
+  /// Trạm đang chọn; mặc định trạm đầu (lên xe) – trạm cuối là điểm trả (xuống xe).
+  BusStopInfo? _currentStop(BusTripInfo trip) {
+    if (trip.stops.isEmpty) return null;
+    return trip.stops.firstWhere(
+      (s) => s.stopId == _selectedStopId,
+      orElse: () => trip.stops.first,
+    );
+  }
+
+  Future<void> _mark(BusTripInfo trip, BusStudentInfo student, String action) async {
+    final stop = _currentStop(trip);
+    setState(() => _busyStudents.add(student.studentId));
+    final msg = await context.read<TeacherProvider>().submitBusCheckin(
+          tripId: trip.tripId,
+          studentId: student.studentId,
+          stopId: stop?.stopId ?? '',
+          actionType: action,
+        );
+    if (mounted) setState(() => _busyStudents.remove(student.studentId));
+    _showResult(msg);
+  }
+
   void _showSafetyClosureModal() {
     final trip = context.read<TeacherProvider>().currentBusTrip;
     final remainingCount = trip?.remainingCount ?? 0;
+    final closed = trip?.isSafetyClosed == true;
 
     showModalBottomSheet(
       context: context,
@@ -41,7 +77,7 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => Padding(
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => Padding(
         padding: EdgeInsets.only(
           left: 16,
           right: 16,
@@ -56,9 +92,11 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
               children: [
                 const Icon(Icons.verified_user, color: AppColors.primary, size: 28),
                 const SizedBox(width: 8),
-                Text(
-                  'Kiểm tra khoang xe & Đóng chuyến (BR-024)',
-                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    'Kiểm tra khoang xe & Đóng chuyến (BR-024)',
+                    style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -68,9 +106,7 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
               decoration: BoxDecoration(
                 color: remainingCount == 0 ? Colors.green.shade50 : Colors.red.shade50,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: remainingCount == 0 ? Colors.green : Colors.red,
-                ),
+                border: Border.all(color: remainingCount == 0 ? Colors.green : Colors.red),
               ),
               child: Row(
                 children: [
@@ -81,9 +117,11 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      remainingCount == 0
-                          ? 'Đã xác nhận 0 học sinh còn sót lại trên xe.'
-                          : 'CẢNH BÁO (MSG-099): Còn $remainingCount học sinh chưa xuống xe! Không thể đóng chuyến.',
+                      closed
+                          ? 'Chuyến xe hôm nay đã được đóng.'
+                          : remainingCount == 0
+                              ? 'Đã xác nhận 0 học sinh còn sót lại trên xe.'
+                              : 'CẢNH BÁO: Còn $remainingCount học sinh chưa xuống xe! Không thể đóng chuyến.',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: remainingCount == 0 ? Colors.green.shade800 : Colors.red.shade800,
@@ -94,21 +132,45 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            TextField(
-              controller: _photoUrlCtrl,
-              decoration: const InputDecoration(
-                labelText: 'URL Ảnh chụp khoang xe kiểm tra an toàn',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.camera_alt),
-              ),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              icon: _uploadingPhoto
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(_photoUrlCtrl.text.isNotEmpty ? Icons.check_circle : Icons.camera_alt,
+                      color: _photoUrlCtrl.text.isNotEmpty ? AppColors.success : null),
+              label: Text(_photoUrlCtrl.text.isNotEmpty
+                  ? 'Đã chụp ảnh khoang xe rỗng (chạm để chụp lại)'
+                  : 'Chụp ảnh khoang xe rỗng *'),
+              onPressed: _uploadingPhoto
+                  ? null
+                  : () async {
+                      final photo = await ImagePicker()
+                          .pickImage(source: ImageSource.camera, maxWidth: 1280, imageQuality: 85);
+                      if (photo == null) return;
+                      setSheet(() => _uploadingPhoto = true);
+                      try {
+                        final url = await context.read<TeacherProvider>().uploadTeacherPhoto(photo.path, 'bus-safety');
+                        _photoUrlCtrl.text = url;
+                      } catch (_) {
+                        _photoUrlCtrl.clear();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Không tải được ảnh khoang xe, vui lòng chụp lại.'),
+                            backgroundColor: AppColors.error,
+                          ));
+                        }
+                      }
+                      setSheet(() => _uploadingPhoto = false);
+                    },
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _qrTokenCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Mã quét QR dán ở đuôi xe (Tail Scan Token)',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.qr_code_scanner),
+              decoration: InputDecoration(
+                labelText: 'Mã QR dán ở đuôi xe *',
+                hintText: trip != null ? 'VD: ${trip.plateNumber}' : null,
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.qr_code_scanner),
               ),
             ),
             const SizedBox(height: 20),
@@ -122,27 +184,22 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
                 ),
                 icon: const Icon(Icons.lock_clock),
                 label: const Text('Xác nhận An toàn & Đóng Chuyến (MSG-100)'),
-                onPressed: trip == null ? null : () async {
-                  Navigator.pop(ctx);
-                  final msg = await context.read<TeacherProvider>().performBusSafetyClosure(
-                        tripId: trip.tripId,
-                        photoUrl: _photoUrlCtrl.text.trim(),
-                        qrTailScanToken: _qrTokenCtrl.text.trim(),
-                      );
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(msg ?? 'Đã hoàn tất đóng chuyến'),
-                        backgroundColor: AppColors.success,
-                      ),
-                    );
-                  }
-                },
+                onPressed: trip == null || closed
+                    ? null
+                    : () async {
+                        Navigator.pop(ctx);
+                        final msg = await context.read<TeacherProvider>().performBusSafetyClosure(
+                              tripId: trip.tripId,
+                              photoUrl: _photoUrlCtrl.text.trim(),
+                              qrTailScanToken: _qrTokenCtrl.text.trim(),
+                            );
+                        _showResult(msg ?? 'Đã hoàn tất đóng chuyến');
+                      },
               ),
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 
@@ -150,6 +207,7 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
   Widget build(BuildContext context) {
     final prov = context.watch<TeacherProvider>();
     final trip = prov.currentBusTrip;
+    final currentStop = trip != null ? _currentStop(trip) : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -161,7 +219,7 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
           ),
         ],
       ),
-      body: prov.loading
+      body: prov.loading && trip == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
@@ -185,24 +243,30 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                trip?.plateNumber ?? '29B-678.90',
+                                trip == null || trip.plateNumber.isEmpty ? '—' : trip.plateNumber,
                                 style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
                               ),
                             ),
-                            Text(
-                              trip?.isSafetyClosed == true ? 'Đã đóng chuyến' : 'Đang hoạt động',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: trip?.isSafetyClosed == true ? Colors.grey : AppColors.success,
+                            if (trip != null)
+                              Text(
+                                trip.isSafetyClosed ? 'Đã đóng chuyến' : 'Đang hoạt động',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: trip.isSafetyClosed ? Colors.grey : AppColors.success,
+                                ),
                               ),
-                            ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          trip?.routeName ?? 'Tuyến số 01: Đưa đón học sinh',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                        if (trip != null) ...[
+                          const SizedBox(height: 10),
+                          Text(trip.routeName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          if (trip.driverName != null && trip.driverName!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text('Tài xế: ${trip.driverName}${trip.driverPhone != null ? ' - ${trip.driverPhone}' : ''}',
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            ),
+                        ],
                         const SizedBox(height: 16),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -219,49 +283,58 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                Text('Danh sách trạm đón / trả', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-
                 if (trip == null)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
                     child: Center(
-                      child: Text('Chưa được phân công tuyến xe buýt nào',
-                          style: TextStyle(color: Colors.grey)),
+                      child: Text('Chưa được phân công tuyến xe buýt nào', style: TextStyle(color: Colors.grey)),
                     ),
                   )
-                else if (trip.stops.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(
-                      child: Text('Tuyến này chưa có điểm dừng',
-                          style: TextStyle(color: Colors.grey)),
+                else ...[
+                  Text('Danh sách trạm đón / trả', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  const Text('Chạm vào trạm để chọn trạm hiện tại khi điểm danh.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  if (trip.stops.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text('Tuyến này chưa có điểm dừng', style: TextStyle(color: Colors.grey)),
+                      ),
+                    )
+                  else
+                    ...trip.stops.map((stop) => _buildStopTile(
+                          stop,
+                          selected: currentStop?.stopId == stop.stopId,
+                          onTap: () => setState(() => _selectedStopId = stop.stopId),
+                        )),
+                  const SizedBox(height: 20),
+                  Text('Học sinh trên tuyến', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  if (trip.students.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Text('Chưa có học sinh đăng ký (đã duyệt) đi tuyến này',
+                            style: TextStyle(color: Colors.grey)),
+                      ),
+                    )
+                  else
+                    ...trip.students.map((s) => _buildStudentTile(trip, s)),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                  )
-                else
-                  ...trip.stops.map((stop) => _buildStopTile(
-                        context,
-                        stopName: stop.stopName,
-                        time: stop.estimatedTime,
-                        boardedCount: stop.boardedCount,
-                        deboardedCount: stop.deboardedCount,
-                        isPassed: stop.isPassed,
-                        isDestination: stop.isDestination,
-                      )),
-
-                const SizedBox(height: 24),
-
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    icon: const Icon(Icons.fact_check),
+                    label: const Text('Quy trình Kiểm tra An toàn & Đóng chuyến (BR-024)'),
+                    onPressed: _showSafetyClosureModal,
                   ),
-                  icon: const Icon(Icons.fact_check),
-                  label: const Text('Quy trình Kiểm tra An toàn & Đóng chuyến (BR-024)'),
-                  onPressed: _showSafetyClosureModal,
-                ),
+                ],
               ],
             ),
     );
@@ -277,27 +350,24 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
     );
   }
 
-  Widget _buildStopTile(
-    BuildContext context, {
-    required String stopName,
-    required String time,
-    required int boardedCount,
-    required int deboardedCount,
-    required bool isPassed,
-    bool isDestination = false,
-  }) {
+  Widget _buildStopTile(BusStopInfo stop, {required bool selected, required VoidCallback onTap}) {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: selected ? AppColors.primary : Colors.transparent, width: 2),
+      ),
       child: ListTile(
+        onTap: onTap,
         leading: CircleAvatar(
-          backgroundColor: isDestination ? Colors.red.shade100 : Colors.blue.shade100,
+          backgroundColor: stop.isDestination ? Colors.red.shade100 : Colors.blue.shade100,
           child: Icon(
-            isDestination ? Icons.school : Icons.directions_bus,
-            color: isDestination ? Colors.red : Colors.blue,
+            stop.isDestination ? Icons.school : Icons.directions_bus,
+            color: stop.isDestination ? Colors.red : Colors.blue,
           ),
         ),
-        title: Text(stopName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text('Thời gian dự kiến: $time'),
+        title: Text(stop.stopName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        subtitle: Text('Thời gian dự kiến: ${stop.estimatedTime.isEmpty ? '—' : stop.estimatedTime}'),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
@@ -306,9 +376,61 @@ class _BusAttendanceScreenState extends State<BusAttendanceScreen> {
             border: Border.all(color: Colors.green.shade300),
           ),
           child: Text(
-            isDestination ? 'Trả: $deboardedCount' : 'Đón: $boardedCount',
+            stop.isDestination ? 'Trả: ${stop.deboardedCount}' : 'Đón: ${stop.boardedCount}',
             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade800, fontSize: 12),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStudentTile(BusTripInfo trip, BusStudentInfo s) {
+    final busy = _busyStudents.contains(s.studentId);
+    final closed = trip.isSafetyClosed;
+    final (label, color) = switch (s.status) {
+      'ONBOARD' => ('Trên xe', Colors.orange),
+      'DEBOARDED' => ('Đã xuống', Colors.green),
+      _ => ('Chưa lên xe', Colors.grey),
+    };
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.studentName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    [
+                      if (s.className != null) s.className!,
+                      if (s.pickupAddress != null) s.pickupAddress!,
+                    ].join(' · '),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(s.lastTime != null ? '$label · ${s.lastTime}' : label,
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+                ],
+              ),
+            ),
+            if (busy)
+              const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+            else if (!closed && !s.isOnboard)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                onPressed: () => _mark(trip, s, 'BOARDING'),
+                child: const Text('Lên xe'),
+              )
+            else if (!closed && s.isOnboard)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                onPressed: () => _mark(trip, s, 'DEBOARDING'),
+                child: const Text('Xuống xe'),
+              ),
+          ],
         ),
       ),
     );

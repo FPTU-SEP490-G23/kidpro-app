@@ -417,14 +417,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   }
 
   Widget _buildRecordsGrid(ParentProvider prov) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 3,
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.1,
-      children: [
+    final tiles = <Widget>[
         _buildIconTile(
           icon: Icons.restaurant,
           label: 'Sổ sinh hoạt',
@@ -471,13 +464,35 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
           },
         ),
         _buildIconTile(
+          icon: Icons.restaurant_menu,
+          label: 'Thực đơn',
+          color: Colors.deepOrange,
+          onTap: () => context.push('/parent/daily-menu'),
+        ),
+        _buildIconTile(
+          icon: Icons.campaign_outlined,
+          label: 'Thông báo lớp',
+          color: Colors.blue,
+          onTap: () => context.push('/parent/class-announcements'),
+        ),
+        _buildIconTile(
           icon: Icons.chat_bubble_outline,
           label: 'Tin nhắn cô',
           badge: '24/7',
           color: Colors.teal,
           onTap: () => context.push('/parent/chat'),
         ),
-      ],
+    ];
+
+    // Một hàng ngang, vuốt sang để xem thêm (kích thước ô giữ như lưới 3 cột cũ)
+    return SizedBox(
+      height: 104,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: tiles.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, i) => SizedBox(width: 104, child: tiles[i]),
+      ),
     );
   }
 
@@ -566,8 +581,27 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   }
 
   Widget _buildTodayStatusCard(ParentProvider prov) {
-    final latestAct = prov.dailyActivities.isNotEmpty ? prov.dailyActivities.first : null;
-    final latestAtt = prov.attendances.isNotEmpty ? prov.attendances.first : null;
+    // Chỉ lấy dữ liệu của HÔM NAY; không có thì hiện 'Chưa có dữ liệu' (không dùng giờ/câu mẫu)
+    final now = DateTime.now();
+    final today = '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final todayAct = prov.dailyActivities.where((a) => a.date == today).firstOrNull;
+    final todayAtt = prov.attendances.where((a) => a.date == today).firstOrNull;
+
+    const consumption = {'ALL': 'Ăn hết suất', 'HALF': 'Ăn một nửa', 'LITTLE': 'Ăn ít', 'REFUSED': 'Không ăn'};
+    const sleep = {
+      'GOOD': 'Ngủ ngon',
+      'RESTLESS': 'Hay giật mình',
+      'DIFFICULT_TO_SLEEP': 'Khó vào giấc',
+      'WOKE_UP_CRYING': 'Khóc khi thức',
+    };
+    const attStatus = {
+      'PRESENT': 'Bé đã vào lớp',
+      'LATE': 'Bé đến lớp muộn',
+      'ABSENT_WITH_LEAVE': 'Bé nghỉ có phép',
+      'ABSENT_WITHOUT_LEAVE': 'Bé nghỉ không phép',
+    };
+
+    String? hhmm(String? t) => (t != null && t.length >= 5) ? t.substring(0, 5) : null;
 
     return Card(
       elevation: 0.8,
@@ -577,31 +611,32 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         child: Column(
           children: [
             _TimelineItem(
-              time: latestAtt?.checkInTime != null ? latestAtt!.checkInTime!.substring(0, 5) : '07:35',
-              title: 'Điểm danh camera AI',
-              subtitle: latestAtt != null && latestAtt.status == 'PRESENT'
-                  ? 'Bé đã vào lớp an toàn'
-                  : 'Đã ghi nhận điểm danh có mặt',
+              time: hhmm(todayAtt?.checkInTime) ?? '--:--',
+              title: 'Điểm danh đến lớp',
+              subtitle: todayAtt == null
+                  ? 'Chưa có dữ liệu điểm danh hôm nay'
+                  : (attStatus[todayAtt.status] ?? todayAtt.status),
               icon: Icons.check_circle,
               color: AppColors.present,
             ),
             const Divider(height: 20),
             _TimelineItem(
-              time: '11:30',
-              title: 'Bữa trưa dinh dưỡng',
-              subtitle: latestAct?.lunchConsumption != null
-                  ? 'Mức tiêu thụ: ${latestAct!.lunchConsumption}'
-                  : 'Bé ăn ngoan, đạt tiêu chuẩn dinh dưỡng',
+              time: '--:--',
+              title: 'Bữa trưa',
+              subtitle: todayAct?.lunchConsumption != null
+                  ? 'Mức ăn: ${consumption[todayAct!.lunchConsumption] ?? todayAct.lunchConsumption}'
+                  : 'Chưa có ghi nhận bữa trưa',
               icon: Icons.restaurant,
               color: AppColors.info,
             ),
             const Divider(height: 20),
             _TimelineItem(
-              time: '12:00',
+              time: '--:--',
               title: 'Giấc ngủ trưa',
-              subtitle: latestAct?.sleepQuality != null
-                  ? '${latestAct!.sleepQuality} • ${latestAct.napDurationMinutes ?? 120} phút'
-                  : 'Bé ngủ ngon giấc',
+              subtitle: todayAct?.sleepQuality != null
+                  ? '${sleep[todayAct!.sleepQuality] ?? todayAct.sleepQuality}'
+                      '${todayAct.napDurationMinutes != null ? ' • ${todayAct.napDurationMinutes} phút' : ''}'
+                  : 'Chưa có ghi nhận giấc ngủ',
               icon: Icons.bedtime,
               color: AppColors.accent,
             ),

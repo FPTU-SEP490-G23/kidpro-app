@@ -500,6 +500,9 @@ class DailyActivityModel {
   final String? napNote;
   final String? generalNote;
   final String? recordedByName;
+  /// UC-74: nhật ký vệ sinh
+  final int? toiletCount;
+  final String? toiletNote;
 
   const DailyActivityModel({
     this.activityId,
@@ -515,6 +518,8 @@ class DailyActivityModel {
     this.napNote,
     this.generalNote,
     this.recordedByName,
+    this.toiletCount,
+    this.toiletNote,
   });
 
   factory DailyActivityModel.fromJson(Map<String, dynamic> json) => DailyActivityModel(
@@ -527,10 +532,12 @@ class DailyActivityModel {
         afternoonSnackConsumption: json['afternoonSnackConsumption']?.toString(),
         mealNote: json['mealNote'] as String?,
         sleepQuality: json['sleepQuality']?.toString(),
-        napDurationMinutes: json['napDurationMinutes'] as int? ?? 120,
+        napDurationMinutes: (json['napDurationMinutes'] as num?)?.toInt(),
         napNote: json['napNote'] as String?,
         generalNote: json['generalNote'] as String?,
         recordedByName: json['recordedByName'] as String?,
+        toiletCount: (json['toiletCount'] as num?)?.toInt(),
+        toiletNote: json['toiletNote'] as String?,
       );
 }
 

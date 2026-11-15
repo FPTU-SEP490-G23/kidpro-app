@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
@@ -14,8 +15,8 @@ class EquipmentIncidentScreen extends StatefulWidget {
 class _EquipmentIncidentScreenState extends State<EquipmentIncidentScreen> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  final _photoUrlCtrl = TextEditingController(
-      text: 'https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=600');
+  // Đường dẫn ảnh hiện trường vừa chụp (tải lên server khi gửi báo cáo)
+  final _photoUrlCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _EquipmentIncidentScreenState extends State<EquipmentIncidentScreen> {
   void _showReportModal() {
     _nameCtrl.clear();
     _descCtrl.clear();
+    _photoUrlCtrl.clear();
 
     showModalBottomSheet(
       context: context,
@@ -102,12 +104,20 @@ class _EquipmentIncidentScreenState extends State<EquipmentIncidentScreen> {
               ),
               const SizedBox(height: 12),
 
-              TextField(
-                controller: _photoUrlCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'URL Ảnh chụp hiện trường (Bắt buộc BR-051)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.camera_alt),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _photoUrlCtrl,
+                builder: (_, v, __) => OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  icon: Icon(v.text.isNotEmpty ? Icons.check_circle : Icons.camera_alt,
+                      color: v.text.isNotEmpty ? AppColors.success : null),
+                  label: Text(v.text.isNotEmpty
+                      ? 'Đã chụp ảnh hiện trường (chạm để chụp lại)'
+                      : 'Chụp ảnh hiện trường (Bắt buộc BR-051)'),
+                  onPressed: () async {
+                    final photo = await ImagePicker()
+                        .pickImage(source: ImageSource.camera, maxWidth: 1280, imageQuality: 85);
+                    if (photo != null) _photoUrlCtrl.text = photo.path;
+                  },
                 ),
               ),
               const SizedBox(height: 20),
@@ -143,7 +153,7 @@ class _EquipmentIncidentScreenState extends State<EquipmentIncidentScreen> {
                     );
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(msg ?? 'Báo cáo thành công'), backgroundColor: AppColors.success),
+                        SnackBar(content: Text(msg ?? 'Báo cáo thành công'), backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success),
                       );
                     }
                   },
@@ -188,7 +198,9 @@ class _EquipmentIncidentScreenState extends State<EquipmentIncidentScreen> {
                   itemCount: incidents.length,
                   itemBuilder: (context, index) {
                     final item = incidents[index];
-                    final isRepaired = item.status == 'REPAIRED';
+                    final st = item.status.toUpperCase();
+                    final isRepaired = st == 'REPAIRED' || st == 'RESOLVED';
+                    final isProcessing = st == 'PROCESSING' || st == 'IN_PROGRESS';
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -213,7 +225,7 @@ class _EquipmentIncidentScreenState extends State<EquipmentIncidentScreen> {
                                     border: Border.all(color: isRepaired ? Colors.green : Colors.amber),
                                   ),
                                   child: Text(
-                                    isRepaired ? 'ĐÃ SỬA CHỮA' : 'ĐANG SỬA CHỮA',
+                                    isRepaired ? 'ĐÃ SỬA CHỮA' : (isProcessing ? 'ĐANG SỬA CHỮA' : 'ĐÃ BÁO HỎNG - CHỜ XỬ LÝ'),
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 11,

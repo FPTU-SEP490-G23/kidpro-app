@@ -568,18 +568,21 @@ class ParentProvider extends ChangeNotifier {
   BiometricPurgeCertificate? _purgeCertificate;
   BiometricPurgeCertificate? get purgeCertificate => _purgeCertificate;
 
-  Future<String?> requestPurgeOtp([String? studentId]) async {
+  /// Gửi OTP xóa dữ liệu sinh trắc. Trả về (thành công, OTP demo nếu server trả về, thông báo lỗi).
+  Future<(bool, String?, String?)> requestPurgeOtp([String? studentId]) async {
     final targetId = (studentId != null && studentId.isNotEmpty)
         ? studentId
         : _selectedStudentId;
-    if (targetId.isEmpty) return null;
+    if (targetId.isEmpty) return (false, null, 'Chưa chọn bé.');
 
     try {
       final res = await _dio.post(ApiEndpoints.parentBiometricPurgeOtp(targetId));
-      return (res.data['demoOtp'] ?? res.data['otp'])?.toString();
+      final data = res.data is Map ? res.data as Map : const {};
+      return (true, (data['demoOtp'] ?? data['otp'])?.toString(), null);
     } on DioException catch (e) {
       logError('requestPurgeOtp', e);
-      return null;
+      final msg = e.response?.data is Map ? e.response?.data['message']?.toString() : null;
+      return (false, null, msg ?? 'Không gửi được mã OTP. Vui lòng thử lại.');
     }
   }
 
@@ -614,32 +617,25 @@ class ParentProvider extends ChangeNotifier {
   List<ChatThread> get chatThreads => _chatThreads;
   List<ChatMessage> get messages => _messages;
 
+  /// Phòng chat nhóm lớp = mỗi lớp của các con (backend: /api/comms/chat/rooms/{classId}).
+  /// Không còn gọi /api/chat/threads (không tồn tại) và không sinh tin nhắn giả.
   Future<void> loadChatThreads() async {
     _loading = true;
     notifyListeners();
-    try {
-      final res = await _dio.get(ApiEndpoints.chatThreads);
-      final list = _extractList(res.data);
-      _chatThreads = list
-          .map((e) => ChatThread.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } on DioException catch (e) {
-      logError('loadChatThreads', e);
-      // Fallback: Tạo chat thread tự động từ danh sách lớp học của các con
-      if (_students.isNotEmpty) {
-        _chatThreads = _students.map((s) {
-          final cid = s.classId?.isNotEmpty == true ? s.classId! : s.studentId;
-          final cname = s.className?.isNotEmpty == true ? s.className! : 'Lớp học';
-          return ChatThread(
-            id: cid,
-            otherPartyName: '$cname - ${s.fullName}',
-            lastMessage: 'Nhóm trao đổi phụ huynh & giáo viên',
-            unreadCount: 0,
-          );
-        }).toList();
-      } else {
-        _chatThreads = [];
-      }
+    if (_students.isEmpty) {
+      await loadMyStudents();
+    }
+    final seen = <String>{};
+    _chatThreads = [];
+    for (final s in _students) {
+      final cid = s.classId ?? '';
+      if (cid.isEmpty || !seen.add(cid)) continue;
+      _chatThreads.add(ChatThread(
+        id: cid,
+        otherPartyName: '${s.className?.isNotEmpty == true ? s.className! : 'Lớp học'} - ${s.fullName}',
+        lastMessage: '',
+        unreadCount: 0,
+      ));
     }
     _loading = false;
     notifyListeners();
