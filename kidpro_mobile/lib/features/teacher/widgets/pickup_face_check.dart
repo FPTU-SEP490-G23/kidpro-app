@@ -141,7 +141,12 @@ class _PickupFaceCheckState extends State<PickupFaceCheck> {
               Icon(icon, color: color),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 15)),
+                child: Text(
+                  title,
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 15),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
