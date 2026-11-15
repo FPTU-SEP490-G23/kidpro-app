@@ -37,10 +37,10 @@ services:
       dockerfile: Dockerfile
     container_name: kidpro-ai-service
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # OPT-003: Internal-only service on bridge network, not exposed publicly to host/internet
+    expose:
+      - "8000"
     environment:
-      - SIMILARITY_THRESHOLD=0.65
       - BLUR_THRESHOLD=80.0
       - INTERNAL_SERVICE_KEY=kidpro_internal_secret_key_2026
     volumes:

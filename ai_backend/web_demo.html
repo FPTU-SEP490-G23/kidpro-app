@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KIDPRO - Face Attendance Live Demo</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body class="bg-slate-900 text-white min-h-screen p-6">
   <div class="max-w-4xl mx-auto">
     <header class="flex items-center justify-between mb-8 pb-4 border-b border-slate-700">
@@ -13,25 +15,29 @@
         <h1 class="text-2xl font-bold text-indigo-400">KIDPRO • Face Attendance AI Demo</h1>
         <p class="text-sm text-slate-400">InsightFace (buffalo_sc) + Cosine Similarity Vector Matching</p>
       </div>
-      <div id="serverStatus" class="px-3 py-1 text-xs rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">
+      <div id="serverStatus"
+        class="px-3 py-1 text-xs rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">
         Đang kiểm tra Server...
       </div>
     </header>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <!-- Camera Preview & Action -->
+      <!-- Camera Preview & Action 
+       abcdef -->
       <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700">
         <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
           <span>📷</span> Live Camera
         </h2>
-        <div class="relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center border-2" id="cameraBox">
+        <div class="relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center border-2"
+          id="cameraBox">
           <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
           <canvas id="canvas" class="hidden"></canvas>
           <div id="resultOverlay" class="absolute inset-0 pointer-events-none transition-all duration-300"></div>
         </div>
 
         <div class="mt-4 flex gap-3">
-          <button id="btnCheckin" class="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 font-semibold rounded-xl transition flex items-center justify-center gap-2">
+          <button id="btnCheckin"
+            class="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 font-semibold rounded-xl transition flex items-center justify-center gap-2">
             <span>✨</span> Điểm danh khuôn mặt
           </button>
           <button id="btnSwitchCam" class="py-3 px-4 bg-slate-700 hover:bg-slate-600 rounded-xl">
@@ -57,30 +63,36 @@
         <form id="formRegister" class="space-y-3">
           <div>
             <label class="block text-xs text-slate-300 mb-1">Mã học sinh (ID):</label>
-            <input type="text" id="regId" required value="HS001" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:border-indigo-500 outline-none">
+            <input type="text" id="regId" required value="HS001"
+              class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:border-indigo-500 outline-none">
           </div>
           <div>
             <label class="block text-xs text-slate-300 mb-1">Họ và tên:</label>
-            <input type="text" id="regName" required value="Bé Nguyễn Minh An" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:border-indigo-500 outline-none">
+            <input type="text" id="regName" required value="Bé Nguyễn Minh An"
+              class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:border-indigo-500 outline-none">
           </div>
           <div>
             <label class="block text-xs text-slate-300 mb-1">Lớp:</label>
-            <input type="text" id="regClass" required value="Mầm 1" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:border-indigo-500 outline-none">
+            <input type="text" id="regClass" required value="Mầm 1"
+              class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:border-indigo-500 outline-none">
           </div>
           <div>
             <label class="block text-xs text-slate-300 mb-1">Ảnh chân dung:</label>
             <div class="flex gap-2">
-              <button type="button" id="btnSnapRegister" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-xs rounded-lg">
+              <button type="button" id="btnSnapRegister"
+                class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-xs rounded-lg">
                 📸 Chụp từ Camera hiện tại
               </button>
               <input type="file" id="regFileInput" accept="image/*" class="hidden">
-              <button type="button" onclick="document.getElementById('regFileInput').click()" class="py-2 px-3 bg-slate-700 hover:bg-slate-600 text-xs rounded-lg">
+              <button type="button" onclick="document.getElementById('regFileInput').click()"
+                class="py-2 px-3 bg-slate-700 hover:bg-slate-600 text-xs rounded-lg">
                 Tải tệp
               </button>
             </div>
             <div id="snapPreviewText" class="text-xs text-indigo-400 mt-1"></div>
           </div>
-          <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 font-semibold rounded-lg text-sm transition">
+          <button type="submit"
+            class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 font-semibold rounded-lg text-sm transition">
             Lưu & Trích xuất Vector AI (512-dim)
           </button>
         </form>
@@ -238,9 +250,10 @@
             <span class="text-slate-500">${s.student_id}</span>
           </div>
         `).join('');
-      } catch (e) {}
+      } catch (e) { }
     }
     document.getElementById('btnReloadList').onclick = loadStudents;
   </script>
 </body>
+
 </html>
