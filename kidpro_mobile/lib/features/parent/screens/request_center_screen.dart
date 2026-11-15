@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
@@ -81,6 +82,14 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
         color: Colors.blue,
         badge: 'G4-UC-07',
         onTap: () => _showBusRegisterDialog(context, prov),
+      ),
+      _RequestCategoryItem(
+        title: 'Đăng ký ăn sáng tại trường',
+        subtitle: 'Dịch vụ ăn sáng bán trú dinh dưỡng tại trường',
+        icon: Icons.breakfast_dining_outlined,
+        color: Colors.orange,
+        badge: 'Bán trú',
+        onTap: () => _showMealRegisterDialog(context, prov),
       ),
       _RequestCategoryItem(
         title: 'Đăng ký lớp năng khiếu',
@@ -649,6 +658,126 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
   // ==========================================
   // FORM 4: ĐỀ NGHỊ HÀNH CHÍNH KHÁC (G4-UC-05)
   // ==========================================
+  // ==========================================
+  // FORM 3b: ĐĂNG KÝ ĂN SÁNG TẠI TRƯỜNG
+  // ==========================================
+  void _showMealRegisterDialog(BuildContext context, ParentProvider prov) {
+    DateTime startDate = DateTime.now().add(const Duration(days: 1));
+    final noteCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Đăng ký ăn sáng bán trú',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.restaurant, color: Colors.orange),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Dịch vụ ăn sáng gồm các món ăn nóng giàu dinh dưỡng, phục vụ từ 06:45 - 07:45 hàng ngày.',
+                        style: TextStyle(fontSize: 12, color: Colors.brown),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('Ngày bắt đầu ăn sáng *',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: startDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 90)),
+                  );
+                  if (picked != null) {
+                    setModalState(() => startDate = picked);
+                  }
+                },
+                icon: const Icon(Icons.calendar_today, size: 18),
+                label: Text(DateFormat('dd/MM/yyyy').format(startDate)),
+              ),
+              const SizedBox(height: 14),
+              const Text('Ghi chú dặn dò (Dị ứng, khẩu vị...)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: noteCtrl,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'Bé không ăn hành, dị ứng hải sản...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    final success = await prov.submitMealRegister(
+                      studentId: prov.selectedStudentId,
+                      startDate: DateFormat('yyyy-MM-dd').format(startDate),
+                      note: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : null,
+                    );
+                    if (success && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Đăng ký ăn sáng bán trú thành công! Chờ giáo vụ duyệt.')),
+                      );
+                      context.pop();
+                    }
+                  },
+                  child: const Text('Gửi đơn đăng ký ăn sáng',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showOtherRequestDialog(BuildContext context, ParentProvider prov) {
     final titleCtrl = TextEditingController();
     final contentCtrl = TextEditingController();

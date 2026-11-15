@@ -867,3 +867,63 @@ class BusStopOption {
         estimatedTime: json['estimatedTime'] as String? ?? '',
       );
 }
+
+class MealRegisterItem {
+  final int registerId;
+  final String studentId;
+  final String? studentName;
+  final String? studentCode;
+  final String? className;
+  final String? serviceId;
+  final String? serviceName;
+  final double? unitPrice;
+  final String? registeredDate;
+  final String? startDate;
+  final String? endDate;
+  final String status;
+  final String? statusLabel;
+  final String? note;
+  final String? parentName;
+  final String? parentPhone;
+  final DateTime? createdAt;
+
+  const MealRegisterItem({
+    required this.registerId,
+    required this.studentId,
+    this.studentName,
+    this.studentCode,
+    this.className,
+    this.serviceId,
+    this.serviceName,
+    this.unitPrice,
+    this.registeredDate,
+    this.startDate,
+    this.endDate,
+    required this.status,
+    this.statusLabel,
+    this.note,
+    this.parentName,
+    this.parentPhone,
+    this.createdAt,
+  });
+
+  factory MealRegisterItem.fromJson(Map<String, dynamic> json) => MealRegisterItem(
+        registerId: (json['registerId'] as num?)?.toInt() ?? 0,
+        studentId: (json['studentId'] ?? '').toString(),
+        studentName: json['studentName'] as String?,
+        studentCode: json['studentCode'] as String?,
+        className: json['className'] as String?,
+        serviceId: (json['serviceId'] ?? '').toString(),
+        serviceName: json['serviceName'] as String? ?? 'Ăn sáng bán trú',
+        unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 450000.0,
+        registeredDate: json['registeredDate'] as String?,
+        startDate: json['startDate'] as String?,
+        endDate: json['endDate'] as String?,
+        status: (json['status'] ?? 'PENDING').toString(),
+        statusLabel: json['statusLabel'] as String?,
+        note: json['note'] as String?,
+        parentName: json['parentName'] as String?,
+        parentPhone: json['parentPhone'] as String?,
+        createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) : null,
+      );
+}
