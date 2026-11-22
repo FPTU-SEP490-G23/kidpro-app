@@ -548,6 +548,18 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                         );
                         return;
                       }
+                      final hasExistingBus = prov.allRequests.any((r) =>
+                          r.type == 'BUS_REGISTRATION' &&
+                          (r.status == 'PENDING' || r.status == 'APPROVED' || r.status == 'CHO_DUYET' || r.status == 'DA_DUYET'));
+                      if (hasExistingBus) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Học sinh đã có 01 đơn đăng ký xe buýt đang chờ duyệt hoặc đang hoạt động. Mỗi học sinh chỉ được phép có tối đa 01 đơn.'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
+                      }
                       Navigator.pop(ctx);
                       final success = await prov.submitBusRegister(
                         studentId: prov.selectedStudentId,
@@ -561,6 +573,13 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                           const SnackBar(content: Text('Đăng ký xe buýt thành công!')),
                         );
                         context.pop();
+                      } else if (!success && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(prov.error ?? 'Đăng ký xe buýt thất bại'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                       }
                     },
                     child: const Text('Gửi đăng ký xe buýt',
