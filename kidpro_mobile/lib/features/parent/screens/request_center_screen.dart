@@ -782,17 +782,32 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () async {
+                    if (prov.selectedStudentId.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Vui lòng chọn học sinh trước khi gửi đơn!')),
+                      );
+                      return;
+                    }
                     Navigator.pop(ctx);
                     final success = await prov.submitMealRegister(
                       studentId: prov.selectedStudentId,
                       startDate: DateFormat('yyyy-MM-dd').format(startDate),
                       note: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : null,
                     );
-                    if (success && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đăng ký ăn sáng bán trú thành công! Chờ giáo vụ duyệt.')),
-                      );
-                      context.pop();
+                    if (context.mounted) {
+                      if (success) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Đăng ký ăn sáng bán trú thành công! Chờ giáo vụ duyệt.')),
+                        );
+                        context.pop();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(prov.error ?? 'Đăng ký ăn sáng thất bại. Vui lòng thử lại sau.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
                     }
                   },
                   child: const Text('Gửi đơn đăng ký ăn sáng',
