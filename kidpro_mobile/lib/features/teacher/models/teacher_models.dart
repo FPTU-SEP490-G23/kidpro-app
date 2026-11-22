@@ -575,19 +575,27 @@ class DevelopmentEvaluationItem {
     required this.status,
   });
 
-  factory DevelopmentEvaluationItem.fromJson(Map<String, dynamic> json) => DevelopmentEvaluationItem(
-        evaluationId: (json['evaluationId'] as num?)?.toInt(),
-        studentId: (json['studentId'] ?? '').toString(),
-        studentName: json['studentName'] as String? ?? '',
-        evaluationPeriod: json['evaluationPeriod'] as String? ?? 'HỌC KỲ I',
-        physicalScore: (json['physicalScore'] as num?)?.toDouble() ?? 5.0,
-        cognitiveScore: (json['cognitiveScore'] as num?)?.toDouble() ?? 5.0,
-        languageScore: (json['languageScore'] as num?)?.toDouble() ?? 5.0,
-        socialEmotionalScore: (json['socialEmotionalScore'] as num?)?.toDouble() ?? 5.0,
-        aestheticScore: (json['aestheticScore'] as num?)?.toDouble() ?? 5.0,
-        teacherComment: json['teacherComment'] as String? ?? '',
-        status: json['status'] as String? ?? 'SUBMITTED',
-      );
+  factory DevelopmentEvaluationItem.fromJson(Map<String, dynamic> json) {
+    double parseScore(dynamic val) {
+      if (val == null) return 5.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 5.0;
+    }
+
+    return DevelopmentEvaluationItem(
+      evaluationId: (json['evaluationId'] as num?)?.toInt(),
+      studentId: (json['studentId'] ?? '').toString(),
+      studentName: json['studentName'] as String? ?? '',
+      evaluationPeriod: json['evaluationPeriod'] as String? ?? 'HỌC KỲ I',
+      physicalScore: parseScore(json['physicalScore']),
+      cognitiveScore: parseScore(json['cognitiveScore']),
+      languageScore: parseScore(json['languageScore']),
+      socialEmotionalScore: parseScore(json['socialEmotionalScore']),
+      aestheticScore: parseScore(json['aestheticScore']),
+      teacherComment: json['teacherComment'] as String? ?? json['reviewNote'] as String? ?? '',
+      status: json['status'] as String? ?? 'SUBMITTED',
+    );
+  }
 }
 
 // ── Classroom Equipment Incident (G9-UC-06, BR-051, BR-052) ──

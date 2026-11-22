@@ -43,6 +43,9 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen>
 
   Color _getTypeColor(String type) {
     switch (type.toUpperCase()) {
+      case 'EPIDEMIC':
+      case 'HEALTH':
+        return Colors.red.shade700;
       case 'BILLING':
         return Colors.orange.shade700;
       case 'ATTENDANCE':
@@ -58,6 +61,9 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen>
 
   IconData _getTypeIcon(String type) {
     switch (type.toUpperCase()) {
+      case 'EPIDEMIC':
+      case 'HEALTH':
+        return Icons.health_and_safety_rounded;
       case 'BILLING':
         return Icons.receipt_long_rounded;
       case 'ATTENDANCE':
@@ -73,6 +79,10 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen>
 
   String _getTypeLabel(String type) {
     switch (type.toUpperCase()) {
+      case 'EPIDEMIC':
+        return 'Cảnh báo dịch';
+      case 'HEALTH':
+        return 'Y tế học đường';
       case 'BILLING':
         return 'Học phí';
       case 'ATTENDANCE':

@@ -184,6 +184,9 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
                       path: 'leave-requests',
                       builder: (_, __) => const LeaveRequestReviewScreen()),
                   GoRoute(
+                      path: 'notifications',
+                      builder: (_, __) => const ParentNotificationScreen()),
+                  GoRoute(
                       path: 'journal',
                       builder: (_, __) => const ClassroomJournalScreen()),
                   GoRoute(
