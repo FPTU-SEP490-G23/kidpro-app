@@ -13,20 +13,40 @@ class HealthMetricsScreen extends StatefulWidget {
 class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
   final Map<String, TextEditingController> _heightControllers = {};
   final Map<String, TextEditingController> _weightControllers = {};
+  String? _selectedRoundId;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<TeacherProvider>();
-      prov.loadHealthMetricsEntrySheet(prov.currentClassId).then((_) {
-        _initControllers();
-      });
+      await prov.loadMeasurementRounds();
+      if (prov.measurementRounds.isNotEmpty) {
+        // Ưu tiên chọn round chưa bị LOCKED, nếu không có thì lấy round đầu
+        final openRound = prov.measurementRounds.firstWhere(
+          (r) => r['status'] != 'LOCKED',
+          orElse: () => prov.measurementRounds.first,
+        );
+        _selectedRoundId = openRound['id']?.toString();
+      }
+      await prov.loadHealthMetricsEntrySheet(prov.currentClassId, measurementRoundId: _selectedRoundId);
+      _initControllers();
     });
+  }
+
+  Future<void> _onRoundChanged(String? roundId) async {
+    setState(() {
+      _selectedRoundId = roundId;
+    });
+    final prov = context.read<TeacherProvider>();
+    await prov.loadHealthMetricsEntrySheet(prov.currentClassId, measurementRoundId: roundId);
+    _initControllers();
   }
 
   void _initControllers() {
     final metrics = context.read<TeacherProvider>().healthMetrics;
+    _heightControllers.clear();
+    _weightControllers.clear();
     for (final item in metrics) {
       _heightControllers[item.studentId] = TextEditingController(
         text: item.heightCm != null ? item.heightCm.toString() : '',
@@ -86,7 +106,7 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => prov.loadHealthMetricsEntrySheet(prov.currentClassId),
+            onPressed: () => prov.loadHealthMetricsEntrySheet(prov.currentClassId, measurementRoundId: _selectedRoundId),
           ),
         ],
       ),
@@ -94,6 +114,48 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (prov.measurementRounds.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    color: Colors.white,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Đợt Cân Đo / Khám Thể Lực:',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryDark),
+                        ),
+                        const SizedBox(height: 6),
+                        DropdownButtonFormField<String>(
+                          value: _selectedRoundId,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            prefixIcon: const Icon(Icons.event_note, color: AppColors.primary, size: 20),
+                          ),
+                          items: prov.measurementRounds.map((r) {
+                            final id = r['id']?.toString() ?? '';
+                            final name = r['roundName']?.toString() ?? 'Đợt khám';
+                            final isLocked = r['status'] == 'LOCKED';
+                            return DropdownMenuItem<String>(
+                              value: id,
+                              child: Text(
+                                '$name ${isLocked ? '(ĐÃ KHÓA)' : '(ĐANG MỞ)'}',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isLocked ? Colors.grey.shade600 : AppColors.primaryDark,
+                                  fontWeight: isLocked ? FontWeight.normal : FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) => _onRoundChanged(val),
+                        ),
+                      ],
+                    ),
+                  ),
                 Container(
                   color: Colors.blue.shade50,
                   padding: const EdgeInsets.all(12),
@@ -217,55 +279,81 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
                     },
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, -4),
-                      ),
-                    ],
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: const Icon(Icons.save),
-                      label: const Text('Lưu toàn bộ chỉ số thể chất (MSG-131)'),
-                      onPressed: () async {
-                        final batchList = <Map<String, dynamic>>[];
-                        for (final item in metrics) {
-                          final h = double.tryParse(_heightControllers[item.studentId]?.text ?? '');
-                          final w = double.tryParse(_weightControllers[item.studentId]?.text ?? '');
-                          if (h != null && w != null) {
-                            batchList.add({
-                              'studentId': item.studentId,
-                              'heightCm': h,
-                              'weightKg': w,
-                            });
-                          }
-                        }
+                Builder(
+                  builder: (context) {
+                    final selectedRound = prov.measurementRounds.firstWhere(
+                      (r) => r['id']?.toString() == _selectedRoundId,
+                      orElse: () => {},
+                    );
+                    final isRoundLocked = selectedRound['status'] == 'LOCKED';
 
-                        final msg = await prov.submitHealthMetricsBatch(batchList);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(msg ?? 'Lưu thành công'),
-                              backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success,
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ),
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, -4),
+                          ),
+                        ],
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isRoundLocked ? Colors.grey : AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: Icon(isRoundLocked ? Icons.lock : Icons.save),
+                          label: Text(
+                            isRoundLocked
+                                ? 'Đợt này đã khóa sổ (Không thể chỉnh sửa)'
+                                : 'Lưu toàn bộ chỉ số thể chất (MSG-131)',
+                          ),
+                          onPressed: isRoundLocked
+                              ? () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Đợt khám sức khỏe này đã bị khóa sổ bởi Giáo vụ. Không thể lưu hoặc sửa số đo!'),
+                                      backgroundColor: AppColors.error,
+                                    ),
+                                  );
+                                }
+                              : () async {
+                                  final batchList = <Map<String, dynamic>>[];
+                                  for (final item in metrics) {
+                                    final h = double.tryParse(_heightControllers[item.studentId]?.text ?? '');
+                                    final w = double.tryParse(_weightControllers[item.studentId]?.text ?? '');
+                                    if (h != null && w != null) {
+                                      batchList.add({
+                                        'studentId': item.studentId,
+                                        'heightCm': h,
+                                        'weightKg': w,
+                                      });
+                                    }
+                                  }
+
+                                  final msg = await prov.submitHealthMetricsBatch(
+                                    batchList,
+                                    measurementRoundId: _selectedRoundId,
+                                  );
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(msg ?? 'Lưu thành công'),
+                                        backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success,
+                                      ),
+                                    );
+                                  }
+                                },
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

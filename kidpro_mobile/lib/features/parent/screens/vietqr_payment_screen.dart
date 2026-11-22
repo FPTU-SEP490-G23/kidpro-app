@@ -84,12 +84,44 @@ class _VietQrPaymentScreenState extends State<VietQrPaymentScreen> {
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(color: Colors.grey.shade200),
                                 ),
-                                child: QrImageView(
-                                  data: qr.qrDataUrl.isNotEmpty
-                                      ? qr.qrDataUrl
-                                      : 'https://img.vietqr.io/image/${qr.bankName}-${qr.accountNumber}-compact2.png?amount=${qr.amount.toInt()}&addInfo=${qr.referenceCode}',
-                                  version: QrVersions.auto,
-                                  size: 220,
+                                child: Builder(
+                                  builder: (context) {
+                                    String qrImageUrl;
+                                    if (qr.qrDataUrl.startsWith('http')) {
+                                      qrImageUrl = qr.qrDataUrl;
+                                    } else {
+                                      final bank = (qr.bankName.isNotEmpty ? qr.bankName : '970422').replaceAll(' ', '');
+                                      final acc = qr.accountNumber.replaceAll(' ', '');
+                                      final amt = qr.amount.toInt();
+                                      final memo = Uri.encodeComponent(qr.referenceCode);
+                                      final accName = Uri.encodeComponent(qr.accountName);
+                                      qrImageUrl = 'https://img.vietqr.io/image/$bank-$acc-compact2.png?amount=$amt&addInfo=$memo&accountName=$accName';
+                                    }
+
+                                    return ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.network(
+                                        qrImageUrl,
+                                        width: 260,
+                                        fit: BoxFit.contain,
+                                        loadingBuilder: (context, child, progress) {
+                                          if (progress == null) return child;
+                                          return const SizedBox(
+                                            height: 240,
+                                            width: 240,
+                                            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                          );
+                                        },
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return QrImageView(
+                                            data: qr.qrDataUrl.isNotEmpty ? qr.qrDataUrl : qr.referenceCode,
+                                            version: QrVersions.auto,
+                                            size: 220,
+                                          );
+                                        },
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                               const SizedBox(height: 12),

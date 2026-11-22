@@ -145,6 +145,11 @@ class TeacherProvider extends ChangeNotifier {
         } else {
           _currentClassName = existing['className']?.toString() ?? 'Lớp học';
         }
+      } else {
+        _currentClassId = '';
+        _currentClassName = 'Chưa được phân công lớp';
+        _students = [];
+        _todayAttendance = {};
       }
       notifyListeners();
     } catch (e) {
@@ -1000,12 +1005,34 @@ class TeacherProvider extends ChangeNotifier {
   // 6. Health Metrics (WHO) (G8-UC-03, BR-031)
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> loadHealthMetricsEntrySheet(String classId) async {
+  List<Map<String, dynamic>> _measurementRounds = [];
+  List<Map<String, dynamic>> get measurementRounds => _measurementRounds;
+
+  Future<void> loadMeasurementRounds() async {
+    try {
+      final res = await _dio.get('/api/health-reports/rounds');
+      final data = res.data;
+      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
+      _measurementRounds = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      notifyListeners();
+    } catch (e) {
+      log('loadMeasurementRounds error: $e');
+      _measurementRounds = [];
+    }
+  }
+
+  Future<void> loadHealthMetricsEntrySheet(String classId, {String? measurementRoundId}) async {
     if (classId.isEmpty) return;
     _loading = true;
     notifyListeners();
     try {
-      final res = await _dio.get(ApiEndpoints.healthMetricsEntrySheet(classId));
+      final queryParams = measurementRoundId != null && measurementRoundId.isNotEmpty
+          ? {'measurementRoundId': measurementRoundId}
+          : null;
+      final res = await _dio.get(
+        ApiEndpoints.healthMetricsEntrySheet(classId),
+        queryParameters: queryParams,
+      );
       final data = res.data;
       final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
       _healthMetrics = list.map((e) => HealthMetricItem.fromJson(e as Map<String, dynamic>)).toList();
@@ -1017,18 +1044,22 @@ class TeacherProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> submitHealthMetricsBatch(List<Map<String, dynamic>> metrics) async {
+  Future<String?> submitHealthMetricsBatch(List<Map<String, dynamic>> metrics, {String? measurementRoundId}) async {
     _lastActionFailed = false;
     _loading = true;
     notifyListeners();
     try {
+      final Map<String, dynamic> body = {
+        'classId': _currentClassId,
+        'measurementDate': DateTime.now().toIso8601String().split('T').first,
+        'records': metrics,
+      };
+      if (measurementRoundId != null && measurementRoundId.isNotEmpty) {
+        body['measurementRoundId'] = measurementRoundId;
+      }
       final res = await _dio.post(
         ApiEndpoints.healthMetricsBatch,
-        data: {
-          'classId': _currentClassId,
-          'measurementDate': DateTime.now().toIso8601String().split('T').first,
-          'records': metrics,
-        },
+        data: body,
       );
       _loading = false;
       notifyListeners();

@@ -125,22 +125,69 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     _buildHeroOverviewCard(teacherProv),
                     const SizedBox(height: 16),
 
-                    // Priority Warning Banners (Strangers, Meds, Leaves)
-                    if (alertsCount > 0 || pendingMedCount > 0 || pendingLeaveCount > 0) ...[
-                      _buildPriorityAlertsSection(alertsCount, pendingMedCount, pendingLeaveCount),
-                      const SizedBox(height: 18),
+                    // Nếu chưa được phân công lớp: Hiển thị thông báo, không xem được thông tin gì cả
+                    if (teacherProv.myClasses.isEmpty) ...[
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.amber.shade200),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(Icons.assignment_ind_outlined, size: 56, color: Colors.amber.shade700),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'Chưa Được Phân Công Lớp',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Tài khoản của Thầy/Cô hiện chưa được phân công làm Giáo viên chủ nhiệm hoặc Phụ tá cho lớp học nào trong niên khóa hiện tại.\n\nVui lòng liên hệ Ban Giám hiệu hoặc Giáo vụ để được phân công lớp trước khi quản lý học sinh và thực hiện điểm danh.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.5),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              icon: const Icon(Icons.sync_rounded),
+                              label: const Text('Kiểm tra phân công lại'),
+                              onPressed: () => teacherProv.initTeacherData(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      // Priority Warning Banners (Strangers, Meds, Leaves)
+                      if (alertsCount > 0 || pendingMedCount > 0 || pendingLeaveCount > 0) ...[
+                        _buildPriorityAlertsSection(alertsCount, pendingMedCount, pendingLeaveCount),
+                        const SizedBox(height: 18),
+                      ],
+
+                      // Quick Action 1-Tap Hub
+                      _buildQuickActionHub(teacherProv),
+                      const SizedBox(height: 20),
+
+                      // Category Selector Pills
+                      _buildCategoryFilterBar(),
+                      const SizedBox(height: 14),
+
+                      // Filtered Feature Modules
+                      ..._buildFilteredModules(teacherProv, pendingMedCount, pendingLeaveCount),
                     ],
-
-                    // Quick Action 1-Tap Hub
-                    _buildQuickActionHub(teacherProv),
-                    const SizedBox(height: 20),
-
-                    // Category Selector Pills
-                    _buildCategoryFilterBar(),
-                    const SizedBox(height: 14),
-
-                    // Filtered Feature Modules
-                    ..._buildFilteredModules(teacherProv, pendingMedCount, pendingLeaveCount),
 
                     const SizedBox(height: 32),
                   ]),
@@ -254,6 +301,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
+                      tooltip: 'Thông báo',
+                      icon: const Icon(Icons.notifications_outlined, color: AppColors.primary, size: 22),
+                      onPressed: () => context.push('/teacher/notifications'),
+                    ),
+                    IconButton(
                       tooltip: 'Đồng bộ dữ liệu',
                       icon: teacherProv.loading
                           ? const SizedBox(
@@ -276,94 +328,58 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Class Selector Pill Bar
+          // Class Assigned Pill Bar (Giáo viên không được tự ý đổi lớp)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.06),
+              color: teacherProv.myClasses.isEmpty
+                  ? Colors.amber.shade50
+                  : AppColors.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
+              border: Border.all(
+                color: teacherProv.myClasses.isEmpty
+                    ? Colors.amber.shade300
+                    : AppColors.primary.withValues(alpha: 0.12),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.apartment_rounded, color: AppColors.primary, size: 18),
+                Icon(
+                  teacherProv.myClasses.isEmpty ? Icons.warning_amber_rounded : Icons.apartment_rounded,
+                  color: teacherProv.myClasses.isEmpty ? Colors.amber.shade800 : AppColors.primary,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Lớp: ${teacherProv.currentClassName}',
-                    style: const TextStyle(
+                    teacherProv.myClasses.isEmpty
+                        ? 'Chưa được phân công lớp'
+                        : 'Lớp: ${teacherProv.currentClassName}',
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
+                      color: teacherProv.myClasses.isEmpty ? Colors.amber.shade900 : AppColors.primary,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (teacherProv.myClasses.length > 1)
-                  PopupMenuButton<String>(
-                    tooltip: 'Chuyển lớp phụ trách',
-                    onSelected: (classId) => teacherProv.selectClass(classId),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    itemBuilder: (context) => teacherProv.myClasses.map((c) {
-                      final isSelected = c['classId']?.toString() == teacherProv.currentClassId;
-                      return PopupMenuItem<String>(
-                        value: c['classId']?.toString(),
-                        child: Row(
-                          children: [
-                            Icon(
-                              isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                              color: isSelected ? AppColors.primary : Colors.grey,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                '${c['className']} (${c['studentCount'] ?? 0} bé)',
-                                style: TextStyle(
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                  color: isSelected ? AppColors.primary : Colors.black87,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Đổi lớp',
-                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                          SizedBox(width: 2),
-                          Icon(Icons.arrow_drop_down, color: Colors.white, size: 16),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${teacherProv.totalCount} học sinh',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    teacherProv.myClasses.isEmpty
+                        ? '0 học sinh'
+                        : '${teacherProv.totalCount} học sinh',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: teacherProv.myClasses.isEmpty ? Colors.grey : AppColors.primary,
                     ),
                   ),
+                ),
               ],
             ),
           ),

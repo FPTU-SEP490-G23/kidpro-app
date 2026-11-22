@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
+import 'package:kidpro_mobile/core/network/api_client.dart';
 import 'package:kidpro_mobile/features/teacher/models/teacher_models.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
 
@@ -19,7 +20,11 @@ class _DevelopmentEvaluationScreenState extends State<DevelopmentEvaluationScree
     final start = now.month >= 9 ? now.year : now.year - 1;
     return '$start-${start + 1}';
   }();
-  String _period = 'HỌC KỲ I - $_schoolYear';
+
+  List<Map<String, dynamic>> _activeAcademicYears = [];
+  String? _selectedYearName;
+  String _period = 'Năm học $_schoolYear';
+
   // Điểm khởi tạo trung tính; giáo viên tự chấm theo quan sát
   double _physical = 5.0;
   double _cognitive = 5.0;
@@ -36,7 +41,44 @@ class _DevelopmentEvaluationScreenState extends State<DevelopmentEvaluationScree
       final prov = context.read<TeacherProvider>();
       prov.loadStudents(prov.currentClassId);
       prov.loadDevelopmentEvaluations(prov.currentClassId);
+      _loadActiveAcademicYears();
     });
+  }
+
+  Future<void> _loadActiveAcademicYears() async {
+    try {
+      final dio = ApiClient().dio;
+      final res = await dio.get('/api/academic-years');
+      final data = res.data;
+      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
+      // Chỉ lấy năm học có is_active == true && status == 'ACTIVE'
+      final activeList = list.where((item) {
+        final isActive = item['isActive'] == true || item['is_active'] == true;
+        final status = (item['status'] ?? '').toString().toUpperCase();
+        return isActive && status == 'ACTIVE';
+      }).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+
+      if (mounted) {
+        setState(() {
+          _activeAcademicYears = activeList;
+          if (_activeAcademicYears.isNotEmpty) {
+            final firstYear = _activeAcademicYears.first;
+            _selectedYearName = firstYear['yearName']?.toString() ?? firstYear['name']?.toString() ?? _schoolYear;
+            _period = 'Năm học $_selectedYearName';
+          } else {
+            _selectedYearName = _schoolYear;
+            _period = 'Năm học $_schoolYear';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _selectedYearName = _schoolYear;
+          _period = 'Năm học $_schoolYear';
+        });
+      }
+    }
   }
 
   @override
@@ -96,6 +138,7 @@ class _DevelopmentEvaluationScreenState extends State<DevelopmentEvaluationScree
 
           DropdownButtonFormField<String>(
             value: _selectedStudentId ?? (students.isNotEmpty ? students.first.id : null),
+            isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Học sinh được đánh giá',
               border: OutlineInputBorder(),
@@ -110,18 +153,31 @@ class _DevelopmentEvaluationScreenState extends State<DevelopmentEvaluationScree
           const SizedBox(height: 12),
 
           DropdownButtonFormField<String>(
-            value: _period,
+            value: _selectedYearName,
+            isExpanded: true,
             decoration: const InputDecoration(
-              labelText: 'Kỳ đánh giá chuẩn phát triển',
+              labelText: 'Năm học đánh giá (Đang áp dụng)',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.calendar_today),
             ),
-            items: [
-              DropdownMenuItem(value: 'HỌC KỲ I - $_schoolYear', child: Text('Học kỳ I ($_schoolYear)')),
-              DropdownMenuItem(value: 'HỌC KỲ II - $_schoolYear', child: Text('Học kỳ II ($_schoolYear)')),
-              DropdownMenuItem(value: 'CUỐI NĂM HỌC - $_schoolYear', child: Text('Tổng kết cuối năm học ($_schoolYear)')),
-            ],
-            onChanged: (val) => setState(() => _period = val ?? 'HỌC KỲ I - $_schoolYear'),
+            items: (_activeAcademicYears.isNotEmpty
+                ? _activeAcademicYears.map((ay) {
+                    final name = ay['yearName']?.toString() ?? ay['name']?.toString() ?? _schoolYear;
+                    return DropdownMenuItem<String>(
+                      value: name,
+                      child: Text('Năm học $name (ACTIVE)'),
+                    );
+                  }).toList()
+                : [
+                    DropdownMenuItem<String>(
+                      value: _selectedYearName ?? _schoolYear,
+                      child: Text('Năm học ${_selectedYearName ?? _schoolYear} (ACTIVE)'),
+                    ),
+                  ]),
+            onChanged: (val) => setState(() {
+              _selectedYearName = val;
+              _period = 'Năm học $val';
+            }),
           ),
           const SizedBox(height: 20),
 
