@@ -1022,12 +1022,14 @@ class ParentProvider extends ChangeNotifier {
     String? note,
   }) async {
     try {
-      await _dio.post(ApiEndpoints.parentMealRegisters, data: {
+      final payload = {
         'studentId': studentId,
         'startDate': startDate,
         if (endDate != null) 'endDate': endDate,
         if (note != null) 'note': note,
-      });
+        if (note != null) 'dietaryNotes': note,
+      };
+      await _dio.post(ApiEndpoints.parentMealRegisters, data: payload);
       await loadAllRequests(studentId);
       return true;
     } on DioException catch (e) {
