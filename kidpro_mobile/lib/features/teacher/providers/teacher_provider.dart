@@ -149,7 +149,6 @@ class TeacherProvider extends ChangeNotifier {
         _currentClassId = '';
         _currentClassName = 'Chưa được phân công lớp';
         _students = [];
-        _todayAttendance = {};
       }
       notifyListeners();
     } catch (e) {
