@@ -114,18 +114,49 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                if (prov.measurementRounds.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    color: Colors.white,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Đợt Cân Đo / Khám Thể Lực:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryDark),
-                        ),
-                        const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: Colors.white,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Đợt Cân Đo / Khám Thể Lực:',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryDark),
+                          ),
+                          InkWell(
+                            onTap: () async {
+                              await prov.loadMeasurementRounds();
+                              if (prov.measurementRounds.isNotEmpty) {
+                                final openRound = prov.measurementRounds.firstWhere(
+                                  (r) => r['status'] != 'LOCKED',
+                                  orElse: () => prov.measurementRounds.first,
+                                );
+                                setState(() {
+                                  _selectedRoundId = openRound['id']?.toString();
+                                });
+                                await prov.loadHealthMetricsEntrySheet(prov.currentClassId, measurementRoundId: _selectedRoundId);
+                                _initControllers();
+                              }
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.refresh, size: 14, color: AppColors.primary),
+                                  SizedBox(width: 4),
+                                  Text('Tải lại đợt', style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      if (prov.measurementRounds.isNotEmpty)
                         DropdownButtonFormField<String>(
                           value: _selectedRoundId,
                           isExpanded: true,
@@ -152,10 +183,31 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
                             );
                           }).toList(),
                           onChanged: (val) => _onRoundChanged(val),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.amber.shade300),
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.amber.shade50,
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Chưa có đợt khám mở từ Giáo vụ. Bấm "Tải lại đợt" hoặc liên hệ Giáo vụ tạo đợt cân đo.',
+                                  style: TextStyle(fontSize: 11, color: Colors.brown),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
+                ),
                 Container(
                   color: Colors.blue.shade50,
                   padding: const EdgeInsets.all(12),
@@ -337,18 +389,18 @@ class _HealthMetricsScreenState extends State<HealthMetricsScreen> {
                                     }
                                   }
 
+                                  final messenger = ScaffoldMessenger.of(context);
                                   final msg = await prov.submitHealthMetricsBatch(
                                     batchList,
                                     measurementRoundId: _selectedRoundId,
                                   );
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(msg ?? 'Lưu thành công'),
-                                        backgroundColor: context.read<TeacherProvider>().lastActionFailed ? AppColors.error : AppColors.success,
-                                      ),
-                                    );
-                                  }
+                                  if (!mounted) return;
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(msg ?? 'Lưu thành công'),
+                                      backgroundColor: prov.lastActionFailed ? AppColors.error : AppColors.success,
+                                    ),
+                                  );
                                 },
                         ),
                       ),

@@ -222,8 +222,85 @@ class _RequestsOverviewScreenState extends State<RequestsOverviewScreen> {
                 }).toList(),
               ),
             ],
+            if (item.status != 'CANCELLED' &&
+                item.status != 'REJECTED' &&
+                item.status != 'TU_CHOI' &&
+                ((item.requestType == 'BUS' && (isPending || isApproved)) || isPending)) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: const BorderSide(color: AppColors.error),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.cancel_outlined, size: 14),
+                    label: Text(
+                      item.requestType == 'BUS' && isApproved
+                          ? 'Dừng đăng ký xe buýt'
+                          : 'Hủy đơn',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () => _confirmCancelRequest(item),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmCancelRequest(ParentUnifiedRequest item) {
+    final isBusActive = item.requestType == 'BUS' &&
+        (item.status == 'APPROVED' || item.status == 'ACTIVE' || item.status == 'DA_DUYET');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          isBusActive ? 'Dừng đăng ký xe buýt' : 'Xác nhận hủy đơn',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          isBusActive
+              ? 'Bạn có chắc chắn muốn dừng đăng ký dịch vụ xe buýt cho bé từ hôm nay không?'
+              : 'Bạn có chắc chắn muốn hủy đơn "${item.title}" không?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Đóng'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final prov = context.read<ParentProvider>();
+              final success = await prov.cancelUnifiedRequest(item.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success ? 'Thao tác thành công' : (prov.error ?? 'Lỗi khi hủy đơn')),
+                    backgroundColor: success ? AppColors.success : AppColors.error,
+                  ),
+                );
+              }
+            },
+            child: const Text('Xác nhận'),
+          ),
+        ],
       ),
     );
   }

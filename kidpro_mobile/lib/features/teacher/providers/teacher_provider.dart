@@ -475,12 +475,14 @@ class TeacherProvider extends ChangeNotifier {
 
   void markAllPresent() {
     final now = DateTime.now();
+    final isPast830 = (now.hour > 8 || (now.hour == 8 && now.minute > 30));
+    final defaultStatus = isPast830 ? AttendanceStatus.late : AttendanceStatus.present;
     final timeStr =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     for (var s in _students) {
       // Bé đã có đơn nghỉ phép được duyệt giữ nguyên 'Nghỉ phép'
       if (s.status == AttendanceStatus.onLeave) continue;
-      s.status = AttendanceStatus.present;
+      s.status = defaultStatus;
       s.checkInTime ??= timeStr;
     }
     notifyListeners();
@@ -489,9 +491,12 @@ class TeacherProvider extends ChangeNotifier {
   void toggleStudentStatus(int index) {
     if (index < 0 || index >= _students.length) return;
     final current = _students[index].status;
+    final now = DateTime.now();
+    final isPast830 = (now.hour > 8 || (now.hour == 8 && now.minute > 30));
+
     switch (current) {
       case AttendanceStatus.notArrived:
-        _students[index].status = AttendanceStatus.present;
+        _students[index].status = isPast830 ? AttendanceStatus.late : AttendanceStatus.present;
         break;
       case AttendanceStatus.present:
         _students[index].status = AttendanceStatus.late;
@@ -506,7 +511,6 @@ class TeacherProvider extends ChangeNotifier {
     if ((_students[index].status == AttendanceStatus.present ||
             _students[index].status == AttendanceStatus.late) &&
         (_students[index].checkInTime == null || _students[index].checkInTime!.isEmpty)) {
-      final now = DateTime.now();
       _students[index].checkInTime =
           '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     }
