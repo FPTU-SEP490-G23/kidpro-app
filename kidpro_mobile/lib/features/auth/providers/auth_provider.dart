@@ -180,6 +180,35 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Đổi mật khẩu tài khoản (mọi role: PH, GV, BGH...)
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    try {
+      final res = await _dio.post(
+        ApiEndpoints.changePassword,
+        data: {
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+          'confirmPassword': confirmPassword,
+        },
+      );
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return null;
+      }
+      return res.data is Map ? res.data['message']?.toString() : 'Đổi mật khẩu thất bại.';
+    } on DioException catch (e) {
+      if (e.response?.data is Map && e.response?.data['message'] != null) {
+        return e.response?.data['message']?.toString();
+      }
+      return e.message ?? 'Lỗi kết nối máy chủ.';
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<void> logout() async {
     await SecureStorageHelper.clearAll();
     _user = null;

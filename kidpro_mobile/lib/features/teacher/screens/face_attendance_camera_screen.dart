@@ -583,8 +583,8 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
       final data = response.data as Map<String, dynamic>;
       data['liveness_verified'] = isLivenessVerified;
 
-      // Khi Spring Boot xác nhận PRESENT: Cập nhật danh sách học sinh
-      if (data['status'] == 'PRESENT') {
+      // Khi Spring Boot xác nhận PRESENT hoặc LATE: Cập nhật danh sách học sinh
+      if (data['status'] == 'PRESENT' || data['status'] == 'LATE') {
         if (mounted) {
           final tProv = context.read<TeacherProvider>();
           tProv.loadStudents(tProv.currentClassId);

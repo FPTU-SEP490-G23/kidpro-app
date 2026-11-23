@@ -43,7 +43,6 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
 
   // Liveness / Trigger state
   bool _faceInFrame = false;
-  DateTime? _faceDetectedTime;
   // Liveness: phải thấy mắt mở -> nhắm -> mở (chớp mắt 80-1800 ms) mới chụp, chống dùng ảnh in/màn hình
   bool _sawEyesOpen = false;
   DateTime? _eyesClosedAt;

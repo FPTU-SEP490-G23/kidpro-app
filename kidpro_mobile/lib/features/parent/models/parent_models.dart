@@ -171,6 +171,10 @@ class MedicationRequest {
   Map<String, dynamic> toJson() => {
         'studentId': studentId,
         'instructions': instructions,
+        if (medicineName != null) 'medicineName': medicineName,
+        if (medicineName != null) 'medicationName': medicineName,
+        if (dosage != null) 'dosage': dosage,
+        if (note != null) 'notes': note,
         'startDate': startDate.toIso8601String().split('T').first,
         'endDate': endDate.toIso8601String().split('T').first,
         if (prescriptionPhotoId != null) 'prescriptionPhotoId': prescriptionPhotoId,

@@ -90,41 +90,74 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       final msg = parentProv.messages[index];
                       final isMe = msg.senderId == currentUserId;
 
-                      return Align(
-                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                          decoration: BoxDecoration(
-                            color: isMe ? AppColors.primary : Colors.grey.shade200,
-                            borderRadius: BorderRadius.only(
-                              topLeft: const Radius.circular(16),
-                              topRight: const Radius.circular(16),
-                              bottomLeft: Radius.circular(isMe ? 16 : 4),
-                              bottomRight: Radius.circular(isMe ? 4 : 16),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                msg.content,
-                                style: TextStyle(
-                                  color: isMe ? Colors.white : Colors.black87,
-                                  fontSize: 15,
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (!isMe) ...[
+                              CircleAvatar(
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                                radius: 15,
+                                child: Text(
+                                  msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryDark,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                timeFormat.format(msg.sentAt),
-                                style: TextStyle(
-                                  color: isMe ? Colors.white70 : Colors.black45,
-                                  fontSize: 10,
-                                ),
-                              ),
+                              const SizedBox(width: 8),
                             ],
-                          ),
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+                                decoration: BoxDecoration(
+                                  color: isMe ? AppColors.primary : Colors.grey.shade200,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: const Radius.circular(16),
+                                    topRight: const Radius.circular(16),
+                                    bottomLeft: Radius.circular(isMe ? 16 : 4),
+                                    bottomRight: Radius.circular(isMe ? 4 : 16),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                  children: [
+                                    if (!isMe) ...[
+                                      Text(
+                                        msg.senderName.isNotEmpty ? msg.senderName : 'Giáo viên',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: AppColors.primaryDark,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                    ],
+                                    Text(
+                                      msg.content,
+                                      style: TextStyle(
+                                        color: isMe ? Colors.white : Colors.black87,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      timeFormat.format(msg.sentAt),
+                                      style: TextStyle(
+                                        color: isMe ? Colors.white70 : Colors.black45,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     },

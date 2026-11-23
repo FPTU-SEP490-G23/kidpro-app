@@ -888,6 +888,23 @@ class ParentProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> cancelUnifiedRequest(String requestId) async {
+    try {
+      final res = await _dio.put(ApiEndpoints.parentCancelUnifiedRequest(requestId));
+      await loadAllRequests(_selectedStudentId);
+      return res.data?['success'] == true;
+    } on DioException catch (e) {
+      logError('cancelUnifiedRequest', e);
+      _error = e.response?.data?['message']?.toString() ?? 'Hủy đơn thất bại';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Lỗi khi hủy đơn: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
   // ── 15. DANH MỤC THAM CHIẾU CHO FORM NỘP ĐƠN ──
   List<AvailableOption> _availableClasses = [];
   List<AvailableOption> _availableBuses = [];

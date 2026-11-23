@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/auth/providers/auth_provider.dart';
+import 'package:kidpro_mobile/features/auth/widgets/change_password_dialog.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
 
 /// Tab "Tài khoản" của giáo viên: thông tin cá nhân, lớp phụ trách và đăng xuất.
@@ -152,6 +153,22 @@ class TeacherProfileScreen extends StatelessWidget {
                 );
               }),
             const SizedBox(height: 28),
+
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => showChangePasswordDialog(context),
+                icon: const Icon(Icons.lock_outline),
+                label: const Text('Đổi mật khẩu', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 12),
 
             SizedBox(
               width: double.infinity,

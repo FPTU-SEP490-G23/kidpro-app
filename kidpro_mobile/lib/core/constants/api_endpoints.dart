@@ -9,6 +9,7 @@ class ApiEndpoints {
   static const refreshToken = '/api/auth/refresh-token';
   static const userMe = '/api/auth/me';
   static const forgotPassword = '/api/auth/forgot-password';
+  static const changePassword = '/api/auth/change-password';
 
   // Parent - Students (Children)
   static const parentStudents = '/api/parents/students';
@@ -34,6 +35,8 @@ class ApiEndpoints {
   // Parent - Unified Requests & Forms (11 loại đơn từ)
   static String parentAllRequests(String studentId) =>
       '/api/parents/students/$studentId/all-requests';
+  static String parentCancelUnifiedRequest(String id) =>
+      '/api/parents/unified-requests/$id/cancel';
   static const parentClassTransfer = '/api/parents/class-transfer-requests';
   static const parentBusRegister = '/api/parents/bus-registers';
   static const parentExtracurricularRegister = '/api/parents/extracurricular-registers';
