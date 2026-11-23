@@ -549,7 +549,8 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                         return;
                       }
                       final hasExistingBus = prov.allRequests.any((r) =>
-                          r.type == 'BUS_REGISTRATION' &&
+                          (r.studentId == null || r.studentId == prov.selectedStudentId) &&
+                          (r.requestType == 'BUS' || r.requestType == 'BUS_REGISTRATION' || r.type == 'BUS' || r.type == 'BUS_REGISTRATION') &&
                           (r.status == 'PENDING' || r.status == 'APPROVED' || r.status == 'CHO_DUYET' || r.status == 'DA_DUYET'));
                       if (hasExistingBus) {
                         ScaffoldMessenger.of(context).showSnackBar(

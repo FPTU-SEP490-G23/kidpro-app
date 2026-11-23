@@ -729,6 +729,8 @@ class ParentUnifiedRequest {
         createdAt: json['createdAt']?.toString(),
         metadata: (json['metadata'] as Map<String, dynamic>?) ?? {},
       );
+
+  String get type => requestType;
 }
 
 class AvailableOption {
