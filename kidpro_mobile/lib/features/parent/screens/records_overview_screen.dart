@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/parent/providers/parent_provider.dart';
+import 'package:kidpro_mobile/features/parent/screens/journal_post_detail_sheet.dart';
 
 class RecordsOverviewScreen extends StatefulWidget {
   final int initialTab;
@@ -517,58 +518,88 @@ class _RecordsOverviewScreenState extends State<RecordsOverviewScreen>
             margin: const EdgeInsets.only(bottom: 18),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (post.imageUrls.isNotEmpty)
-                  SizedBox(
-                    height: 200,
-                    width: double.infinity,
-                    child: Image.network(
-                      post.imageUrls.first,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(Icons.broken_image, size: 40, color: Colors.grey),
+            child: InkWell(
+              onTap: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                useSafeArea: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => JournalPostDetailSheet(
+                  post: post,
+                  loadDetail: post.postId == null
+                      ? () async => post
+                      : () => prov.loadJournalPostDetail(post.postId!),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (post.imageUrls.isNotEmpty)
+                    SizedBox(
+                      height: 200,
+                      width: double.infinity,
+                      child: Image.network(
+                        post.imageUrls.first,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Colors.grey.shade200,
+                          child: const Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                        ),
                       ),
                     ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              post.title ?? 'Hoạt động lớp',
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                post.title ?? 'Hoạt động lớp',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                          Text(
-                            post.createdAt != null && post.createdAt!.length >= 10
-                                ? post.createdAt!.substring(0, 10)
-                                : '',
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
+                            Text(
+                              post.createdAt != null && post.createdAt!.length >= 10
+                                  ? post.createdAt!.substring(0, 10)
+                                  : '',
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          post.content ?? '',
+                          style: TextStyle(color: Colors.grey.shade800, fontSize: 13, height: 1.4),
+                        ),
+                        if (post.teacherName != null) ...[
+                          const SizedBox(height: 8),
+                          Text('Đăng bởi: ${post.teacherName}',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
                         ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        post.content ?? '',
-                        style: TextStyle(color: Colors.grey.shade800, fontSize: 13, height: 1.4),
-                      ),
-                      if (post.teacherName != null) ...[
-                        const SizedBox(height: 8),
-                        Text('Đăng bởi: ${post.teacherName}',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                        const SizedBox(height: 10),
+                        const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.open_in_new, size: 15, color: AppColors.primary),
+                            SizedBox(width: 5),
+                            Text(
+                              'Chạm để xem chi tiết',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },

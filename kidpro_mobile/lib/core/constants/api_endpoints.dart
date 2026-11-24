@@ -31,6 +31,8 @@ class ApiEndpoints {
       '/api/health/metrics/student/$studentId/growth-history';
   static String parentJournalPosts(String classId) =>
       '/api/health/journal-posts/class/$classId';
+  static String parentJournalPostDetail(int postId) =>
+      '/api/health/journal-posts/$postId';
 
   // Parent - Unified Requests & Forms (11 loại đơn từ)
   static String parentAllRequests(String studentId) =>
