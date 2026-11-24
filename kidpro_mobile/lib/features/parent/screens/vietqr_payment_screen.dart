@@ -43,14 +43,14 @@ class _VietQrPaymentScreenState extends State<VietQrPaymentScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Thanh toán VietQR'),
+        title: const Text('Thanh toán PayOS (Napas 24/7)'),
       ),
       body: parentProv.loading
           ? const Center(child: CircularProgressIndicator())
           : qr == null
               ? Center(
                   child: Text(
-                    parentProv.error ?? 'Không thể tải mã VietQR',
+                    parentProv.error ?? 'Không thể tải mã PayOS',
                     style: const TextStyle(color: AppColors.error),
                   ),
                 )
@@ -71,7 +71,7 @@ class _VietQrPaymentScreenState extends State<VietQrPaymentScreen> {
                                   Icon(Icons.qr_code_scanner, color: AppColors.primary, size: 28),
                                   const SizedBox(width: 8),
                                   const Text(
-                                    'VietQR - NAPAS 247',
+                                    'PayOS - NAPAS 24/7',
                                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                   ),
                                 ],
@@ -86,6 +86,18 @@ class _VietQrPaymentScreenState extends State<VietQrPaymentScreen> {
                                 ),
                                 child: Builder(
                                   builder: (context) {
+                                    final rawQr = (qr.qrCode != null && qr.qrCode!.isNotEmpty)
+                                        ? qr.qrCode!
+                                        : (qr.qrDataUrl.startsWith('000201') ? qr.qrDataUrl : null);
+
+                                    if (rawQr != null) {
+                                      return QrImageView(
+                                        data: rawQr,
+                                        version: QrVersions.auto,
+                                        size: 240,
+                                      );
+                                    }
+
                                     String qrImageUrl;
                                     if (qr.qrDataUrl.startsWith('http')) {
                                       qrImageUrl = qr.qrDataUrl;
@@ -179,6 +191,28 @@ class _VietQrPaymentScreenState extends State<VietQrPaymentScreen> {
                       const SizedBox(height: 24),
 
                       // One-tap bank app open button
+                      if (qr.checkoutUrl != null && qr.checkoutUrl!.isNotEmpty) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              side: const BorderSide(color: AppColors.primary, width: 1.5),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            onPressed: () {
+                              _copyToClipboard(qr.checkoutUrl!, 'link thanh toán PayOS');
+                            },
+                            icon: const Icon(Icons.link),
+                            label: const Text(
+                              'Sao chép Link Thanh Toán PayOS',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       SizedBox(
                         width: double.infinity,
                         height: 52,
