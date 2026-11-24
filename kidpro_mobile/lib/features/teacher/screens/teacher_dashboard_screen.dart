@@ -117,16 +117,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   delegate: SliverChildListDelegate([
                     const SizedBox(height: 12),
 
-                    // Shift Guidance Alert Card
-                    _buildShiftGuidanceBanner(),
-                    const SizedBox(height: 14),
-
-                    // Hero Overview Card (Class Attendance Pulse)
-                    _buildHeroOverviewCard(teacherProv),
-                    const SizedBox(height: 16),
-
-                    // Nếu chưa được phân công lớp: Hiển thị thông báo, không xem được thông tin gì cả
-                    if (teacherProv.myClasses.isEmpty) ...[
+                    if (!teacherProv.hasApprovedClassAssignment) ...[
                       Container(
                         margin: const EdgeInsets.symmetric(vertical: 16),
                         padding: const EdgeInsets.all(24),
@@ -147,12 +138,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                             Icon(Icons.assignment_ind_outlined, size: 56, color: Colors.amber.shade700),
                             const SizedBox(height: 14),
                             const Text(
-                              'Chưa Được Phân Công Lớp',
+                              'Chưa Có Phân Công Lớp Được Phê Duyệt',
                               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Tài khoản của Thầy/Cô hiện chưa được phân công làm Giáo viên chủ nhiệm hoặc Phụ tá cho lớp học nào trong niên khóa hiện tại.\n\nVui lòng liên hệ Ban Giám hiệu hoặc Giáo vụ để được phân công lớp trước khi quản lý học sinh và thực hiện điểm danh.',
+                              teacherProv.classAssignmentsError ??
+                                  'Thầy/Cô chỉ có thể xem thông tin lớp sau khi Ban Giám hiệu phê duyệt phân công lớp.\n\nVui lòng liên hệ Giáo vụ nếu cần kiểm tra trạng thái phân công.',
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.5),
                             ),
@@ -191,6 +183,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         ),
                       ],
                     ] else ...[
+                      _buildShiftGuidanceBanner(),
+                      const SizedBox(height: 14),
+                      _buildHeroOverviewCard(teacherProv),
+                      const SizedBox(height: 16),
+
                       // Priority Warning Banners (Strangers, Meds, Leaves)
                       if (alertsCount > 0 || pendingMedCount > 0 || pendingLeaveCount > 0) ...[
                         _buildPriorityAlertsSection(alertsCount, pendingMedCount, pendingLeaveCount),

@@ -16,6 +16,7 @@ class TeacherStudent {
   String? guardianName;
   String? photoUrl;
   String? checkInMethod;
+
   /// UC-33: triệu chứng khi khám sức khỏe buổi sáng
   String? symptoms;
 
@@ -36,19 +37,21 @@ class TeacherStudent {
   });
 
   factory TeacherStudent.fromJson(Map<String, dynamic> json) => TeacherStudent(
-        id: (json['id'] ?? json['studentId'] ?? '') as String,
-        fullName: (json['fullName'] ?? json['name'] ?? json['studentName'] ?? '') as String,
-        avatarUrl: json['avatarUrl'] as String?,
-        studentCode: json['studentCode'] as String?,
-        status: parseStatus(json['status'] as String?),
-        checkInTime: json['checkInTime'] as String?,
-        checkOutTime: json['checkOutTime'] as String?,
-        notes: json['notes'] as String?,
-        temperature: (json['temperature'] as num?)?.toDouble(),
-        guardianName: json['guardianName'] as String?,
-        photoUrl: json['photoUrl'] as String?,
-        checkInMethod: json['checkInMethod'] as String?,
-      );
+    id: (json['id'] ?? json['studentId'] ?? '') as String,
+    fullName:
+        (json['fullName'] ?? json['name'] ?? json['studentName'] ?? '')
+            as String,
+    avatarUrl: json['avatarUrl'] as String?,
+    studentCode: json['studentCode'] as String?,
+    status: parseStatus(json['status'] as String?),
+    checkInTime: json['checkInTime'] as String?,
+    checkOutTime: json['checkOutTime'] as String?,
+    notes: json['notes'] as String?,
+    temperature: (json['temperature'] as num?)?.toDouble(),
+    guardianName: json['guardianName'] as String?,
+    photoUrl: json['photoUrl'] as String?,
+    checkInMethod: json['checkInMethod'] as String?,
+  );
 
   static AttendanceStatus parseStatus(String? status) {
     if (status == null) return AttendanceStatus.notArrived;
@@ -83,15 +86,15 @@ class StrangerAlert {
   });
 
   factory StrangerAlert.fromJson(Map<String, dynamic> json) => StrangerAlert(
-        id: (json['id'] ?? json['faceLogId'] ?? '') as String,
-        snapshotUrl: json['snapshotUrl'] as String? ?? json['photoUrl'] as String?,
-        detectedAt: json['timestamp'] != null
-            ? DateTime.parse(json['timestamp'] as String)
-            : DateTime.now(),
-        confidence: (json['confidence'] as num?)?.toDouble(),
-        isResolved: json['isResolved'] as bool? ?? false,
-        resolutionNote: json['resolutionNote'] as String?,
-      );
+    id: (json['id'] ?? json['faceLogId'] ?? '') as String,
+    snapshotUrl: json['snapshotUrl'] as String? ?? json['photoUrl'] as String?,
+    detectedAt: json['timestamp'] != null
+        ? DateTime.parse(json['timestamp'] as String)
+        : DateTime.now(),
+    confidence: (json['confidence'] as num?)?.toDouble(),
+    isResolved: json['isResolved'] as bool? ?? false,
+    resolutionNote: json['resolutionNote'] as String?,
+  );
 }
 
 class MedicationTask {
@@ -119,26 +122,29 @@ class MedicationTask {
 
   // Backend: PENDING (chờ tiếp nhận), ACCEPTED (đã nhận thuốc), COMPLETED (đã cho uống), CANCELLED
   bool get isPending => status == 'PENDING' || status == 'ACCEPTED';
+
   /// UC-72: đơn mới, cô giáo chưa tiếp nhận & đối chiếu thuốc
   bool get isAwaitingReceipt => status == 'PENDING';
+
   /// Đã tiếp nhận thuốc, chờ cho uống
   bool get isReceived => status == 'ACCEPTED';
   bool get isAdministered => status == 'ADMINISTERED' || status == 'COMPLETED';
   bool get isCancelled => status == 'CANCELLED';
 
   factory MedicationTask.fromJson(Map<String, dynamic> json) => MedicationTask(
-        id: (json['id'] ?? json['requestId'] ?? '').toString(),
-        studentId: json['studentId'] as String? ?? '',
-        studentName: json['studentName'] as String? ?? 'Học sinh',
-        medicineName: json['medicineName'] as String? ?? '',
-        dosage: json['dosage'] as String? ?? '',
-        note: json['note'] as String? ?? json['instructions'] as String?,
-        status: json['status'] as String? ?? 'PENDING',
-        proofImageUrl: json['proofImageUrl'] as String? ?? json['proofPhotoUrl'] as String?,
-        administeredAt: json['administeredAt'] != null
-            ? DateTime.parse(json['administeredAt'] as String)
-            : null,
-      );
+    id: (json['id'] ?? json['requestId'] ?? '').toString(),
+    studentId: json['studentId'] as String? ?? '',
+    studentName: json['studentName'] as String? ?? 'Học sinh',
+    medicineName: json['medicineName'] as String? ?? '',
+    dosage: json['dosage'] as String? ?? '',
+    note: json['note'] as String? ?? json['instructions'] as String?,
+    status: json['status'] as String? ?? 'PENDING',
+    proofImageUrl:
+        json['proofImageUrl'] as String? ?? json['proofPhotoUrl'] as String?,
+    administeredAt: json['administeredAt'] != null
+        ? DateTime.parse(json['administeredAt'] as String)
+        : null,
+  );
 }
 
 // ── Bus Attendance (G5-UC-02, G5-UC-03, BR-024) ──
@@ -152,6 +158,7 @@ class BusStopInfo {
   final double? longitude;
   final int boardedCount;
   final int deboardedCount;
+  final int studentCount;
   final bool isPassed;
   final bool isDestination;
 
@@ -165,23 +172,25 @@ class BusStopInfo {
     this.longitude,
     this.boardedCount = 0,
     this.deboardedCount = 0,
+    this.studentCount = 0,
     this.isPassed = false,
     this.isDestination = false,
   });
 
   factory BusStopInfo.fromJson(Map<String, dynamic> json) => BusStopInfo(
-        stopId: (json['stopId'] ?? '').toString(),
-        stopName: json['stopName'] as String? ?? 'Trạm đón/trả',
-        stopAddress: json['stopAddress'] as String? ?? '',
-        stopOrder: (json['stopOrder'] as num?)?.toInt() ?? 1,
-        estimatedTime: json['estimatedTime'] as String? ?? '',
-        latitude: (json['latitude'] as num?)?.toDouble(),
-        longitude: (json['longitude'] as num?)?.toDouble(),
-        boardedCount: (json['boardedCount'] as num?)?.toInt() ?? 0,
-        deboardedCount: (json['deboardedCount'] as num?)?.toInt() ?? 0,
-        isPassed: json['isPassed'] as bool? ?? false,
-        isDestination: json['isDestination'] as bool? ?? false,
-      );
+    stopId: (json['stopId'] ?? '').toString(),
+    stopName: json['stopName'] as String? ?? 'Trạm đón/trả',
+    stopAddress: json['stopAddress'] as String? ?? '',
+    stopOrder: (json['stopOrder'] as num?)?.toInt() ?? 1,
+    estimatedTime: json['estimatedTime'] as String? ?? '',
+    latitude: (json['latitude'] as num?)?.toDouble(),
+    longitude: (json['longitude'] as num?)?.toDouble(),
+    boardedCount: (json['boardedCount'] as num?)?.toInt() ?? 0,
+    deboardedCount: (json['deboardedCount'] as num?)?.toInt() ?? 0,
+    studentCount: (json['studentCount'] as num?)?.toInt() ?? 0,
+    isPassed: json['isPassed'] as bool? ?? false,
+    isDestination: json['isDestination'] as bool? ?? false,
+  );
 }
 
 class BusTripInfo {
@@ -219,14 +228,17 @@ class BusTripInfo {
     List<BusStopInfo> stopsList = [];
     if (json['stops'] is List) {
       final rawStops = json['stops'] as List;
-      stopsList = rawStops.map((s) {
-        if (s is Map<String, dynamic>) {
-          return BusStopInfo.fromJson(s);
-        } else if (s is Map) {
-          return BusStopInfo.fromJson(Map<String, dynamic>.from(s));
-        }
-        return null;
-      }).whereType<BusStopInfo>().toList();
+      stopsList = rawStops
+          .map((s) {
+            if (s is Map<String, dynamic>) {
+              return BusStopInfo.fromJson(s);
+            } else if (s is Map) {
+              return BusStopInfo.fromJson(Map<String, dynamic>.from(s));
+            }
+            return null;
+          })
+          .whereType<BusStopInfo>()
+          .toList();
     }
     return BusTripInfo(
       tripId: (json['tripId'] ?? '').toString(),
@@ -242,9 +254,11 @@ class BusTripInfo {
       stops: stopsList,
       students: (json['students'] is List)
           ? (json['students'] as List)
-              .whereType<Map>()
-              .map((e) => BusStudentInfo.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .whereType<Map>()
+                .map(
+                  (e) => BusStudentInfo.fromJson(Map<String, dynamic>.from(e)),
+                )
+                .toList()
           : const [],
       waitingCount: (json['waitingCount'] as num?)?.toInt() ?? 0,
     );
@@ -257,6 +271,9 @@ class BusStudentInfo {
   final String studentName;
   final String? className;
   final String? pickupAddress;
+  final String? stopId;
+  final String? stopName;
+  final String? parentPhone;
   final String status;
   final String? lastTime;
 
@@ -265,6 +282,9 @@ class BusStudentInfo {
     required this.studentName,
     this.className,
     this.pickupAddress,
+    this.stopId,
+    this.stopName,
+    this.parentPhone,
     this.status = 'WAITING',
     this.lastTime,
   });
@@ -273,13 +293,16 @@ class BusStudentInfo {
   bool get isDeboarded => status == 'DEBOARDED';
 
   factory BusStudentInfo.fromJson(Map<String, dynamic> json) => BusStudentInfo(
-        studentId: (json['studentId'] ?? '').toString(),
-        studentName: json['studentName'] as String? ?? '',
-        className: json['className'] as String?,
-        pickupAddress: json['pickupAddress'] as String?,
-        status: json['status'] as String? ?? 'WAITING',
-        lastTime: json['lastTime'] as String?,
-      );
+    studentId: (json['studentId'] ?? '').toString(),
+    studentName: json['studentName'] as String? ?? '',
+    className: json['className'] as String?,
+    pickupAddress: json['pickupAddress'] as String?,
+    stopId: json['stopId']?.toString(),
+    stopName: json['stopName'] as String?,
+    parentPhone: json['parentPhone'] as String?,
+    status: json['status'] as String? ?? 'WAITING',
+    lastTime: json['lastTime'] as String?,
+  );
 }
 
 // ── Emergency Pickup Verification (G5-UC-06, BR-022) ──
@@ -294,6 +317,7 @@ class EmergencyPickupInfo {
   final String pickupPersonName;
   final String? pickupPersonPhone;
   final DateTime? validUntil;
+
   /// Phụ huynh có gửi ảnh người đón hộ: phải quét mặt khớp mới được bàn giao.
   final bool hasPickupPhoto;
 
@@ -311,7 +335,8 @@ class EmergencyPickupInfo {
     this.hasPickupPhoto = false,
   });
 
-  factory EmergencyPickupInfo.fromJson(Map<String, dynamic> json) => EmergencyPickupInfo(
+  factory EmergencyPickupInfo.fromJson(Map<String, dynamic> json) =>
+      EmergencyPickupInfo(
         authorizationId: (json['authorizationId'] as num).toInt(),
         studentId: (json['studentId'] ?? '').toString(),
         studentName: json['studentName'] as String? ?? '',
@@ -326,7 +351,7 @@ class EmergencyPickupInfo {
             : null,
         hasPickupPhoto: json['hasPickupPhoto'] as bool? ?? false,
       );
-  }
+}
 
 /// Kết quả quét khuôn mặt phụ huynh khi đón trẻ (nhận diện phụ huynh trong lớp, cho đón con & ghi attendance)
 class ParentPickupRecognitionResult {
@@ -402,8 +427,10 @@ class LatePickupRecord {
   final String? studentCode;
   final String? parentName;
   final String? parentPhone;
+
   /// Giờ trả bé (HH:mm); null khi bé vẫn đang chờ đón.
   final String? pickupTime;
+
   /// true: chưa được đón, phí còn tăng theo giờ.
   final bool isWaiting;
   final int lateMinutes;
@@ -431,7 +458,9 @@ class LatePickupRecord {
       studentCode: json['studentCode'] as String?,
       parentName: json['parentName'] as String?,
       parentPhone: json['parentPhone'] as String?,
-      pickupTime: rawTime != null && rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime,
+      pickupTime: rawTime != null && rawTime.length >= 5
+          ? rawTime.substring(0, 5)
+          : rawTime,
       isWaiting: json['status'] == 'WAITING',
       lateMinutes: (json['lateMinutes'] as num?)?.toInt() ?? 0,
       chargedHours: (json['chargedHours'] as num?)?.toInt() ?? 0,
@@ -458,14 +487,17 @@ class HealthMetricItem {
     this.nutritionalStatus,
   });
 
-  factory HealthMetricItem.fromJson(Map<String, dynamic> json) => HealthMetricItem(
-        studentId: (json['studentId'] ?? '').toString(),
-        studentName: json['studentName'] as String? ?? '',
-        heightCm: ((json['heightCm'] ?? json['lastHeightCm']) as num?)?.toDouble(),
-        weightKg: ((json['weightKg'] ?? json['lastWeightKg']) as num?)?.toDouble(),
-        bmi: ((json['bmi'] ?? json['lastBmi']) as num?)?.toDouble(),
-        nutritionalStatus: (json['nutritionalStatus'] ?? json['lastZScoreStatus'])?.toString(),
-      );
+  factory HealthMetricItem.fromJson(
+    Map<String, dynamic> json,
+  ) => HealthMetricItem(
+    studentId: (json['studentId'] ?? '').toString(),
+    studentName: json['studentName'] as String? ?? '',
+    heightCm: ((json['heightCm'] ?? json['lastHeightCm']) as num?)?.toDouble(),
+    weightKg: ((json['weightKg'] ?? json['lastWeightKg']) as num?)?.toDouble(),
+    bmi: ((json['bmi'] ?? json['lastBmi']) as num?)?.toDouble(),
+    nutritionalStatus: (json['nutritionalStatus'] ?? json['lastZScoreStatus'])
+        ?.toString(),
+  );
 }
 
 // ── Health Incident (G8-UC-04, BR-031) ──
@@ -494,8 +526,12 @@ class HealthIncident {
 
   factory HealthIncident.fromJson(Map<String, dynamic> json) {
     // Backend lưu '[LOẠI][MỨC ĐỘ] mô tả' trong symptomDescription
-    final raw = (json['symptomDescription'] ?? json['description'] ?? '').toString();
-    final m = RegExp(r'^\[([^\]]*)\]\[([^\]]*)\]\s*(.*)$', dotAll: true).firstMatch(raw);
+    final raw = (json['symptomDescription'] ?? json['description'] ?? '')
+        .toString();
+    final m = RegExp(
+      r'^\[([^\]]*)\]\[([^\]]*)\]\s*(.*)$',
+      dotAll: true,
+    ).firstMatch(raw);
     final time = json['incidentTime'] ?? json['createdAt'];
     return HealthIncident(
       incidentId: (json['incidentId'] as num?)?.toInt() ?? 0,
@@ -506,7 +542,9 @@ class HealthIncident {
       description: m?.group(3) ?? raw,
       firstAidGiven: json['firstAidGiven'] as String?,
       status: json['status'] as String? ?? 'REPORTED',
-      createdAt: time != null ? (DateTime.tryParse(time.toString()) ?? DateTime.now()) : DateTime.now(),
+      createdAt: time != null
+          ? (DateTime.tryParse(time.toString()) ?? DateTime.now())
+          : DateTime.now(),
     );
   }
 }
@@ -533,7 +571,8 @@ class WeeklyLessonPlan {
     required this.createdAt,
   });
 
-  factory WeeklyLessonPlan.fromJson(Map<String, dynamic> json) => WeeklyLessonPlan(
+  factory WeeklyLessonPlan.fromJson(Map<String, dynamic> json) =>
+      WeeklyLessonPlan(
         planId: (json['planId'] as num?)?.toInt() ?? 0,
         classId: (json['classId'] ?? '').toString(),
         weekNumber: (json['weekNumber'] as num?)?.toInt() ?? 1,
@@ -592,7 +631,10 @@ class DevelopmentEvaluationItem {
       languageScore: parseScore(json['languageScore']),
       socialEmotionalScore: parseScore(json['socialEmotionalScore']),
       aestheticScore: parseScore(json['aestheticScore']),
-      teacherComment: json['teacherComment'] as String? ?? json['reviewNote'] as String? ?? '',
+      teacherComment:
+          json['teacherComment'] as String? ??
+          json['reviewNote'] as String? ??
+          '',
       status: json['status'] as String? ?? 'SUBMITTED',
     );
   }
@@ -697,7 +739,8 @@ class TeacherLeaveRequestItem {
 
   factory TeacherLeaveRequestItem.fromJson(Map<String, dynamic> json) {
     final rawId = json['leaveRequestId'] ?? json['id'];
-    final int parsedId = (rawId as num?)?.toInt() ?? int.tryParse(rawId?.toString() ?? '0') ?? 0;
+    final int parsedId =
+        (rawId as num?)?.toInt() ?? int.tryParse(rawId?.toString() ?? '0') ?? 0;
 
     return TeacherLeaveRequestItem(
       id: parsedId,
@@ -707,7 +750,10 @@ class TeacherLeaveRequestItem {
       endDate: json['endDate'] as String? ?? '',
       reason: json['reason'] as String? ?? '',
       status: json['status'] as String? ?? 'PENDING',
-      mealRefundEligible: json['mealRefundEligible'] as bool? ?? json['eligibleForMealRefund'] as bool? ?? false,
+      mealRefundEligible:
+          json['mealRefundEligible'] as bool? ??
+          json['eligibleForMealRefund'] as bool? ??
+          false,
     );
   }
 }
@@ -734,7 +780,8 @@ class ClassChatMessageItem {
     required this.createdAt,
   });
 
-  factory ClassChatMessageItem.fromJson(Map<String, dynamic> json) => ClassChatMessageItem(
+  factory ClassChatMessageItem.fromJson(Map<String, dynamic> json) =>
+      ClassChatMessageItem(
         messageId: (json['messageId'] as num?)?.toInt() ?? 0,
         classId: (json['classId'] ?? '').toString(),
         studentName: json['studentName'] as String?,
@@ -768,13 +815,16 @@ class PrivateChatThread {
     this.unreadCount = 0,
   });
 
-  factory PrivateChatThread.fromJson(Map<String, dynamic> json) => PrivateChatThread(
+  factory PrivateChatThread.fromJson(Map<String, dynamic> json) =>
+      PrivateChatThread(
         studentId: (json['studentId'] ?? '').toString(),
         studentName: json['studentName'] as String? ?? 'Bé',
         parentName: json['parentName'] as String?,
         lastMessage: json['lastMessage'] as String?,
         lastSenderType: json['lastSenderType'] as String?,
-        lastMessageAt: json['lastMessageAt'] != null ? DateTime.tryParse(json['lastMessageAt'].toString()) : null,
+        lastMessageAt: json['lastMessageAt'] != null
+            ? DateTime.tryParse(json['lastMessageAt'].toString())
+            : null,
         unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
       );
 }
@@ -801,14 +851,21 @@ class ClassroomJournalItem {
     required this.createdAt,
   });
 
-  factory ClassroomJournalItem.fromJson(Map<String, dynamic> json) => ClassroomJournalItem(
+  factory ClassroomJournalItem.fromJson(Map<String, dynamic> json) =>
+      ClassroomJournalItem(
         postId: (json['postId'] as num?)?.toInt() ?? 0,
         classId: (json['classId'] ?? '').toString(),
         className: json['className'] as String? ?? 'Lớp học',
         title: json['title'] as String? ?? '',
         content: json['content'] as String? ?? '',
-        photoUrls: (json['photoUrls'] as List?)?.map((e) => e.toString()).toList() ?? [],
-        taggedStudentIds: (json['taggedStudentIds'] as List?)?.map((e) => e.toString()).toList() ?? [],
+        photoUrls:
+            (json['photoUrls'] as List?)?.map((e) => e.toString()).toList() ??
+            [],
+        taggedStudentIds:
+            (json['taggedStudentIds'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [],
         createdAt: json['createdAt'] != null
             ? DateTime.parse(json['createdAt'] as String)
             : DateTime.now(),

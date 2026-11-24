@@ -80,7 +80,7 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
       ),
       _RequestCategoryItem(
         title: 'Đăng ký xe buýt đưa đón',
-        subtitle: 'Dịch vụ xe tuyến đưa đón tận nhà an toàn',
+        subtitle: 'Chọn tuyến xe và điểm dừng đón/trả theo lịch trình',
         icon: Icons.directions_bus_outlined,
         color: Colors.blue,
         badge: 'G4-UC-07',
@@ -136,14 +136,6 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
         color: Colors.brown,
         badge: 'UC-26',
         onTap: () => context.push('/parent/withdrawal'),
-      ),
-      _RequestCategoryItem(
-        title: 'Quyền riêng tư AI (NĐ 13)',
-        subtitle: 'Yêu cầu xóa toàn bộ dữ liệu sinh trắc học khuôn mặt',
-        icon: Icons.shield_outlined,
-        color: Colors.red.shade900,
-        badge: 'NĐ 13/2023',
-        onTap: () => context.push('/parent/biometric-purge'),
       ),
     ];
 
@@ -445,7 +437,6 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
         prov.availableBuses.isNotEmpty ? prov.availableBuses.first.id : null;
     String? selectedStopId;
     String pickupType = 'TWO_WAY';
-    final addressCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
 
     if (selectedBusId != null) {
@@ -492,10 +483,32 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                     decoration: InputDecoration(
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
+                    selectedItemBuilder: (_) => prov.availableBuses
+                        .map((b) => Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(b.title, overflow: TextOverflow.ellipsis),
+                            ))
+                        .toList(),
                     items: prov.availableBuses
                         .map((b) => DropdownMenuItem(
                               value: b.id,
-                              child: Text(b.title, overflow: TextOverflow.ellipsis),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(b.title, overflow: TextOverflow.ellipsis),
+                                  if (b.subtitle != null && b.subtitle!.isNotEmpty)
+                                    Text(
+                                      b.subtitle!,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ))
                         .toList(),
                     onChanged: (v) {
@@ -538,7 +551,7 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                       border: Border.all(color: Colors.amber.shade300),
                     ),
                     child: const Text(
-                      'Tuyến xe chưa cấu hình trạm dừng cố định trên hệ thống. Vui lòng nhập địa chỉ bên dưới.',
+                      'Tuyến xe chưa cấu hình điểm dừng cố định. Vui lòng liên hệ nhà trường để được hướng dẫn.',
                       style: TextStyle(fontSize: 12, color: Colors.brown),
                     ),
                   )
@@ -561,15 +574,6 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                         .toList(),
                     onChanged: (v) {
                       setModalState(() => selectedStopId = v);
-                      if (v != null) {
-                        final found = prov.currentBusStops.firstWhere(
-                          (s) => s.stopId == v,
-                          orElse: () => prov.currentBusStops.first,
-                        );
-                        if (found.stopAddress.isNotEmpty) {
-                          addressCtrl.text = '${found.stopName} - ${found.stopAddress}';
-                        }
-                      }
                     },
                   ),
                 const SizedBox(height: 12),
@@ -588,17 +592,6 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                     DropdownMenuItem(value: 'ONE_WAY_AFTERNOON', child: Text('Một chiều (Chỉ trả chiều)')),
                   ],
                   onChanged: (v) => setModalState(() => pickupType = v ?? 'TWO_WAY'),
-                ),
-                const SizedBox(height: 12),
-                const Text('Địa chỉ đón/trả trẻ tận nơi *',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: addressCtrl,
-                  decoration: InputDecoration(
-                    hintText: 'Số nhà, tên đường, phường/xã...',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
                 ),
                 const SizedBox(height: 12),
                 const Text('Ghi chú dặn dò lái xe / phụ xe',
@@ -622,12 +615,18 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     onPressed: () async {
-                      if (selectedBusId == null || addressCtrl.text.trim().isEmpty) {
+                      if (selectedBusId == null || selectedStopId == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Vui lòng chọn tuyến xe và nhập địa chỉ đón!')),
+                          const SnackBar(content: Text('Vui lòng chọn tuyến xe và điểm dừng đón/trả!')),
                         );
                         return;
                       }
+                      final selectedStop = prov.currentBusStops.firstWhere(
+                        (stop) => stop.stopId == selectedStopId,
+                      );
+                      final pickupAddress = selectedStop.stopAddress.trim().isNotEmpty
+                          ? '${selectedStop.stopName} - ${selectedStop.stopAddress.trim()}'
+                          : selectedStop.stopName;
                       final hasExistingBus = prov.allRequests.any((r) =>
                           (r.studentId == null || r.studentId == prov.selectedStudentId) &&
                           (r.requestType == 'BUS' || r.requestType == 'BUS_REGISTRATION' || r.type == 'BUS' || r.type == 'BUS_REGISTRATION') &&
@@ -645,7 +644,7 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
                       final success = await prov.submitBusRegister(
                         studentId: prov.selectedStudentId,
                         busId: selectedBusId!,
-                        pickupAddress: addressCtrl.text.trim(),
+                        pickupAddress: pickupAddress,
                         pickupType: pickupType,
                         note: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : null,
                       );

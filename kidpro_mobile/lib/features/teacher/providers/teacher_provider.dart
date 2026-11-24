@@ -22,8 +22,16 @@ class TeacherProvider extends ChangeNotifier {
 
   String _currentClassName = 'Đang tải...';
   String get currentClassName => _currentClassName;
+  bool get hasApprovedClassAssignment => _myClasses.isNotEmpty;
+  String? _classAssignmentsError;
+  String? get classAssignmentsError => _classAssignmentsError;
+
+  bool _isApprovedAssignedClass(String classId) =>
+      classId.isNotEmpty &&
+      _myClasses.any((c) => c['classId']?.toString() == classId);
 
   void setCurrentClassId(String id) {
+    if (!_isApprovedAssignedClass(id)) return;
     _currentClassId = id;
     notifyListeners();
   }
@@ -82,8 +90,10 @@ class TeacherProvider extends ChangeNotifier {
 
   // 12. Lớp năng khiếu được phân công (rỗng => ẩn mục điểm danh năng khiếu)
   List<Map<String, dynamic>> _extracurricularClasses = [];
-  List<Map<String, dynamic>> get extracurricularClasses => _extracurricularClasses;
+  List<Map<String, dynamic>> get extracurricularClasses =>
+      _extracurricularClasses;
   bool get hasExtracurricularClasses => _extracurricularClasses.isNotEmpty;
+
   /// Chỉ giáo viên được phân công phụ trách xe buýt (finance.teacher_bus_assignment) mới thấy mục xe buýt.
   bool get hasBusAssignment => _availableBusRoutes.isNotEmpty;
 
@@ -111,7 +121,11 @@ class TeacherProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
-      await Future.wait([loadMyClasses(), loadExtracurricularClasses(), loadBusRoutes()]);
+      await Future.wait([
+        loadMyClasses(),
+        loadExtracurricularClasses(),
+        loadBusRoutes(),
+      ]);
       if (_currentClassId.isNotEmpty) {
         await Future.wait([
           loadStudents(_currentClassId),
@@ -131,29 +145,69 @@ class TeacherProvider extends ChangeNotifier {
     try {
       final res = await _dio.get('/api/teachers/my-classes');
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _myClasses = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _myClasses = list
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      _classAssignmentsError = null;
 
-      if (_myClasses.isNotEmpty) {
-        final existing = _myClasses.firstWhere(
-          (c) => c['classId']?.toString() == _currentClassId,
-          orElse: () => {},
-        );
-        if (existing.isEmpty) {
-          _currentClassId = _myClasses.first['classId']?.toString() ?? '';
-          _currentClassName = _myClasses.first['className']?.toString() ?? 'Lớp học';
-        } else {
-          _currentClassName = existing['className']?.toString() ?? 'Lớp học';
-        }
-      } else {
-        _currentClassId = '';
-        _currentClassName = 'Chưa được phân công lớp';
-        _students = [];
+      if (_myClasses.isEmpty) {
+        _clearClassAssignmentData();
+        notifyListeners();
+        return;
       }
+
+      final existing = _myClasses.firstWhere(
+        (c) => c['classId']?.toString() == _currentClassId,
+        orElse: () => {},
+      );
+      final selected = existing.isNotEmpty ? existing : _myClasses.first;
+      final selectedClassId = selected['classId']?.toString() ?? '';
+      if (selectedClassId != _currentClassId) _clearSelectedClassData();
+      _currentClassId = selectedClassId;
+      _currentClassName = selected['className']?.toString() ?? 'Lớp học';
       notifyListeners();
     } catch (e) {
       log('loadMyClasses error: $e');
+      _clearClassAssignmentData();
+      _classAssignmentsError = _apiMessage(
+        e,
+        'Không kiểm tra được trạng thái phân công lớp.',
+      );
+      notifyListeners();
     }
+  }
+
+  void _clearClassAssignmentData() {
+    _myClasses = [];
+    _currentClassId = '';
+    _currentClassName = 'Chưa có phân công lớp được phê duyệt';
+    _clearSelectedClassData();
+    _studentsError = 'Tài khoản chưa có phân công lớp được phê duyệt.';
+  }
+
+  void _clearSelectedClassData() {
+    _students = [];
+    _studentsError = null;
+    _latePickups = [];
+    _latePickupsError = null;
+    _strangerAlerts = [];
+    _medications = [];
+    _healthMetrics = [];
+    _healthIncidents = [];
+    _lessonPlans = [];
+    _evaluations = [];
+    _equipmentIncidents = [];
+    _leaveRequests = [];
+    _chatMessages = [];
+    _isChatLocked = false;
+    _journalPosts = [];
+    _classAnnouncements = [];
+    _privateThreads = [];
+    _privateMessages = [];
+    _openPrivateStudentId = '';
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -168,8 +222,12 @@ class TeacherProvider extends ChangeNotifier {
         queryParameters: date != null ? {'date': _isoDate(date)} : null,
       );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _extracurricularClasses = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _extracurricularClasses = list
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
     } catch (e) {
       log('loadExtracurricularClasses error: $e');
       _extracurricularClasses = [];
@@ -178,7 +236,10 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   /// Bảng điểm danh 1 lớp năng khiếu theo ngày: {className, date, alreadyMarked, students: [...]}
-  Future<Map<String, dynamic>> fetchExtracurricularAttendance(String classId, DateTime date) async {
+  Future<Map<String, dynamic>> fetchExtracurricularAttendance(
+    String classId,
+    DateTime date,
+  ) async {
     try {
       final res = await _dio.get(
         ApiEndpoints.teacherExtracurricularAttendance(classId),
@@ -186,15 +247,22 @@ class TeacherProvider extends ChangeNotifier {
       );
       final data = res.data;
       final sheet = data is Map<String, dynamic> ? data['data'] : null;
-      return sheet is Map ? Map<String, dynamic>.from(sheet) : <String, dynamic>{};
+      return sheet is Map
+          ? Map<String, dynamic>.from(sheet)
+          : <String, dynamic>{};
     } on DioException catch (e) {
-      throw Exception(_dioMessage(e, 'Không tải được danh sách lớp năng khiếu'));
+      throw Exception(
+        _dioMessage(e, 'Không tải được danh sách lớp năng khiếu'),
+      );
     }
   }
 
   /// Lưu điểm danh. records: [{studentId, status: PRESENT|ABSENT|EXCUSED, note}]. Trả về null nếu thành công.
   Future<String?> saveExtracurricularAttendance(
-      String classId, DateTime date, List<Map<String, dynamic>> records) async {
+    String classId,
+    DateTime date,
+    List<Map<String, dynamic>> records,
+  ) async {
     try {
       await _dio.post(
         ApiEndpoints.teacherExtracurricularAttendance(classId),
@@ -214,8 +282,10 @@ class TeacherProvider extends ChangeNotifier {
   Future<String> receiveMedication(String id, String? notes) async {
     _lastActionFailed = false;
     try {
-      final res = await _dio.put(ApiEndpoints.medicationReceive(id),
-          data: {if (notes != null && notes.isNotEmpty) 'teacherNotes': notes});
+      final res = await _dio.put(
+        ApiEndpoints.medicationReceive(id),
+        data: {if (notes != null && notes.isNotEmpty) 'teacherNotes': notes},
+      );
       await loadDailyMedications();
       return res.data['message']?.toString() ?? 'Đã tiếp nhận thuốc.';
     } catch (e) {
@@ -228,7 +298,10 @@ class TeacherProvider extends ChangeNotifier {
   Future<String> rejectMedication(String id, String reason) async {
     _lastActionFailed = false;
     try {
-      final res = await _dio.put(ApiEndpoints.medicationReject(id), data: {'rejectReason': reason});
+      final res = await _dio.put(
+        ApiEndpoints.medicationReject(id),
+        data: {'rejectReason': reason},
+      );
       await loadDailyMedications();
       return res.data['message']?.toString() ?? 'Đã từ chối tiếp nhận thuốc.';
     } catch (e) {
@@ -238,14 +311,21 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   /// UC-74: ghi nhận số lần đi vệ sinh và ghi chú trong ngày.
-  Future<String> recordRestroom({required String studentId, required int count, String? note}) async {
+  Future<String> recordRestroom({
+    required String studentId,
+    required int count,
+    String? note,
+  }) async {
     _lastActionFailed = false;
     try {
-      final res = await _dio.post(ApiEndpoints.restroomRecords, data: {
-        'studentId': studentId,
-        'toiletCount': count,
-        if (note != null && note.isNotEmpty) 'notes': note,
-      });
+      final res = await _dio.post(
+        ApiEndpoints.restroomRecords,
+        data: {
+          'studentId': studentId,
+          'toiletCount': count,
+          if (note != null && note.isNotEmpty) 'notes': note,
+        },
+      );
       return res.data['message']?.toString() ?? 'Đã lưu nhật ký vệ sinh.';
     } catch (e) {
       _lastActionFailed = true;
@@ -254,16 +334,23 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   /// UC-44: chụp & đăng ảnh khay cơm của lớp theo bữa.
-  Future<String> uploadMealTray({required String photoPath, required String mealType, String? note}) async {
+  Future<String> uploadMealTray({
+    required String photoPath,
+    required String mealType,
+    String? note,
+  }) async {
     _lastActionFailed = false;
     try {
       final url = await uploadTeacherPhoto(photoPath, 'meal');
-      final res = await _dio.post(ApiEndpoints.teacherMealTrays, data: {
-        'classId': _currentClassId,
-        'mealType': mealType,
-        'photoUrl': url,
-        if (note != null && note.isNotEmpty) 'note': note,
-      });
+      final res = await _dio.post(
+        ApiEndpoints.teacherMealTrays,
+        data: {
+          'classId': _currentClassId,
+          'mealType': mealType,
+          'photoUrl': url,
+          if (note != null && note.isNotEmpty) 'note': note,
+        },
+      );
       return res.data['message']?.toString() ?? 'Đã đăng ảnh khay cơm.';
     } catch (e) {
       _lastActionFailed = true;
@@ -277,12 +364,16 @@ class TeacherProvider extends ChangeNotifier {
 
   Future<void> loadClassAnnouncements() async {
     if (_currentClassId.isEmpty) await loadMyClasses();
-    if (_currentClassId.isEmpty) return;
+    if (!_isApprovedAssignedClass(_currentClassId)) return;
     try {
-      final res = await _dio.get(ApiEndpoints.teacherClassAnnouncements,
-          queryParameters: {'classId': _currentClassId});
+      final res = await _dio.get(
+        ApiEndpoints.teacherClassAnnouncements,
+        queryParameters: {'classId': _currentClassId},
+      );
       final data = res.data is Map ? res.data['data'] : res.data;
-      _classAnnouncements = (data as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      _classAnnouncements = (data as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
     } catch (e) {
       log('loadClassAnnouncements error: $e');
       _classAnnouncements = [];
@@ -293,10 +384,13 @@ class TeacherProvider extends ChangeNotifier {
   Future<String> postClassAnnouncement(String title, String content) async {
     _lastActionFailed = false;
     try {
-      final res = await _dio.post(ApiEndpoints.teacherClassAnnouncements,
-          data: {'classId': _currentClassId, 'title': title, 'content': content});
+      final res = await _dio.post(
+        ApiEndpoints.teacherClassAnnouncements,
+        data: {'classId': _currentClassId, 'title': title, 'content': content},
+      );
       await loadClassAnnouncements();
-      return res.data['message']?.toString() ?? 'Đã gửi thông báo cho phụ huynh lớp.';
+      return res.data['message']?.toString() ??
+          'Đã gửi thông báo cho phụ huynh lớp.';
     } catch (e) {
       _lastActionFailed = true;
       return _apiMessage(e, 'Không gửi được thông báo.');
@@ -310,9 +404,14 @@ class TeacherProvider extends ChangeNotifier {
     final form = FormData.fromMap({
       'photo': await MultipartFile.fromFile(pathOrUrl, filename: '$folder.jpg'),
     });
-    final res = await _dio.post(ApiEndpoints.teacherUploadPhoto,
-        data: form, queryParameters: {'folder': folder});
-    final data = res.data is Map && res.data['data'] is Map ? res.data['data'] as Map : res.data as Map;
+    final res = await _dio.post(
+      ApiEndpoints.teacherUploadPhoto,
+      data: form,
+      queryParameters: {'folder': folder},
+    );
+    final data = res.data is Map && res.data['data'] is Map
+        ? res.data['data'] as Map
+        : res.data as Map;
     final url = data['url']?.toString() ?? '';
     if (url.isEmpty) throw Exception('Không nhận được URL ảnh từ máy chủ');
     return url;
@@ -323,14 +422,18 @@ class TeacherProvider extends ChangeNotifier {
 
   String _dioMessage(DioException e, String fallback) {
     final resData = e.response?.data;
-    if (resData is Map && resData['message'] != null) return resData['message'].toString();
-    if (e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout) {
+    if (resData is Map && resData['message'] != null)
+      return resData['message'].toString();
+    if (e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout) {
       return 'Không kết nối được máy chủ';
     }
     return fallback;
   }
 
   Future<void> selectClass(String classId) async {
+    if (!_isApprovedAssignedClass(classId)) return;
+    if (_currentClassId != classId) _clearSelectedClassData();
     _currentClassId = classId;
     final found = _myClasses.firstWhere(
       (c) => c['classId']?.toString() == classId,
@@ -360,29 +463,35 @@ class TeacherProvider extends ChangeNotifier {
         if (_currentClassId.isEmpty) await loadMyClasses();
         classId = _currentClassId;
       }
-      if (classId.isEmpty) {
+      if (!_isApprovedAssignedClass(classId)) {
         _students = [];
-        _studentsError = 'Tài khoản chưa được phân công lớp phụ trách.';
+        _studentsError = 'Tài khoản chưa có phân công lớp được phê duyệt.';
       } else {
         final res = await _dio.get(ApiEndpoints.teacherClassStudents(classId));
         final data = res.data;
-        final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-        _students = list.map((e) => TeacherStudent.fromJson(e as Map<String, dynamic>)).toList();
+        final list = data is Map<String, dynamic>
+            ? (data['data'] as List? ?? [])
+            : (data as List? ?? []);
+        _students = list
+            .map((e) => TeacherStudent.fromJson(e as Map<String, dynamic>))
+            .toList();
 
         // Đồng bộ dữ liệu điểm danh đã lưu trong ngày (nếu có)
         try {
-          final targetDate = (date ?? DateTime.now()).toIso8601String().split('T').first;
+          final targetDate = (date ?? DateTime.now())
+              .toIso8601String()
+              .split('T')
+              .first;
           final attRes = await _dio.get(
             '/api/teachers/attendance',
-            queryParameters: {
-              'classId': classId,
-              'date': targetDate,
-            },
+            queryParameters: {'classId': classId, 'date': targetDate},
           );
           final attData = attRes.data;
           final attList = attData is List
               ? attData
-              : (attData is Map<String, dynamic> ? (attData['data'] as List? ?? []) : []);
+              : (attData is Map<String, dynamic>
+                    ? (attData['data'] as List? ?? [])
+                    : []);
 
           if (attList.isNotEmpty) {
             final Map<String, dynamic> attMap = {};
@@ -396,7 +505,9 @@ class TeacherProvider extends ChangeNotifier {
               if (attMap.containsKey(s.id)) {
                 final rec = attMap[s.id];
                 if (rec['status'] != null) {
-                  s.status = TeacherStudent.parseStatus(rec['status'].toString());
+                  s.status = TeacherStudent.parseStatus(
+                    rec['status'].toString(),
+                  );
                 }
                 if (rec['checkInTime'] != null) {
                   s.checkInTime = rec['checkInTime'].toString();
@@ -433,7 +544,10 @@ class TeacherProvider extends ChangeNotifier {
     } catch (e) {
       log('loadStudents error: $e');
       _students = [];
-      _studentsError = _apiMessage(e, 'Không tải được danh sách học sinh. Vui lòng thử lại.');
+      _studentsError = _apiMessage(
+        e,
+        'Không tải được danh sách học sinh. Vui lòng thử lại.',
+      );
     }
     _loading = false;
     notifyListeners();
@@ -442,8 +556,10 @@ class TeacherProvider extends ChangeNotifier {
   void setStudentStatus(int index, AttendanceStatus status) {
     if (index < 0 || index >= _students.length) return;
     _students[index].status = status;
-    if ((status == AttendanceStatus.present || status == AttendanceStatus.late) &&
-        (_students[index].checkInTime == null || _students[index].checkInTime!.isEmpty)) {
+    if ((status == AttendanceStatus.present ||
+            status == AttendanceStatus.late) &&
+        (_students[index].checkInTime == null ||
+            _students[index].checkInTime!.isEmpty)) {
       final now = DateTime.now();
       _students[index].checkInTime =
           '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
@@ -476,7 +592,9 @@ class TeacherProvider extends ChangeNotifier {
   void markAllPresent() {
     final now = DateTime.now();
     final isPast830 = (now.hour > 8 || (now.hour == 8 && now.minute > 30));
-    final defaultStatus = isPast830 ? AttendanceStatus.late : AttendanceStatus.present;
+    final defaultStatus = isPast830
+        ? AttendanceStatus.late
+        : AttendanceStatus.present;
     final timeStr =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     for (var s in _students) {
@@ -496,7 +614,9 @@ class TeacherProvider extends ChangeNotifier {
 
     switch (current) {
       case AttendanceStatus.notArrived:
-        _students[index].status = isPast830 ? AttendanceStatus.late : AttendanceStatus.present;
+        _students[index].status = isPast830
+            ? AttendanceStatus.late
+            : AttendanceStatus.present;
         break;
       case AttendanceStatus.present:
         _students[index].status = AttendanceStatus.late;
@@ -510,7 +630,8 @@ class TeacherProvider extends ChangeNotifier {
     }
     if ((_students[index].status == AttendanceStatus.present ||
             _students[index].status == AttendanceStatus.late) &&
-        (_students[index].checkInTime == null || _students[index].checkInTime!.isEmpty)) {
+        (_students[index].checkInTime == null ||
+            _students[index].checkInTime!.isEmpty)) {
       _students[index].checkInTime =
           '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     }
@@ -535,7 +656,9 @@ class TeacherProvider extends ChangeNotifier {
       }
 
       // Kiểm tra nếu danh sách đang là dữ liệu mẫu (ID không phải UUID)
-      final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+      final uuidRegex = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+      );
       final hasInvalidUuid = _students.any((s) => !uuidRegex.hasMatch(s.id));
 
       if (hasInvalidUuid) {
@@ -543,9 +666,13 @@ class TeacherProvider extends ChangeNotifier {
         await loadStudents(_currentClassId, date);
       }
 
-      final validStudents = _students.where((s) => uuidRegex.hasMatch(s.id)).toList();
+      final validStudents = _students
+          .where((s) => uuidRegex.hasMatch(s.id))
+          .toList();
       if (validStudents.isEmpty) {
-        _error = _studentsError ?? 'Chưa có danh sách học sinh của lớp để lưu điểm danh.';
+        _error =
+            _studentsError ??
+            'Chưa có danh sách học sinh của lớp để lưu điểm danh.';
         _loading = false;
         notifyListeners();
         return false;
@@ -553,7 +680,9 @@ class TeacherProvider extends ChangeNotifier {
 
       // Ảnh lúc đón chụp trên máy -> tải lên cloud trước khi lưu (để xem lại được sau khi tải lại)
       for (final s in validStudents) {
-        if (s.photoUrl != null && s.photoUrl!.isNotEmpty && !s.photoUrl!.startsWith('http')) {
+        if (s.photoUrl != null &&
+            s.photoUrl!.isNotEmpty &&
+            !s.photoUrl!.startsWith('http')) {
           s.photoUrl = await uploadTeacherPhoto(s.photoUrl!, 'attendance');
         }
       }
@@ -578,16 +707,23 @@ class TeacherProvider extends ChangeNotifier {
           'studentId': s.id,
           'status': statusStr,
           if (s.notes != null && s.notes!.isNotEmpty) 'notes': s.notes,
-          if (s.checkInTime != null && RegExp(r'^\d{2}:\d{2}').hasMatch(s.checkInTime!))
+          if (s.checkInTime != null &&
+              RegExp(r'^\d{2}:\d{2}').hasMatch(s.checkInTime!))
             'checkInTime': s.checkInTime!.substring(0, 5),
           if (s.temperature != null) 'temperature': s.temperature,
-          if (s.guardianName != null && s.guardianName!.isNotEmpty) 'guardianName': s.guardianName,
-          if (s.symptoms != null && s.symptoms!.isNotEmpty) 'symptoms': s.symptoms,
-          if (s.photoUrl != null && s.photoUrl!.startsWith('http')) 'photoUrl': s.photoUrl,
+          if (s.guardianName != null && s.guardianName!.isNotEmpty)
+            'guardianName': s.guardianName,
+          if (s.symptoms != null && s.symptoms!.isNotEmpty)
+            'symptoms': s.symptoms,
+          if (s.photoUrl != null && s.photoUrl!.startsWith('http'))
+            'photoUrl': s.photoUrl,
         };
       }).toList();
 
-      final targetDate = (date ?? DateTime.now()).toIso8601String().split('T').first;
+      final targetDate = (date ?? DateTime.now())
+          .toIso8601String()
+          .split('T')
+          .first;
 
       await _dio.post(
         ApiEndpoints.teacherAttendanceBatch,
@@ -636,14 +772,21 @@ class TeacherProvider extends ChangeNotifier {
           ? res.data['data']
           : res.data;
       if (raw is List) {
-        _availableBusRoutes = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _availableBusRoutes = raw
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
       } else {
         _availableBusRoutes = [];
       }
       if (_availableBusRoutes.isNotEmpty) {
-        final firstBusId = _availableBusRoutes.first['busId']?.toString();
-        if (firstBusId != null && firstBusId.isNotEmpty) {
-          await loadBusTrip(firstBusId);
+        final currentBusId = _currentBusTrip?.tripId;
+        final selectedRoute = _availableBusRoutes.firstWhere(
+          (route) => route['busId']?.toString() == currentBusId,
+          orElse: () => _availableBusRoutes.first,
+        );
+        final selectedBusId = selectedRoute['busId']?.toString();
+        if (selectedBusId != null && selectedBusId.isNotEmpty) {
+          await loadBusTrip(selectedBusId);
         }
       } else {
         _currentBusTrip = null;
@@ -656,11 +799,19 @@ class TeacherProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> selectBusRoute(String busId) async {
+    final isAssigned = _availableBusRoutes.any(
+      (route) => route['busId']?.toString() == busId,
+    );
+    if (!isAssigned) return;
+    await loadBusTrip(busId);
+  }
+
   Future<void> loadBusTrip(String tripId) async {
     _loading = true;
     notifyListeners();
     try {
-      final res = await _dio.get('/api/teachers/bus/trips/$tripId/stops');
+      final res = await _dio.get(ApiEndpoints.teacherBusTripStops(tripId));
       final data = res.data is Map<String, dynamic> && res.data['data'] != null
           ? res.data['data']
           : res.data;
@@ -693,7 +844,8 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       await loadBusTrip(tripId);
-      return res.data['message']?.toString() ?? 'Ghi nhận điểm danh xe buýt thành công';
+      return res.data['message']?.toString() ??
+          'Ghi nhận điểm danh xe buýt thành công';
     } catch (e) {
       log('submitBusCheckin error: $e');
       _lastActionFailed = true;
@@ -728,7 +880,9 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   /// Danh sách người được phép đón bé (phụ huynh + người đón thường xuyên).
-  Future<(List<PickupPerson>?, String)> loadPickupPersons(String studentId) async {
+  Future<(List<PickupPerson>?, String)> loadPickupPersons(
+    String studentId,
+  ) async {
     try {
       final res = await _dio.get(ApiEndpoints.teacherPickupPersons(studentId));
       final list = (res.data as List? ?? [])
@@ -762,11 +916,16 @@ class TeacherProvider extends ChangeNotifier {
         data: form,
         options: Options(receiveTimeout: const Duration(seconds: 40)),
       );
-      final result = PickupFaceVerification.fromJson(res.data as Map<String, dynamic>);
+      final result = PickupFaceVerification.fromJson(
+        res.data as Map<String, dynamic>,
+      );
       return (result, result.message);
     } catch (e) {
       log('verifyPickupFace error: $e');
-      return (null, _apiMessage(e, 'Không quét được khuôn mặt. Vui lòng thử lại.'));
+      return (
+        null,
+        _apiMessage(e, 'Không quét được khuôn mặt. Vui lòng thử lại.'),
+      );
     }
   }
 
@@ -780,14 +939,19 @@ class TeacherProvider extends ChangeNotifier {
     try {
       final form = FormData.fromMap({
         'autoCheckout': autoCheckout,
-        'photo': MultipartFile.fromBytes(photoBytes, filename: 'parent_pickup.jpg'),
+        'photo': MultipartFile.fromBytes(
+          photoBytes,
+          filename: 'parent_pickup.jpg',
+        ),
       });
       final res = await _dio.post(
         ApiEndpoints.teacherPickupFaceRecognize(classId),
         data: form,
         options: Options(receiveTimeout: const Duration(seconds: 45)),
       );
-      final result = ParentPickupRecognitionResult.fromJson(res.data as Map<String, dynamic>);
+      final result = ParentPickupRecognitionResult.fromJson(
+        res.data as Map<String, dynamic>,
+      );
       if (result.checkoutSuccess && result.studentId != null) {
         _markCheckedOut(result.studentId!, result.checkoutTime);
         loadStudents(classId);
@@ -795,7 +959,10 @@ class TeacherProvider extends ChangeNotifier {
       return (result, result.message);
     } catch (e) {
       log('recognizeParentPickup error: $e');
-      return (null, _apiMessage(e, 'Không thể nhận diện phụ huynh. Vui lòng thử lại.'));
+      return (
+        null,
+        _apiMessage(e, 'Không thể nhận diện phụ huynh. Vui lòng thử lại.'),
+      );
     }
   }
 
@@ -812,20 +979,28 @@ class TeacherProvider extends ChangeNotifier {
         data: {
           'studentId': studentId,
           if (guardianId != null) 'guardianId': guardianId,
-          if (faceVerificationId != null) 'faceVerificationId': faceVerificationId,
+          if (faceVerificationId != null)
+            'faceVerificationId': faceVerificationId,
         },
       );
-      final data = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
+      final data = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
       _markCheckedOut(studentId, data['checkOutTime']?.toString());
       return (true, data['message']?.toString() ?? 'Đã xác nhận trả trẻ.');
     } catch (e) {
       log('checkoutStudent error: $e');
-      return (false, _apiMessage(e, 'Không thể xác nhận trả trẻ. Vui lòng thử lại.'));
+      return (
+        false,
+        _apiMessage(e, 'Không thể xác nhận trả trẻ. Vui lòng thử lại.'),
+      );
     }
   }
 
   /// Kiểm tra mã QR / OTP người đón hộ, chưa bàn giao trẻ.
-  Future<(EmergencyPickupInfo?, String)> verifyEmergencyPickup(String code) async {
+  Future<(EmergencyPickupInfo?, String)> verifyEmergencyPickup(
+    String code,
+  ) async {
     try {
       final res = await _dio.post(
         ApiEndpoints.emergencyPickupVerify,
@@ -835,10 +1010,16 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       final data = res.data as Map<String, dynamic>;
-      return (EmergencyPickupInfo.fromJson(data), data['message']?.toString() ?? 'Mã đón hộ hợp lệ.');
+      return (
+        EmergencyPickupInfo.fromJson(data),
+        data['message']?.toString() ?? 'Mã đón hộ hợp lệ.',
+      );
     } catch (e) {
       log('verifyEmergencyPickup error: $e');
-      return (null, _apiMessage(e, 'Không kiểm tra được mã đón hộ. Vui lòng thử lại.'));
+      return (
+        null,
+        _apiMessage(e, 'Không kiểm tra được mã đón hộ. Vui lòng thử lại.'),
+      );
     }
   }
 
@@ -854,14 +1035,21 @@ class TeacherProvider extends ChangeNotifier {
         data: {
           'code': code,
           if (_currentClassId.isNotEmpty) 'classId': _currentClassId,
-          if (faceVerificationId != null) 'faceVerificationId': faceVerificationId,
+          if (faceVerificationId != null)
+            'faceVerificationId': faceVerificationId,
         },
       );
       _markCheckedOut(info.studentId, null);
-      return (true, res.data['message']?.toString() ?? 'Đã bàn giao trẻ cho người đón hộ.');
+      return (
+        true,
+        res.data['message']?.toString() ?? 'Đã bàn giao trẻ cho người đón hộ.',
+      );
     } catch (e) {
       log('confirmEmergencyPickup error: $e');
-      return (false, _apiMessage(e, 'Không xác nhận được bàn giao. Vui lòng thử lại.'));
+      return (
+        false,
+        _apiMessage(e, 'Không xác nhận được bàn giao. Vui lòng thử lại.'),
+      );
     }
   }
 
@@ -869,7 +1057,8 @@ class TeacherProvider extends ChangeNotifier {
     for (final s in _students) {
       if (s.id == studentId) {
         final now = DateTime.now();
-        s.checkOutTime = checkOutTime ??
+        s.checkOutTime =
+            checkOutTime ??
             '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
       }
     }
@@ -881,8 +1070,10 @@ class TeacherProvider extends ChangeNotifier {
   String _apiMessage(Object e, String fallback) {
     if (e is DioException) {
       final data = e.response?.data;
-      if (data is Map && data['message'] != null) return data['message'].toString();
-      if (e.response == null) return 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng.';
+      if (data is Map && data['message'] != null)
+        return data['message'].toString();
+      if (e.response == null)
+        return 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng.';
     }
     return fallback;
   }
@@ -897,12 +1088,23 @@ class TeacherProvider extends ChangeNotifier {
   /// Danh sách đón muộn do server tự tính từ giờ trả bé (không ghi nhận bằng tay).
   Future<void> loadLatePickups([String? classId]) async {
     final cId = classId ?? currentClassId;
-    if (cId.isEmpty) return;
+    if (!_isApprovedAssignedClass(cId)) {
+      _latePickups = [];
+      notifyListeners();
+      return;
+    }
     try {
-      final res = await _dio.get(ApiEndpoints.latePickups, queryParameters: {'classId': cId});
+      final res = await _dio.get(
+        ApiEndpoints.latePickups,
+        queryParameters: {'classId': cId},
+      );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _latePickups = list.map((e) => LatePickupRecord.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _latePickups = list
+          .map((e) => LatePickupRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
       _latePickupsError = null;
     } catch (e) {
       log('loadLatePickups error: $e');
@@ -916,11 +1118,20 @@ class TeacherProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> loadStrangerAlerts() async {
+    if (!hasApprovedClassAssignment) {
+      _strangerAlerts = [];
+      notifyListeners();
+      return;
+    }
     try {
       final res = await _dio.get(ApiEndpoints.faceLogsUnresolved);
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _strangerAlerts = list.map((e) => StrangerAlert.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _strangerAlerts = list
+          .map((e) => StrangerAlert.fromJson(e as Map<String, dynamic>))
+          .toList();
       notifyListeners();
     } catch (e) {
       log('loadStrangerAlerts error: $e');
@@ -948,6 +1159,10 @@ class TeacherProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> loadDailyMedications() async {
+    if (!hasApprovedClassAssignment || _currentClassId.isEmpty) {
+      _medications = [];
+      return;
+    }
     _loading = true;
     notifyListeners();
     try {
@@ -960,8 +1175,12 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _medications = list.map((e) => MedicationTask.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _medications = list
+          .map((e) => MedicationTask.fromJson(e as Map<String, dynamic>))
+          .toList();
       _error = null;
     } catch (e) {
       log('loadDailyMedications error: $e');
@@ -971,7 +1190,11 @@ class TeacherProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> administerMedication(String id, String proofImageUrl, String? note) async {
+  Future<String?> administerMedication(
+    String id,
+    String proofImageUrl,
+    String? note,
+  ) async {
     _lastActionFailed = false;
     try {
       // Ảnh chụp từ camera là file trên máy -> tải lên server trước để lấy fileId/url thật (BR-030)
@@ -979,10 +1202,18 @@ class TeacherProvider extends ChangeNotifier {
       String photoUrl = proofImageUrl;
       if (!proofImageUrl.startsWith('http')) {
         final form = FormData.fromMap({
-          'photo': await MultipartFile.fromFile(proofImageUrl, filename: 'medication_proof.jpg'),
+          'photo': await MultipartFile.fromFile(
+            proofImageUrl,
+            filename: 'medication_proof.jpg',
+          ),
         });
-        final up = await _dio.post(ApiEndpoints.medicationProofPhoto, data: form);
-        final upData = up.data is Map && up.data['data'] is Map ? up.data['data'] as Map : up.data as Map;
+        final up = await _dio.post(
+          ApiEndpoints.medicationProofPhoto,
+          data: form,
+        );
+        final upData = up.data is Map && up.data['data'] is Map
+            ? up.data['data'] as Map
+            : up.data as Map;
         proofPhotoId = upData['fileId']?.toString();
         photoUrl = upData['url']?.toString() ?? '';
       }
@@ -996,7 +1227,8 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       await loadDailyMedications();
-      return res.data['message']?.toString() ?? 'MSG-205: Xác nhận đã cho trẻ uống thuốc thành công.';
+      return res.data['message']?.toString() ??
+          'MSG-205: Xác nhận đã cho trẻ uống thuốc thành công.';
     } catch (e) {
       await loadDailyMedications();
       _lastActionFailed = true;
@@ -1015,8 +1247,12 @@ class TeacherProvider extends ChangeNotifier {
     try {
       final res = await _dio.get('/api/health-reports/rounds');
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _measurementRounds = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _measurementRounds = list
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
       notifyListeners();
     } catch (e) {
       log('loadMeasurementRounds error: $e');
@@ -1024,12 +1260,16 @@ class TeacherProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadHealthMetricsEntrySheet(String classId, {String? measurementRoundId}) async {
-    if (classId.isEmpty) return;
+  Future<void> loadHealthMetricsEntrySheet(
+    String classId, {
+    String? measurementRoundId,
+  }) async {
+    if (!_isApprovedAssignedClass(classId)) return;
     _loading = true;
     notifyListeners();
     try {
-      final queryParams = measurementRoundId != null && measurementRoundId.isNotEmpty
+      final queryParams =
+          measurementRoundId != null && measurementRoundId.isNotEmpty
           ? {'measurementRoundId': measurementRoundId}
           : null;
       final res = await _dio.get(
@@ -1037,8 +1277,12 @@ class TeacherProvider extends ChangeNotifier {
         queryParameters: queryParams,
       );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _healthMetrics = list.map((e) => HealthMetricItem.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _healthMetrics = list
+          .map((e) => HealthMetricItem.fromJson(e as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       log('loadHealthMetricsEntrySheet error: $e');
       _healthMetrics = [];
@@ -1047,7 +1291,10 @@ class TeacherProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> submitHealthMetricsBatch(List<Map<String, dynamic>> metrics, {String? measurementRoundId}) async {
+  Future<String?> submitHealthMetricsBatch(
+    List<Map<String, dynamic>> metrics, {
+    String? measurementRoundId,
+  }) async {
     _lastActionFailed = false;
     _loading = true;
     notifyListeners();
@@ -1060,13 +1307,11 @@ class TeacherProvider extends ChangeNotifier {
       if (measurementRoundId != null && measurementRoundId.isNotEmpty) {
         body['measurementRoundId'] = measurementRoundId;
       }
-      final res = await _dio.post(
-        ApiEndpoints.healthMetricsBatch,
-        data: body,
-      );
+      final res = await _dio.post(ApiEndpoints.healthMetricsBatch, data: body);
       _loading = false;
       notifyListeners();
-      return res.data['message']?.toString() ?? 'MSG-131: Lưu chỉ số phát triển thể chất định kỳ thành công.';
+      return res.data['message']?.toString() ??
+          'MSG-131: Lưu chỉ số phát triển thể chất định kỳ thành công.';
     } catch (e) {
       _loading = false;
       notifyListeners();
@@ -1081,12 +1326,18 @@ class TeacherProvider extends ChangeNotifier {
 
   /// Sự cố y tế của cả lớp đang chọn (thay vì chỉ 1 học sinh).
   Future<void> loadClassHealthIncidents() async {
-    if (_currentClassId.isEmpty) return;
+    if (!_isApprovedAssignedClass(_currentClassId)) return;
     try {
-      final res = await _dio.get(ApiEndpoints.healthIncidentsByClass(_currentClassId));
+      final res = await _dio.get(
+        ApiEndpoints.healthIncidentsByClass(_currentClassId),
+      );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _healthIncidents = list.map((e) => HealthIncident.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _healthIncidents = list
+          .map((e) => HealthIncident.fromJson(e as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       log('loadClassHealthIncidents error: $e');
       _healthIncidents = [];
@@ -1095,14 +1346,23 @@ class TeacherProvider extends ChangeNotifier {
   }
 
   Future<void> loadHealthIncidents(String studentId) async {
-    if (studentId.isEmpty) return;
+    if (studentId.isEmpty ||
+        !_students.any((student) => student.id == studentId)) {
+      return;
+    }
     _loading = true;
     notifyListeners();
     try {
-      final res = await _dio.get(ApiEndpoints.healthIncidentsByStudent(studentId));
+      final res = await _dio.get(
+        ApiEndpoints.healthIncidentsByStudent(studentId),
+      );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _healthIncidents = list.map((e) => HealthIncident.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _healthIncidents = list
+          .map((e) => HealthIncident.fromJson(e as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       log('loadHealthIncidents error: $e');
       _healthIncidents = [];
@@ -1131,7 +1391,8 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       await loadClassHealthIncidents();
-      return res.data['message']?.toString() ?? 'MSG-135: Ghi nhận sự cố y tế và gửi thông báo khẩn cấp tới phụ huynh thành công.';
+      return res.data['message']?.toString() ??
+          'MSG-135: Ghi nhận sự cố y tế và gửi thông báo khẩn cấp tới phụ huynh thành công.';
     } catch (e) {
       _lastActionFailed = true;
       return _apiMessage(e, 'Không ghi nhận được sự cố y tế.');
@@ -1158,7 +1419,8 @@ class TeacherProvider extends ChangeNotifier {
           'studentId': studentId,
           'startTime': napStartTime,
           'endTime': napEndTime,
-          'sleepQuality': const {
+          'sleepQuality':
+              const {
                 'NGỦ SÂU': 'GOOD',
                 'HAY GIẬT MÌNH': 'RESTLESS',
                 'KHÓ VÀO GIẤC': 'DIFFICULT_TO_SLEEP',
@@ -1168,8 +1430,12 @@ class TeacherProvider extends ChangeNotifier {
           if (note != null && note.isNotEmpty) 'notes': note,
         },
       );
-      final msg = res.data['message']?.toString() ?? 'MSG-208: Ghi nhận nhật ký giấc ngủ của trẻ thành công.';
-      final minutes = (res.data['data'] is Map) ? res.data['data']['napDurationMinutes'] : null;
+      final msg =
+          res.data['message']?.toString() ??
+          'MSG-208: Ghi nhận nhật ký giấc ngủ của trẻ thành công.';
+      final minutes = (res.data['data'] is Map)
+          ? res.data['data']['napDurationMinutes']
+          : null;
       return minutes != null ? '$msg (Thời lượng ngủ: $minutes phút)' : msg;
     } catch (e) {
       _lastActionFailed = true;
@@ -1190,7 +1456,8 @@ class TeacherProvider extends ChangeNotifier {
         data: {
           // Khớp DailyActivityRecordDto ở backend (mealType, intakeLevel enum ConsumptionLevel, notes)
           'studentId': studentId,
-          'mealType': const {
+          'mealType':
+              const {
                 'BỮA SÁNG': 'BREAKFAST',
                 'BỮA PHỤ SÁNG': 'MORNING_SNACK',
                 'BỮA TRƯA': 'LUNCH',
@@ -1201,7 +1468,8 @@ class TeacherProvider extends ChangeNotifier {
           if (note != null && note.isNotEmpty) 'notes': note,
         },
       );
-      return res.data['message']?.toString() ?? 'MSG-211: Ghi nhận khẩu phần ăn của trẻ thành công.';
+      return res.data['message']?.toString() ??
+          'MSG-211: Ghi nhận khẩu phần ăn của trẻ thành công.';
     } catch (e) {
       _lastActionFailed = true;
       return _apiMessage(e, 'Không lưu được khẩu phần ăn.');
@@ -1213,14 +1481,18 @@ class TeacherProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> loadLessonPlans(String classId) async {
-    if (classId.isEmpty) return;
+    if (!_isApprovedAssignedClass(classId)) return;
     _loading = true;
     notifyListeners();
     try {
       final res = await _dio.get(ApiEndpoints.lessonPlansByClass(classId));
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _lessonPlans = list.map((e) => WeeklyLessonPlan.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _lessonPlans = list
+          .map((e) => WeeklyLessonPlan.fromJson(e as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       log('loadLessonPlans error: $e');
       _lessonPlans = [];
@@ -1250,7 +1522,8 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       await loadLessonPlans(classId);
-      return res.data['message']?.toString() ?? 'MSG-188: Nộp kế hoạch giáo dục tuần lên BGH thành công.';
+      return res.data['message']?.toString() ??
+          'MSG-188: Nộp kế hoạch giáo dục tuần lên BGH thành công.';
     } catch (e) {
       await loadLessonPlans(classId);
       _lastActionFailed = true;
@@ -1263,14 +1536,23 @@ class TeacherProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> loadDevelopmentEvaluations(String classId) async {
-    if (classId.isEmpty) return;
+    if (!_isApprovedAssignedClass(classId)) return;
     _loading = true;
     notifyListeners();
     try {
-      final res = await _dio.get(ApiEndpoints.developmentEvaluationsByClass(classId));
+      final res = await _dio.get(
+        ApiEndpoints.developmentEvaluationsByClass(classId),
+      );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _evaluations = list.map((e) => DevelopmentEvaluationItem.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _evaluations = list
+          .map(
+            (e) =>
+                DevelopmentEvaluationItem.fromJson(e as Map<String, dynamic>),
+          )
+          .toList();
     } catch (e) {
       log('loadDevelopmentEvaluations error: $e');
       _evaluations = [];
@@ -1296,7 +1578,8 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       await loadDevelopmentEvaluations(_currentClassId);
-      return res.data['message']?.toString() ?? 'MSG-181: Lưu phiếu đánh giá chuẩn phát triển 5 lĩnh vực của trẻ thành công.';
+      return res.data['message']?.toString() ??
+          'MSG-181: Lưu phiếu đánh giá chuẩn phát triển 5 lĩnh vực của trẻ thành công.';
     } catch (e) {
       await loadDevelopmentEvaluations(_currentClassId);
       _lastActionFailed = true;
@@ -1309,14 +1592,20 @@ class TeacherProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> loadEquipmentIncidents(String classroomId) async {
-    if (classroomId.isEmpty) return;
+    if (!_isApprovedAssignedClass(classroomId)) return;
     _loading = true;
     notifyListeners();
     try {
-      final res = await _dio.get(ApiEndpoints.equipmentIncidentsByClass(classroomId));
+      final res = await _dio.get(
+        ApiEndpoints.equipmentIncidentsByClass(classroomId),
+      );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _equipmentIncidents = list.map((e) => EquipmentIncidentItem.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _equipmentIncidents = list
+          .map((e) => EquipmentIncidentItem.fromJson(e as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       log('loadEquipmentIncidents error: $e');
       _equipmentIncidents = [];
@@ -1378,6 +1667,10 @@ class TeacherProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> loadTeacherLeaveRequests() async {
+    if (!hasApprovedClassAssignment || _currentClassId.isEmpty) {
+      _leaveRequests = [];
+      return;
+    }
     _loading = true;
     notifyListeners();
     try {
@@ -1388,8 +1681,14 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _leaveRequests = list.map((e) => TeacherLeaveRequestItem.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _leaveRequests = list
+          .map(
+            (e) => TeacherLeaveRequestItem.fromJson(e as Map<String, dynamic>),
+          )
+          .toList();
     } catch (e) {
       log('loadTeacherLeaveRequests error: $e');
       _leaveRequests = [];
@@ -1398,7 +1697,11 @@ class TeacherProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> reviewLeaveRequest(int id, String status, String? comment) async {
+  Future<String?> reviewLeaveRequest(
+    int id,
+    String status,
+    String? comment,
+  ) async {
     try {
       final res = await _dio.put(
         ApiEndpoints.teacherLeaveRequestReview(id),
@@ -1409,11 +1712,13 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       await loadTeacherLeaveRequests();
-      return res.data['message']?.toString() ?? 'MSG-215: Phê duyệt đơn xin nghỉ học thành công.';
+      return res.data['message']?.toString() ??
+          'MSG-215: Phê duyệt đơn xin nghỉ học thành công.';
     } catch (e) {
       log('reviewLeaveRequest error: $e');
       await loadTeacherLeaveRequests();
-      String errorMsg = 'MSG-216: Cập nhật trạng thái đơn xin nghỉ học thất bại.';
+      String errorMsg =
+          'MSG-216: Cập nhật trạng thái đơn xin nghỉ học thất bại.';
       if (e is DioException) {
         final serverMsg = e.response?.data?['message']?.toString();
         if (serverMsg != null && serverMsg.isNotEmpty) {
@@ -1429,14 +1734,18 @@ class TeacherProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> loadClassChat(String classId) async {
-    if (classId.isEmpty) return;
+    if (!_isApprovedAssignedClass(classId)) return;
     _loading = true;
     notifyListeners();
     try {
       final res = await _dio.get(ApiEndpoints.classChatMessages(classId));
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _chatMessages = list.map((e) => ClassChatMessageItem.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _chatMessages = list
+          .map((e) => ClassChatMessageItem.fromJson(e as Map<String, dynamic>))
+          .toList();
 
       final lockRes = await _dio.get(ApiEndpoints.classChatLock(classId));
       _isChatLocked = lockRes.data['data']?['isMuted'] ?? false;
@@ -1471,7 +1780,8 @@ class TeacherProvider extends ChangeNotifier {
       );
       _isChatLocked = lockState;
       notifyListeners();
-      return res.data['message']?.toString() ?? 'MSG-235: Cập nhật trạng thái điều hành nhóm chat lớp thành công.';
+      return res.data['message']?.toString() ??
+          'MSG-235: Cập nhật trạng thái điều hành nhóm chat lớp thành công.';
     } catch (e) {
       notifyListeners();
       _lastActionFailed = true;
@@ -1485,7 +1795,8 @@ class TeacherProvider extends ChangeNotifier {
 
   List<PrivateChatThread> _privateThreads = [];
   List<PrivateChatThread> get privateThreads => _privateThreads;
-  int get privateUnreadTotal => _privateThreads.fold(0, (sum, t) => sum + t.unreadCount);
+  int get privateUnreadTotal =>
+      _privateThreads.fold(0, (sum, t) => sum + t.unreadCount);
   bool _privateThreadsLoading = false;
   bool get privateThreadsLoading => _privateThreadsLoading;
   String? _privateThreadsError;
@@ -1497,24 +1808,35 @@ class TeacherProvider extends ChangeNotifier {
   List<ClassChatMessageItem> get privateMessages => _privateMessages;
 
   Future<void> loadPrivateThreads() async {
-    if (_currentClassId.isEmpty) return;
+    if (!_isApprovedAssignedClass(_currentClassId)) return;
     _privateThreadsLoading = true;
     notifyListeners();
     try {
-      final res = await _dio.get(ApiEndpoints.privateChatThreads, queryParameters: {'classId': _currentClassId});
+      final res = await _dio.get(
+        ApiEndpoints.privateChatThreads,
+        queryParameters: {'classId': _currentClassId},
+      );
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _privateThreads = list.map((e) => PrivateChatThread.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _privateThreads = list
+          .map((e) => PrivateChatThread.fromJson(e as Map<String, dynamic>))
+          .toList();
       _privateThreadsError = null;
     } catch (e) {
       log('loadPrivateThreads error: $e');
-      _privateThreadsError = _apiMessage(e, 'Không tải được danh sách tin nhắn phụ huynh.');
+      _privateThreadsError = _apiMessage(
+        e,
+        'Không tải được danh sách tin nhắn phụ huynh.',
+      );
     }
     _privateThreadsLoading = false;
     notifyListeners();
   }
 
   Future<void> loadPrivateMessages(String studentId) async {
+    if (!_privateThreads.any((thread) => thread.studentId == studentId)) return;
     if (_openPrivateStudentId != studentId) {
       _openPrivateStudentId = studentId;
       _privateMessages = [];
@@ -1523,21 +1845,28 @@ class TeacherProvider extends ChangeNotifier {
     try {
       final res = await _dio.get(ApiEndpoints.privateChatMessages(studentId));
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      if (_openPrivateStudentId != studentId) return; // đã chuyển sang hội thoại khác
-      _privateMessages = list.map((e) => ClassChatMessageItem.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      if (_openPrivateStudentId != studentId)
+        return; // đã chuyển sang hội thoại khác
+      _privateMessages = list
+          .map((e) => ClassChatMessageItem.fromJson(e as Map<String, dynamic>))
+          .toList();
       // Mở hội thoại = đã đọc tin của phụ huynh
       _privateThreads = _privateThreads
-          .map((t) => t.studentId == studentId
-              ? PrivateChatThread(
-                  studentId: t.studentId,
-                  studentName: t.studentName,
-                  parentName: t.parentName,
-                  lastMessage: t.lastMessage,
-                  lastSenderType: t.lastSenderType,
-                  lastMessageAt: t.lastMessageAt,
-                )
-              : t)
+          .map(
+            (t) => t.studentId == studentId
+                ? PrivateChatThread(
+                    studentId: t.studentId,
+                    studentName: t.studentName,
+                    parentName: t.parentName,
+                    lastMessage: t.lastMessage,
+                    lastSenderType: t.lastSenderType,
+                    lastMessageAt: t.lastMessageAt,
+                  )
+                : t,
+          )
           .toList();
       notifyListeners();
     } catch (e) {
@@ -1548,7 +1877,10 @@ class TeacherProvider extends ChangeNotifier {
   /// Trả về null nếu gửi thành công, ngược lại là thông báo lỗi.
   Future<String?> sendPrivateMessage(String studentId, String content) async {
     try {
-      await _dio.post(ApiEndpoints.privateChatMessages(studentId), data: {'content': content});
+      await _dio.post(
+        ApiEndpoints.privateChatMessages(studentId),
+        data: {'content': content},
+      );
       await loadPrivateMessages(studentId);
       return null;
     } catch (e) {
@@ -1567,14 +1899,18 @@ class TeacherProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> loadClassroomJournal(String classId) async {
-    if (classId.isEmpty) return;
+    if (!_isApprovedAssignedClass(classId)) return;
     _loading = true;
     notifyListeners();
     try {
       final res = await _dio.get(ApiEndpoints.journalPostsByClass(classId));
       final data = res.data;
-      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
-      _journalPosts = list.map((e) => ClassroomJournalItem.fromJson(e as Map<String, dynamic>)).toList();
+      final list = data is Map<String, dynamic>
+          ? (data['data'] as List? ?? [])
+          : (data as List? ?? []);
+      _journalPosts = list
+          .map((e) => ClassroomJournalItem.fromJson(e as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       log('loadClassroomJournal error: $e');
       _journalPosts = [];
@@ -1607,7 +1943,8 @@ class TeacherProvider extends ChangeNotifier {
         },
       );
       await loadClassroomJournal(_currentClassId);
-      return res.data['message']?.toString() ?? 'MSG-238: Đăng tải album ảnh hoạt động lớp thành công.';
+      return res.data['message']?.toString() ??
+          'MSG-238: Đăng tải album ảnh hoạt động lớp thành công.';
     } catch (e) {
       await loadClassroomJournal(_currentClassId);
       _lastActionFailed = true;

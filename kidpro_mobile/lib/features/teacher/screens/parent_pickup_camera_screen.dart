@@ -235,7 +235,9 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
         if (_faceInFrame) {
           setState(() {
             _faceInFrame = false;
-            _faceDetectedTime = null;
+            _sawEyesOpen = false;
+            _eyesClosedAt = null;
+            _livenessPassed = false;
             _statusMessage = 'Hướng camera về phía phụ huynh';
           });
         }
@@ -259,7 +261,6 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
       if (!_faceInFrame) {
         setState(() {
           _faceInFrame = true;
-          _faceDetectedTime = DateTime.now();
           _sawEyesOpen = false;
           _eyesClosedAt = null;
           _livenessPassed = false;
@@ -484,7 +485,6 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
     setState(() {
       _lastResult = null;
       _faceInFrame = false;
-      _faceDetectedTime = null;
       _sawEyesOpen = false;
       _eyesClosedAt = null;
       _livenessPassed = false;

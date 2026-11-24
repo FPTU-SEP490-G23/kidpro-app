@@ -39,17 +39,19 @@ class ApiEndpoints {
       '/api/parents/unified-requests/$id/cancel';
   static const parentClassTransfer = '/api/parents/class-transfer-requests';
   static const parentBusRegister = '/api/parents/bus-registers';
-  static const parentExtracurricularRegister = '/api/parents/extracurricular-registers';
+  static const parentExtracurricularRegister =
+      '/api/parents/extracurricular-registers';
   static const parentOtherRequest = '/api/parents/other-requests';
   static const parentAvailableClasses = '/api/parents/available-classes';
   static const parentAvailableBuses = '/api/parents/available-buses';
-  static String parentBusStops(String busId) => '/api/parents/buses/$busId/stops';
-  static const parentAvailableExtracurricular = '/api/parents/available-extracurricular';
+  static String parentBusStops(String busId) =>
+      '/api/parents/buses/$busId/stops';
+  static const parentAvailableExtracurricular =
+      '/api/parents/available-extracurricular';
 
   // Parent - Invoices & Payment
   static const parentInvoices = '/api/parents/invoices';
-  static String parentInvoiceDetail(String id) =>
-      '/api/parents/invoices/$id';
+  static String parentInvoiceDetail(String id) => '/api/parents/invoices/$id';
   static String parentInvoiceVietQr(String id) =>
       '/api/parents/invoices/$id/vietqr';
   static String parentInvoiceReceipt(String id) =>
@@ -71,25 +73,18 @@ class ApiEndpoints {
   static const parentGuardians = '/api/parents/guardians';
   static String parentStudentGuardians(String studentId) =>
       '/api/parents/students/$studentId/guardians';
-  static String parentGuardianRevoke(int id) =>
-      '/api/parents/guardians/$id';
+  static String parentGuardianRevoke(int id) => '/api/parents/guardians/$id';
 
   // Parent - Medication Requests (G10-UC-01)
   static const parentMedications = '/api/parents/medications';
-  static const parentPrescriptionPhoto = '/api/parents/medications/prescription-photo';
+  static const parentPrescriptionPhoto =
+      '/api/parents/medications/prescription-photo';
   static String parentMedicationCancel(int id) =>
       '/api/parents/medications/$id';
 
   // Parent - Allergies & Health Profile (G4-UC-06)
   static const parentAllergies = '/api/parents/allergies';
-  static String parentAllergyDelete(int id) =>
-      '/api/parents/allergies/$id';
-
-  // Parent - Decree 13 Biometric Purge (UC-Decree13)
-  static String parentBiometricPurgeOtp(String studentId) =>
-      '/api/parents/students/$studentId/biometric-purge/request-otp';
-  static String parentBiometricPurgeConfirm(String studentId) =>
-      '/api/parents/students/$studentId/biometric-purge/confirm';
+  static String parentAllergyDelete(int id) => '/api/parents/allergies/$id';
 
   // Teacher
   static String teacherClassStudents(String classId) =>
@@ -103,8 +98,11 @@ class ApiEndpoints {
   static const teacherAttendanceCheckout = '/api/teachers/attendance/checkout';
 
   // Teacher - Điểm danh lớp năng khiếu (chỉ GV được phân công)
-  static const teacherExtracurricularClasses = '/api/teachers/extracurricular/my-classes';
-  static String teacherExtracurricularAttendance(String extracurricularClassId) =>
+  static const teacherExtracurricularClasses =
+      '/api/teachers/extracurricular/my-classes';
+  static String teacherExtracurricularAttendance(
+    String extracurricularClassId,
+  ) =>
       '/api/teachers/extracurricular/classes/$extracurricularClassId/attendance';
 
   // Bus Attendance (G5-UC-02, G5-UC-03, BR-024)
@@ -112,6 +110,8 @@ class ApiEndpoints {
   static String busSafetyClosure(String tripId) =>
       '/api/attendance/bus/trips/$tripId/safety-closure';
   static const teacherBusRoutes = '/api/teachers/bus/routes';
+  static String teacherBusTripStops(String tripId) =>
+      '/api/teachers/bus/trips/$tripId/stops';
 
   // Emergency Pickup Verification (G5-UC-06, BR-022)
   static const emergencyPickupVerify = '/api/academic/emergency-pickups/verify';
@@ -151,7 +151,8 @@ class ApiEndpoints {
 
   // Health Incidents (G8-UC-04, BR-031)
   static const healthIncidents = '/api/health/incidents';
-  static String healthIncidentsByClass(String classId) => '/api/health/incidents/class/$classId';
+  static String healthIncidentsByClass(String classId) =>
+      '/api/health/incidents/class/$classId';
   static String healthIncidentsByStudent(String studentId) =>
       '/api/health/incidents/student/$studentId';
   static String healthIncidentResolve(int id) =>
@@ -182,8 +183,7 @@ class ApiEndpoints {
 
   // Announcements (G11-UC-02, BR-056)
   static const announcements = '/api/comms/announcements';
-  static String announcementDetail(int id) =>
-      '/api/comms/announcements/$id';
+  static String announcementDetail(int id) => '/api/comms/announcements/$id';
 
   // Class Chat (G11-UC-04, BR-058, BR-059)
   static String classChatMessages(String classId) =>
@@ -192,7 +192,8 @@ class ApiEndpoints {
       '/api/comms/chat/rooms/$classId/lock';
 
   // Nhắn tin riêng giáo viên - phụ huynh theo từng bé
-  static const privateChatThreads = '/api/comms/chat/private/threads'; // giáo viên: ?classId=
+  static const privateChatThreads =
+      '/api/comms/chat/private/threads'; // giáo viên: ?classId=
   static String privateChatMessages(String studentId) =>
       '/api/comms/chat/private/$studentId/messages';
 
@@ -200,8 +201,10 @@ class ApiEndpoints {
   static const faceCheckIn = '/api/attendance/face-recognition/check-in';
   static const faceChallenge = '/api/attendance/face-recognition/challenge';
   static const faceLogs = '/api/attendance/face-logs';
-  static const faceLogsRegistered = '/api/attendance/face-logs/registered-faces';
-  static const faceLogsUnresolved = '/api/attendance/face-logs/unresolved-alerts';
+  static const faceLogsRegistered =
+      '/api/attendance/face-logs/registered-faces';
+  static const faceLogsUnresolved =
+      '/api/attendance/face-logs/unresolved-alerts';
   static String faceLogResolve(String id) =>
       '/api/attendance/face-logs/$id/resolve-alert';
 
@@ -209,16 +212,20 @@ class ApiEndpoints {
   static const medications = '/api/health/medications';
   static const medicationProofPhoto = '/api/health/medications/proof-photo';
   // UC-72: giáo viên tiếp nhận / từ chối thuốc phụ huynh gửi
-  static String medicationReceive(String id) => '/api/health/medications/$id/receive';
-  static String medicationReject(String id) => '/api/health/medications/$id/reject';
+  static String medicationReceive(String id) =>
+      '/api/health/medications/$id/receive';
+  static String medicationReject(String id) =>
+      '/api/health/medications/$id/reject';
   // UC-74: nhật ký vệ sinh
   static const restroomRecords = '/api/health/restroom-records';
   // UC-44: ảnh khay cơm & thực đơn ngày
   static const teacherMealTrays = '/api/teachers/meal-trays';
-  static String parentDailyMenu(String studentId) => '/api/parents/students/$studentId/daily-menu';
+  static String parentDailyMenu(String studentId) =>
+      '/api/parents/students/$studentId/daily-menu';
   // UC-81: thông báo theo lớp
   static const teacherClassAnnouncements = '/api/teachers/class-announcements';
-  static String parentClassAnnouncements(String studentId) => '/api/parents/students/$studentId/class-announcements';
+  static String parentClassAnnouncements(String studentId) =>
+      '/api/parents/students/$studentId/class-announcements';
   // UC-26: đơn thôi học / chuyển trường
   static const parentWithdrawalRequests = '/api/parents/withdrawal-requests';
   // UC-28 / BR-018: đăng ký / đổi gói bán trú
