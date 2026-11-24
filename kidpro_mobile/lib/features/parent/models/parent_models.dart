@@ -693,8 +693,9 @@ class JournalPostModel {
 
   factory JournalPostModel.fromJson(Map<String, dynamic> json) {
     List<String> images = [];
-    if (json['imageUrls'] is List) {
-      images = (json['imageUrls'] as List).map((e) => e.toString()).toList();
+    final rawImages = json['photoUrls'] ?? json['imageUrls'];
+    if (rawImages is List) {
+      images = rawImages.map((e) => e.toString()).toList();
     }
     return JournalPostModel(
       postId: json['postId'] as int? ?? json['id'] as int?,
@@ -702,7 +703,7 @@ class JournalPostModel {
       content: json['content'] as String? ?? '',
       classId: json['classId']?.toString(),
       className: json['className'] as String?,
-      teacherName: json['teacherName'] as String?,
+      teacherName: json['teacherName'] as String? ?? json['authorStaffName'] as String?,
       imageUrls: images,
       createdAt: json['createdAt']?.toString(),
     );

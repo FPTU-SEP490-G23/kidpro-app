@@ -816,6 +816,23 @@ class ParentProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<JournalPostModel> loadJournalPostDetail(int postId) async {
+    try {
+      final res = await _dio.get(ApiEndpoints.parentJournalPostDetail(postId));
+      final payload = res.data;
+      final data = payload is Map && payload['data'] != null
+          ? payload['data']
+          : payload;
+      if (data is! Map) {
+        throw const FormatException('Dữ liệu chi tiết nhật ký không hợp lệ.');
+      }
+      return JournalPostModel.fromJson(Map<String, dynamic>.from(data));
+    } on DioException catch (e) {
+      logError('loadJournalPostDetail', e);
+      rethrow;
+    }
+  }
+
   // ── 14. TRUNG TÂM ĐƠN TỪ: TỔNG HỢP TOÀN BỘ 11 LOẠI ĐƠN TỪ ──
   List<ParentUnifiedRequest> _allRequests = [];
   List<ParentUnifiedRequest> get allRequests => _allRequests;
