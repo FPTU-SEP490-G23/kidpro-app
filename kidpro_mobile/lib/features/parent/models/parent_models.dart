@@ -23,7 +23,7 @@ class Invoice {
   });
 
   double get remainingAmount => totalAmount - paidAmount;
-  bool get isPaid => status == 'PAID';
+  bool get isPaid => status == 'PAID' || status == 'OVERPAID';
 
   factory Invoice.fromJson(Map<String, dynamic> json) => Invoice(
         id: json['invoiceId']?.toString() ?? json['id']?.toString() ?? '',
@@ -46,6 +46,8 @@ class VietQrPayment {
   final double amount;
   final String referenceCode;
   final String? deepLink;
+  final String? checkoutUrl;
+  final String? qrCode;
 
   const VietQrPayment({
     required this.qrDataUrl,
@@ -55,16 +57,20 @@ class VietQrPayment {
     required this.amount,
     required this.referenceCode,
     this.deepLink,
+    this.checkoutUrl,
+    this.qrCode,
   });
 
   factory VietQrPayment.fromJson(Map<String, dynamic> json) => VietQrPayment(
-        qrDataUrl: json['paymentQrCode'] as String? ?? json['qrDataUrl'] as String? ?? '',
-        bankName: json['bankCode'] as String? ?? json['bankName'] as String? ?? 'MB Bank',
-        accountNumber: json['accountNumber'] as String? ?? '999988887777',
-        accountName: json['accountName'] as String? ?? 'TRUONG MAM NON QUOC TE KIDPRO',
+        qrDataUrl: json['qrImageUrl'] as String? ?? json['paymentQrCode'] as String? ?? json['qrDataUrl'] as String? ?? '',
+        bankName: json['bankName'] as String? ?? json['bankCode'] as String? ?? 'MB Bank',
+        accountNumber: json['accountNumber'] as String? ?? '',
+        accountName: json['accountName'] as String? ?? 'TRUONG MAM NON KIDPRO',
         amount: (json['amount'] as num?)?.toDouble() ?? 0,
-        referenceCode: json['invoiceCode'] as String? ?? json['referenceCode'] as String? ?? '',
-        deepLink: json['deepLink'] as String?,
+        referenceCode: json['referenceCode'] as String? ?? json['invoiceCode'] as String? ?? '',
+        deepLink: json['deepLink'] as String? ?? json['deepLinkUrl'] as String?,
+        checkoutUrl: json['checkoutUrl'] as String?,
+        qrCode: json['qrCode'] as String? ?? json['paymentQrCode'] as String?,
       );
 }
 

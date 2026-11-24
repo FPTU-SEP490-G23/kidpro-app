@@ -28,7 +28,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     switch (status) {
       case 'PAID':
         return AppColors.success;
+      case 'OVERPAID':
+        return Colors.purple;
+      case 'PARTIAL':
+      case 'UNDERPAID':
+      case 'PARTIALLY_PAID':
+        return Colors.orange;
       case 'PENDING':
+      case 'UNPAID':
         return AppColors.warning;
       case 'OVERDUE':
         return AppColors.error;
@@ -43,7 +50,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     switch (status) {
       case 'PAID':
         return 'Đã thanh toán';
+      case 'OVERPAID':
+        return 'Nộp thừa';
+      case 'PARTIAL':
+      case 'UNDERPAID':
+      case 'PARTIALLY_PAID':
+        return 'Nộp thiếu';
       case 'PENDING':
+      case 'UNPAID':
         return 'Chờ thanh toán';
       case 'OVERDUE':
         return 'Quá hạn';
@@ -108,7 +122,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: statusColor.withOpacity(0.12),
+                                      color: statusColor.withValues(alpha: 0.12),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(color: statusColor),
                                     ),
@@ -163,7 +177,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                     ),
                                     onPressed: () => context.go('/parent/invoices/${invoice.id}/pay'),
                                     icon: const Icon(Icons.qr_code_2),
-                                    label: const Text('Thanh toán VietQR'),
+                                    label: const Text('Thanh toán PayOS (QR)'),
                                   ),
                                 ),
                               ],
