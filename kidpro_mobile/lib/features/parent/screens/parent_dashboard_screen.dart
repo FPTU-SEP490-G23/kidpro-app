@@ -477,6 +477,12 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
           onTap: () => context.push('/parent/class-announcements'),
         ),
         _buildIconTile(
+          icon: Icons.fact_check_outlined,
+          label: 'Khảo sát',
+          color: Colors.cyan.shade700,
+          onTap: () => context.push('/parent/surveys'),
+        ),
+        _buildIconTile(
           icon: Icons.chat_bubble_outline,
           label: 'Tin nhắn cô',
           badge: '24/7',
@@ -509,7 +515,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         _ActionCard(
           icon: Icons.event_busy,
           label: 'Xin nghỉ học',
-          subLabel: 'Hoàn tiền ăn trước 8h',
+          subLabel: 'Hoàn tiền ăn: trước 8h',
           color: AppColors.warning,
           onTap: () => context.push('/parent/leave'),
         ),

@@ -41,6 +41,7 @@ import 'package:kidpro_mobile/features/teacher/screens/class_announcement_screen
 import 'package:kidpro_mobile/features/parent/screens/daily_menu_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/class_announcements_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/withdrawal_request_screen.dart';
+import 'package:kidpro_mobile/features/parent/screens/survey_screens.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -138,6 +139,13 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
             GoRoute(
                 path: 'withdrawal',
                 builder: (_, __) => const WithdrawalRequestScreen()),
+            GoRoute(
+                path: 'surveys',
+                builder: (_, state) =>
+                    SurveyListScreen(openTitle: state.uri.queryParameters['open'])),
+            GoRoute(
+                path: 'surveys/:id',
+                builder: (_, state) => SurveyFillScreen(surveyId: state.pathParameters['id']!)),
           ],
         ),
 

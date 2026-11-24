@@ -170,6 +170,26 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           ],
                         ),
                       ),
+                      // Giáo viên chưa có lớp nhưng được giao phụ trách xe buýt vẫn vào được phần xe buýt
+                      if (teacherProv.hasBusAssignment) ...[
+                        const Text(
+                          'NHIỆM VỤ ĐƯỢC GIAO',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.black54,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildQuickActionButton(
+                          title: 'Xe buýt',
+                          subtitle: 'Điểm danh & Đóng chuyến',
+                          icon: Icons.directions_bus_rounded,
+                          color: const Color(0xFFEA580C),
+                          onTap: () => context.go('/teacher/bus'),
+                        ),
+                      ],
                     ] else ...[
                       // Priority Warning Banners (Strangers, Meds, Leaves)
                       if (alertsCount > 0 || pendingMedCount > 0 || pendingLeaveCount > 0) ...[
@@ -862,7 +882,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         ),
                         const SizedBox(height: 2),
                         const Text(
-                          'Duyệt trước 07:30 để bếp kịp cắt suất hoàn tiền ăn',
+                          'Duyệt trước 08:30 để bếp kịp cắt suất ăn',
                           style: TextStyle(color: Color(0xFF2563EB), fontSize: 11),
                         ),
                       ],
@@ -1223,7 +1243,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       widgets.add(const SizedBox(height: 10));
       widgets.add(_ModernActionCard(
         title: 'Duyệt Đơn Xin Nghỉ Học Của Phụ Huynh',
-        subtitle: 'Đồng bộ điểm danh & báo bếp hoàn tiền ăn trước 07:30 (BR-064)',
+        subtitle: 'Duyệt trước 08:30; hoàn tiền ăn nếu PH nộp trước 7h (gói cả ngày) / 8h (gói trưa-xế)',
         tag: 'G10-UC-09',
         icon: Icons.assignment_turned_in_rounded,
         color: const Color(0xFF0284C7),

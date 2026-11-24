@@ -423,6 +423,8 @@ class ChatMessage {
   final String id;
   final String senderId;
   final String senderName;
+  final String? senderType; // TEACHER, PARENT
+  final String? studentName;
   final String content;
   final DateTime sentAt;
   final bool isRead;
@@ -431,6 +433,8 @@ class ChatMessage {
     required this.id,
     required this.senderId,
     this.senderName = 'Người dùng',
+    this.senderType,
+    this.studentName,
     required this.content,
     required this.sentAt,
     this.isRead = false,
@@ -440,6 +444,8 @@ class ChatMessage {
         id: (json['messageId'] ?? json['id'] ?? '')?.toString() ?? '',
         senderId: (json['senderAccountId'] ?? json['senderId'] ?? '')?.toString() ?? '',
         senderName: json['senderName'] as String? ?? 'Người dùng',
+        senderType: json['senderType'] as String?,
+        studentName: json['studentName'] as String?,
         content: json['content'] as String? ?? '',
         sentAt: json['createdAt'] != null
             ? DateTime.parse(json['createdAt'] as String)
@@ -458,6 +464,13 @@ class StudentSummary {
   final String? className;
   final String? avatarUrl;
   final String? parentId;
+  /// BR-018: gói bán trú (FULL: sáng-trưa-xế, LUNCH_SNACK: trưa-xế, NONE)
+  final String boardingPackage;
+  final String? boardingPackageLabel;
+  /// Hạn báo nghỉ để được giảm trừ tiền ăn của gói, dạng HH:mm (null nếu không ăn bán trú)
+  final String? mealRefundCutoff;
+  final String? pendingBoardingPackage;
+  final String? pendingPackageFrom;
 
   const StudentSummary({
     required this.studentId,
@@ -469,6 +482,11 @@ class StudentSummary {
     this.className,
     this.avatarUrl,
     this.parentId,
+    this.boardingPackage = 'LUNCH_SNACK',
+    this.boardingPackageLabel,
+    this.mealRefundCutoff,
+    this.pendingBoardingPackage,
+    this.pendingPackageFrom,
   });
 
   String get displayName => className != null ? '$fullName ($className)' : fullName;
@@ -483,6 +501,11 @@ class StudentSummary {
         className: json['className'] as String?,
         avatarUrl: json['avatarUrl'] as String?,
         parentId: json['parentId']?.toString(),
+        boardingPackage: json['boardingPackage']?.toString() ?? 'LUNCH_SNACK',
+        boardingPackageLabel: json['boardingPackageLabel'] as String?,
+        mealRefundCutoff: json['mealRefundCutoff']?.toString(),
+        pendingBoardingPackage: json['pendingBoardingPackage']?.toString(),
+        pendingPackageFrom: json['pendingPackageFrom']?.toString(),
       );
 }
 
@@ -644,13 +667,38 @@ class HealthGrowthMetricModel {
   factory HealthGrowthMetricModel.fromJson(Map<String, dynamic> json) => HealthGrowthMetricModel(
         metricId: json['metricId'] as int?,
         studentId: json['studentId']?.toString(),
-        measuredDate: json['measuredDate']?.toString(),
+        measuredDate: _formatYmd((json['measurementDate'] ?? json['measuredDate'])?.toString()),
         heightCm: (json['heightCm'] as num?)?.toDouble(),
         weightKg: (json['weightKg'] as num?)?.toDouble(),
         bmi: (json['bmi'] as num?)?.toDouble(),
-        zscoreCategory: json['zscoreCategory'] as String?,
+        // BE trả enum ZScoreStatus (Jackson đặt tên "zscoreStatus")
+        zscoreCategory: _zScoreLabel(
+            (json['zscoreStatus'] ?? json['zScoreStatus'] ?? json['zscoreCategory'])?.toString()),
         note: json['note'] as String?,
       );
+
+  /// "2026-11-20" -> "20/11/2026"; giữ nguyên nếu không đúng định dạng.
+  static String? _formatYmd(String? s) {
+    if (s == null || s.isEmpty) return null;
+    final d = DateTime.tryParse(s);
+    if (d == null) return s;
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
+
+  static String? _zScoreLabel(String? s) {
+    switch (s) {
+      case 'NORMAL':
+        return 'Bình thường';
+      case 'MALNUTRITION':
+        return 'Suy dinh dưỡng';
+      case 'UNDERWEIGHT':
+        return 'Thiếu cân';
+      case 'OBESE':
+        return 'Béo phì';
+      default:
+        return s;
+    }
+  }
 }
 
 class JournalPostModel {

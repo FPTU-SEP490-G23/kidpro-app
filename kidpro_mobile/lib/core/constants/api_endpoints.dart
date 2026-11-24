@@ -171,6 +171,9 @@ class ApiEndpoints {
   static const equipmentIncidents = '/api/academic/equipment/incidents';
   static String equipmentIncidentsByClass(String classroomId) =>
       '/api/academic/equipment/incidents/class/$classroomId';
+  // Danh mục thiết bị của lớp để chọn khi báo hỏng (UC-67 bước 2)
+  static String classEquipmentOptions(String classId) =>
+      '/api/academic/equipment/incidents/class/$classId/equipment';
 
   // Teacher Leave Request Review (G10-UC-09, BR-064, BR-065)
   static const teacherLeaveRequests = '/api/teachers/leave-requests';
@@ -218,6 +221,8 @@ class ApiEndpoints {
   static String parentClassAnnouncements(String studentId) => '/api/parents/students/$studentId/class-announcements';
   // UC-26: đơn thôi học / chuyển trường
   static const parentWithdrawalRequests = '/api/parents/withdrawal-requests';
+  // UC-28 / BR-018: đăng ký / đổi gói bán trú
+  static String parentBoardingPackage(String studentId) => '/api/parents/students/$studentId/boarding-package';
   static String medicationAdminister(String id) =>
       '/api/health/medications/$id/administer';
   static const mealRecords = '/api/health/meal-records';
@@ -232,6 +237,11 @@ class ApiEndpoints {
       '/api/chat/threads/$threadId/messages';
   static String chatMarkRead(String threadId) =>
       '/api/chat/threads/$threadId/read';
+
+  // Parent surveys (G11-UC-06)
+  static const parentOpenSurveys = '/api/surveys/my-open';
+  static String surveyDetail(String id) => '/api/surveys/$id';
+  static String surveySubmit(String id) => '/api/surveys/$id/responses';
 
   // Notifications
   static const notifications = '/api/notifications';

@@ -1,3 +1,6 @@
+import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
+import 'package:kidpro_mobile/core/network/api_client.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -29,7 +32,7 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
     final List<_RequestCategoryItem> items = [
       _RequestCategoryItem(
         title: 'Đơn xin nghỉ học',
-        subtitle: 'Hoàn tiền ăn theo BR-064 khi gửi trước 08:00 sáng',
+        subtitle: 'Gửi trước 08:00: vắng có phép + trừ tiền ăn sáng/trưa; sau 08:00: vắng không phép',
         icon: Icons.event_busy,
         color: AppColors.warning,
         badge: 'G10-UC-08',
@@ -114,6 +117,17 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
         color: Colors.blueGrey,
         badge: 'G4-UC-05',
         onTap: () => _showOtherRequestDialog(context, prov),
+      ),
+      _RequestCategoryItem(
+        title: 'Gói ăn bán trú',
+        subtitle: student == null
+            ? 'Đăng ký gói sáng-trưa-xế hoặc trưa-xế'
+            : 'Đang dùng: ${student.boardingPackageLabel ?? student.boardingPackage}'
+                '${student.pendingBoardingPackage != null ? ' • đổi từ ${student.pendingPackageFrom}' : ''}',
+        icon: Icons.restaurant,
+        color: Colors.deepOrange,
+        badge: 'UC-28',
+        onTap: () => _showBoardingPackageDialog(context, prov),
       ),
       _RequestCategoryItem(
         title: 'Đơn thôi học / chuyển trường',
@@ -233,6 +247,72 @@ class _RequestCenterScreenState extends State<RequestCenterScreen> {
   // ==========================================
   // FORM 1: CHUYỂN LỚP (G4-UC-04)
   // ==========================================
+  /// UC-28 / BR-018: chọn gói bán trú, áp dụng từ đầu tháng sau.
+  void _showBoardingPackageDialog(BuildContext context, ParentProvider prov) {
+    final student = prov.selectedStudent;
+    if (student == null) return;
+    String selected = student.pendingBoardingPackage ?? student.boardingPackage;
+    const options = [
+      ('FULL', 'Bán trú hoàn toàn (sáng, trưa, xế)', 'Báo nghỉ trước 08:00 sáng ngày nghỉ để được giảm trừ tiền ăn'),
+      ('LUNCH_SNACK', 'Bán trú trưa (trưa, xế)', 'Báo nghỉ trước 08:00 sáng ngày nghỉ để được giảm trừ tiền ăn'),
+      ('NONE', 'Không ăn bán trú', 'Không thu tiền ăn bán trú'),
+    ];
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('Gói ăn bán trú'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Đang dùng: ${student.boardingPackageLabel ?? student.boardingPackage}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              const Text('Gói mới được áp dụng từ ngày 1 tháng sau.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 8),
+              ...options.map((o) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(selected == o.$1 ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                        color: selected == o.$1 ? AppColors.primary : Colors.grey),
+                    title: Text(o.$2, style: const TextStyle(fontSize: 14)),
+                    subtitle: Text(o.$3, style: const TextStyle(fontSize: 12)),
+                    onTap: () => setD(() => selected = o.$1),
+                  )),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Đóng')),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                String msg;
+                bool ok = false;
+                try {
+                  final res = await ApiClient().dio.put(ApiEndpoints.parentBoardingPackage(student.studentId),
+                      data: {'boardingPackage': selected});
+                  msg = res.data is Map ? (res.data['message']?.toString() ?? 'Đã lưu.') : 'Đã lưu.';
+                  ok = true;
+                  await prov.loadMyStudents();
+                } on DioException catch (e) {
+                  msg = (e.response?.data is Map ? e.response?.data['message']?.toString() : null) ??
+                      'Không lưu được gói bán trú.';
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(msg),
+                    backgroundColor: ok ? AppColors.success : AppColors.error,
+                  ));
+                }
+              },
+              child: const Text('Lưu'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showClassTransferDialog(BuildContext context, ParentProvider prov) {
     String? selectedToClassId =
         prov.availableClasses.isNotEmpty ? prov.availableClasses.first.id : null;
