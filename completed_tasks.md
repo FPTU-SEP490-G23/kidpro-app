@@ -577,3 +577,13 @@
 - Nộp đơn trước 08:00 ngày nghỉ: hệ thống tự điểm danh VẮNG CÓ PHÉP (ABSENT_WITH_LEAVE) + trừ tiền ăn sáng & trưa vào hóa đơn cuối tháng.
 - Nộp từ 08:00: tự điểm danh VẮNG KHÔNG PHÉP (ABSENT_WITHOUT_LEAVE), không trừ tiền ăn. Bỏ mốc 07:00 cũ.
 - Sửa LeaveRequestServiceImpl, TuitionManagementServiceImpl, test; cập nhật text trên app phụ huynh/giáo viên.
+## 2026-11-24: Chỉ xem lớp sau khi phân công giáo viên được duyệt
+- Ứng dụng giáo viên chỉ hiển thị/tải dữ liệu lớp từ danh sách phân công `APPROVED`; làm trống dữ liệu lớp cũ khi không còn quyền và hiển thị lỗi khi không kiểm tra được phân công.
+- Backend lọc `/api/teachers/my-classes` theo phân công `APPROVED` và trả `403` nếu giáo viên chưa được duyệt khi gọi API danh sách học sinh hoặc tổng quan lớp.
+
+## 2026-11-24: Sửa lỗi analyzer ở màn hình camera đón trẻ
+- Bỏ các gán đến `_faceDetectedTime` không được khai báo/không được sử dụng; reset trạng thái liveness khi khuôn mặt rời khung hình.
+
+## 2026-11-24: Cập nhật đăng ký xe buýt và gỡ trang quyền riêng tư AI
+- Lựa chọn tuyến xe hiển thị điểm đầu/điểm cuối; bỏ nhập địa chỉ tận nơi và dùng địa chỉ điểm dừng đã chọn khi gửi đăng ký.
+- Gỡ trang quyền riêng tư AI khỏi dashboard, trung tâm yêu cầu và router cùng các phần mobile chỉ phục vụ trang này.

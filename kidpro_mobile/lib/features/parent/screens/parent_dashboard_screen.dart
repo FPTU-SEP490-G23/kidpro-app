@@ -746,13 +746,6 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.shield_outlined, color: Colors.indigo),
-                  title: const Text('Quyền riêng tư AI (Nghị định 13)'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/parent/biometric-purge'),
-                ),
-                const Divider(height: 1),
-                ListTile(
                   leading: const Icon(Icons.lock_outline, color: Colors.blueGrey),
                   title: const Text('Đổi mật khẩu'),
                   subtitle: const Text('Cập nhật mật khẩu bảo mật tài khoản'),

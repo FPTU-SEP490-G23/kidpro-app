@@ -564,52 +564,6 @@ class ParentProvider extends ChangeNotifier {
     }
   }
 
-  // ── 7. DECREE 13 BIOMETRIC PURGE (UC-Decree13) ──
-  BiometricPurgeCertificate? _purgeCertificate;
-  BiometricPurgeCertificate? get purgeCertificate => _purgeCertificate;
-
-  /// Gửi OTP xóa dữ liệu sinh trắc. Trả về (thành công, OTP demo nếu server trả về, thông báo lỗi).
-  Future<(bool, String?, String?)> requestPurgeOtp([String? studentId]) async {
-    final targetId = (studentId != null && studentId.isNotEmpty)
-        ? studentId
-        : _selectedStudentId;
-    if (targetId.isEmpty) return (false, null, 'Chưa chọn bé.');
-
-    try {
-      final res = await _dio.post(ApiEndpoints.parentBiometricPurgeOtp(targetId));
-      final data = res.data is Map ? res.data as Map : const {};
-      return (true, (data['demoOtp'] ?? data['otp'])?.toString(), null);
-    } on DioException catch (e) {
-      logError('requestPurgeOtp', e);
-      final msg = e.response?.data is Map ? e.response?.data['message']?.toString() : null;
-      return (false, null, msg ?? 'Không gửi được mã OTP. Vui lòng thử lại.');
-    }
-  }
-
-  Future<bool> confirmBiometricPurge(String otpCode, String reason,
-      [String? studentId]) async {
-    final targetId = (studentId != null && studentId.isNotEmpty)
-        ? studentId
-        : _selectedStudentId;
-    if (targetId.isEmpty) return false;
-
-    try {
-      final res = await _dio.post(
-        ApiEndpoints.parentBiometricPurgeConfirm(targetId),
-        data: {'otpCode': otpCode, 'reason': reason},
-      );
-      _purgeCertificate = BiometricPurgeCertificate.fromJson(res.data);
-      notifyListeners();
-      return true;
-    } on DioException catch (e) {
-      logError('confirmBiometricPurge', e);
-      _purgeCertificate = null;
-      _error = e.response?.data?['message']?.toString() ?? e.message;
-      notifyListeners();
-      return false;
-    }
-  }
-
   // ── 8. CHAT ──
   List<ChatThread> _chatThreads = [];
   List<ChatMessage> _messages = [];

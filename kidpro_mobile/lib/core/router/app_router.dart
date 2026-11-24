@@ -12,7 +12,6 @@ import 'package:kidpro_mobile/features/parent/screens/chat_detail_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/emergency_pickup_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/authorized_guardians_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/allergy_profile_screen.dart';
-import 'package:kidpro_mobile/features/parent/screens/biometric_purge_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/records_overview_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/requests_overview_screen.dart';
 import 'package:kidpro_mobile/features/parent/screens/request_center_screen.dart';
@@ -109,9 +108,6 @@ GoRouter appRouter(AuthProvider auth) => GoRouter(
             GoRoute(
                 path: 'allergies',
                 builder: (_, __) => const AllergyProfileScreen()),
-            GoRoute(
-                path: 'biometric-purge',
-                builder: (_, __) => const BiometricPurgeScreen()),
             GoRoute(
                 path: 'face-registration',
                 builder: (_, __) => const FaceRegistrationScreen()),

@@ -116,7 +116,10 @@ class TeacherProfileScreen extends StatelessWidget {
                 child: ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.grey),
                   title: Text(prov.currentClassName),
-                  subtitle: const Text('Chưa có phân công lớp trên hệ thống'),
+                  subtitle: Text(
+                    prov.classAssignmentsError ??
+                        'Chưa có phân công lớp được phê duyệt',
+                  ),
                 ),
               )
             else

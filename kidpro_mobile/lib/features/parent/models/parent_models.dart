@@ -328,37 +328,6 @@ class AllergyAlert {
       );
 }
 
-class BiometricPurgeCertificate {
-  final String studentId;
-  final String studentName;
-  final String certificateCode;
-  final String hashSha256;
-  final String purgedAt;
-  final int deletedFaceVectorsCount;
-  final String message;
-
-  const BiometricPurgeCertificate({
-    required this.studentId,
-    required this.studentName,
-    required this.certificateCode,
-    required this.hashSha256,
-    required this.purgedAt,
-    required this.deletedFaceVectorsCount,
-    required this.message,
-  });
-
-  factory BiometricPurgeCertificate.fromJson(Map<String, dynamic> json) =>
-      BiometricPurgeCertificate(
-        studentId: json['studentId']?.toString() ?? '',
-        studentName: json['studentName'] as String? ?? '',
-        certificateCode: json['certificateCode'] as String? ?? '',
-        hashSha256: json['hashSha256'] as String? ?? '',
-        purgedAt: json['purgedAt'] as String? ?? '',
-        deletedFaceVectorsCount: json['deletedFaceVectorsCount'] as int? ?? 0,
-        message: json['message'] as String? ?? '',
-      );
-}
-
 class ChatThread {
   final String id;
   final String otherPartyName;
@@ -802,11 +771,22 @@ class AvailableOption {
         subtitle: json['roomNumber'] != null ? 'Phòng: ${json['roomNumber']}' : null,
       );
 
-  factory AvailableOption.fromBusJson(Map<String, dynamic> json) => AvailableOption(
-        id: json['busId']?.toString() ?? '',
-        title: 'Tuyến xe: ${json['busNumber'] ?? ""}',
-        subtitle: '${json['routeDescription'] ?? ""} • Tài xế: ${json['driverName'] ?? ""} (${json['driverPhone'] ?? ""})',
-      );
+  factory AvailableOption.fromBusJson(Map<String, dynamic> json) {
+    final routeStart = json['routeStart']?.toString().trim() ?? '';
+    final routeEnd = json['routeEnd']?.toString().trim() ?? '';
+    final routePoints = [
+      if (routeStart.isNotEmpty) 'Điểm đầu: $routeStart',
+      if (routeEnd.isNotEmpty) 'Điểm cuối: $routeEnd',
+    ].join(' • ');
+
+    return AvailableOption(
+      id: json['busId']?.toString() ?? '',
+      title: 'Tuyến xe: ${json['busNumber'] ?? ""}',
+      subtitle: routePoints.isNotEmpty
+          ? routePoints
+          : json['routeDescription']?.toString(),
+    );
+  }
 
   factory AvailableOption.fromExtraJson(Map<String, dynamic> json) => AvailableOption(
         id: json['classId']?.toString() ?? '',
