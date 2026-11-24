@@ -1325,8 +1325,26 @@ class TeacherProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Danh mục thiết bị của lớp để chọn khi báo hỏng (UC-67 bước 2).
+  Future<List<ClassEquipmentOption>> loadClassEquipmentOptions() async {
+    if (_currentClassId.isEmpty) return [];
+    try {
+      final res = await _dio.get(ApiEndpoints.classEquipmentOptions(_currentClassId));
+      final data = res.data;
+      final list = data is Map<String, dynamic> ? (data['data'] as List? ?? []) : (data as List? ?? []);
+      return list.map((e) => ClassEquipmentOption.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (e) {
+      log('loadClassEquipmentOptions error: $e');
+      return [];
+    }
+  }
+
+  /// Gửi phiếu báo hỏng (UC-67): chọn [equipmentId] trong danh mục, hoặc nhập [equipmentName] khi thiết bị chưa có trong danh mục.
   Future<String?> reportEquipmentIncident({
-    required String equipmentName,
+    String? equipmentId,
+    String? equipmentName,
+    int damagedQuantity = 1,
+    String severity = 'NORMAL',
     required String description,
     required String photoUrl,
     String? classroomId,
@@ -1337,15 +1355,17 @@ class TeacherProvider extends ChangeNotifier {
       final res = await _dio.post(
         ApiEndpoints.equipmentIncidents,
         data: {
-          'equipmentName': equipmentName,
+          if (equipmentId != null) 'equipmentId': equipmentId,
+          if (equipmentName != null) 'equipmentName': equipmentName,
+          'damagedQuantity': damagedQuantity,
           'description': description,
-          'severity': 'NORMAL',
+          'severity': severity,
           'photoUrl': uploadedUrl,
           'classroomId': classroomId ?? _currentClassId,
         },
       );
       await loadEquipmentIncidents(_currentClassId);
-      return res.data['message']?.toString() ?? 'MSG-185: Báo cáo sự cố cơ sở vật chất lớp học thành công.';
+      return res.data['message']?.toString() ?? 'Gửi báo cáo sự cố hư hỏng cơ sở vật chất lớp học thành công.';
     } catch (e) {
       await loadEquipmentIncidents(_currentClassId);
       _lastActionFailed = true;

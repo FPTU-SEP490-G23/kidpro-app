@@ -39,7 +39,8 @@ class _LeaveRequestReviewScreenState extends State<LeaveRequestReviewScreen> {
           children: [
             Text(
               isApprove
-                  ? 'Xác nhận duyệt đơn. Hệ thống sẽ tự động đồng bộ điểm danh sang trạng thái "Nghỉ có phép" và tính toán hoàn tiền ăn bếp theo BR-065.'
+                  ? 'Xác nhận duyệt đơn. Điểm danh đã được hệ thống tự đánh khi phụ huynh gửi đơn: '
+                      'trước 08:00 là "Vắng có phép" (trừ tiền ăn sáng + trưa), từ 08:00 là "Vắng không phép" (không trừ tiền ăn).'
                   : 'Vui lòng nhập lý do từ chối đơn:',
               style: const TextStyle(fontSize: 13),
             ),
@@ -196,6 +197,11 @@ class _LeaveRequestReviewScreenState extends State<LeaveRequestReviewScreen> {
                                     ),
                                   ],
                                 ),
+                              )
+                            else
+                              const Text(
+                                'Vắng không phép - không hoàn tiền ăn (nộp từ 08:00)',
+                                style: TextStyle(fontSize: 11, color: Colors.grey),
                               ),
                             if (isPending) ...[
                               const SizedBox(height: 14),

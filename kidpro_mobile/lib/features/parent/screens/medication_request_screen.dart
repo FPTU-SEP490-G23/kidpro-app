@@ -401,6 +401,20 @@ class _MedicationRequestScreenState extends State<MedicationRequestScreen>
                           ),
                         ],
                       ),
+                      if (item.prescriptionPhotoUrl != null && item.prescriptionPhotoUrl!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            item.prescriptionPhotoUrl!,
+                            height: 140,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Text('Không tải được ảnh đơn thuốc',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

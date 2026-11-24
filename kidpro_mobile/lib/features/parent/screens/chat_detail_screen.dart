@@ -89,6 +89,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     itemBuilder: (context, index) {
                       final msg = parentProv.messages[index];
                       final isMe = msg.senderId == currentUserId;
+                      final isTeacher = msg.senderType == 'TEACHER';
+                      final senderLabel = isMe
+                          ? null
+                          : isTeacher
+                              ? 'Giáo viên · ${msg.senderName}'
+                              : '${msg.senderName}${msg.studentName != null ? ' (PH bé ${msg.studentName})' : ''}';
 
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -127,13 +133,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                                 child: Column(
                                   crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                                   children: [
-                                    if (!isMe) ...[
+                                    if (senderLabel != null) ...[
                                       Text(
-                                        msg.senderName.isNotEmpty ? msg.senderName : 'Giáo viên',
-                                        style: const TextStyle(
+                                        senderLabel,
+                                        style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 12,
-                                          color: AppColors.primaryDark,
+                                          color: isTeacher ? AppColors.primaryDark : Colors.black54,
                                         ),
                                       ),
                                       const SizedBox(height: 3),

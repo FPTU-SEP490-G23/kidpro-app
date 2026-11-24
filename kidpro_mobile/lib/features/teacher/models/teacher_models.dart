@@ -599,36 +599,78 @@ class DevelopmentEvaluationItem {
 }
 
 // ── Classroom Equipment Incident (G9-UC-06, BR-051, BR-052) ──
+/// Thiết bị trong danh mục tài sản của lớp (UC-67 bước 2).
+class ClassEquipmentOption {
+  final String equipmentId;
+  final String equipmentCode;
+  final String name;
+  final int goodQuantity;
+  final int damagedQuantity;
+
+  const ClassEquipmentOption({
+    required this.equipmentId,
+    required this.equipmentCode,
+    required this.name,
+    required this.goodQuantity,
+    required this.damagedQuantity,
+  });
+
+  factory ClassEquipmentOption.fromJson(Map<String, dynamic> json) => ClassEquipmentOption(
+        equipmentId: json['equipmentId']?.toString() ?? '',
+        equipmentCode: json['equipmentCode']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        goodQuantity: (json['goodQuantity'] as num?)?.toInt() ?? 0,
+        damagedQuantity: (json['damagedQuantity'] as num?)?.toInt() ?? 0,
+      );
+}
+
 class EquipmentIncidentItem {
-  final int incidentId;
+  final String incidentId;
   final String equipmentName;
+  final String? equipmentCode;
+  final int damagedQuantity;
+  final String severity; // NORMAL, URGENT
   final String classroomName;
   final String description;
   final String? photoUrl;
-  final String status; // REPORTED, IN_REPAIR, REPAIRED
+  final String status; // PENDING, IN_PROGRESS, RESOLVED
   final DateTime createdAt;
+  final String? handledByName;
+  final String? handlerNote;
 
   const EquipmentIncidentItem({
     required this.incidentId,
     required this.equipmentName,
+    this.equipmentCode,
+    this.damagedQuantity = 1,
+    this.severity = 'NORMAL',
     required this.classroomName,
     required this.description,
     this.photoUrl,
     required this.status,
     required this.createdAt,
+    this.handledByName,
+    this.handlerNote,
   });
 
-  factory EquipmentIncidentItem.fromJson(Map<String, dynamic> json) => EquipmentIncidentItem(
-        incidentId: (json['incidentId'] as num?)?.toInt() ?? 0,
-        equipmentName: json['equipmentName'] as String? ?? '',
-        classroomName: json['classroomName'] as String? ?? 'Lớp học',
-        description: json['description'] as String? ?? '',
-        photoUrl: json['photoUrl'] as String?,
-        status: json['status'] as String? ?? 'REPORTED',
-        createdAt: json['createdAt'] != null
-            ? DateTime.parse(json['createdAt'] as String)
-            : DateTime.now(),
-      );
+  factory EquipmentIncidentItem.fromJson(Map<String, dynamic> json) {
+    // Backend trả incidentId dạng UUID và thời gian báo ở reportedAt
+    final at = json['reportedAt'] ?? json['createdAt'];
+    return EquipmentIncidentItem(
+      incidentId: json['incidentId']?.toString() ?? '',
+      equipmentName: json['equipmentName'] as String? ?? '',
+      equipmentCode: json['equipmentCode'] as String?,
+      damagedQuantity: (json['damagedQuantity'] as num?)?.toInt() ?? 1,
+      severity: json['severity']?.toString() ?? 'NORMAL',
+      classroomName: json['classroomName'] as String? ?? 'Lớp học',
+      description: json['description'] as String? ?? '',
+      photoUrl: json['photoUrl'] as String?,
+      status: json['status'] as String? ?? 'PENDING',
+      createdAt: at != null ? DateTime.tryParse(at.toString()) ?? DateTime.now() : DateTime.now(),
+      handledByName: json['handledByName'] as String?,
+      handlerNote: json['handlerNote'] as String?,
+    );
+  }
 }
 
 // ── Leave Request Review (G10-UC-09, BR-064, BR-065) ──

@@ -525,3 +525,55 @@
 
 ## 2026-11-11: Nhật ký giấc ngủ – hiện thời lượng ngủ (TC "Nap record outside standard time")
 - Màn Nhật ký giấc ngủ: hiện "Thời lượng ngủ: N phút" ngay dưới giờ ngủ/thức; lưu xong SnackBar kèm "(Thời lượng ngủ: N phút)" lấy từ napDurationMinutes backend tính.
+
+## 2026-11-22: Sửa lỗi báo hỏng thiết bị (CSVC) không thêm được
+- Nguyên nhân: app giáo viên gửi mã lớp (classId) nhưng ClassroomEquipmentServiceImpl tìm theo mã phòng học, gây lỗi "Không tìm thấy phòng học"; danh sách cũng lọc theo mã phòng nên phiếu mới không hiện.
+- Sửa: backend nhận cả mã lớp lẫn mã phòng học, quy về phòng học của lớp cho cả gửi và xem danh sách; thêm @Transactional; thêm 1 unit test (8/8 qua).
+
+## 2026-11-22: Sửa lỗi tải ảnh "Identifier of entity FileEntity must be manually assigned"
+- Nguyên nhân: FileEntity thiếu @GeneratedValue nên mọi chỗ lưu file mới (upload ảnh giáo viên, cấp thuốc, khuôn mặt đón trẻ) đều lỗi.
+- Sửa: thêm @GeneratedValue(strategy = GenerationType.UUID); AuthServiceImpl lấy fileId từ bản ghi đã lưu thay vì tự gán.
+
+## 2026-11-22: Phiếu báo hỏng CSVC lưu DB + giáo vụ xử lý trên web
+- Backend: bảng facility.equipment_incident (docs/migration_equipment_incident.sql), entity EquipmentIncident, EquipmentIncidentRepository; ClassroomEquipmentServiceImpl lưu DB thay cho bộ nhớ tạm, ghi người báo; API GET /api/academic/equipment/incidents?status= và PATCH /{id}/status cho giáo vụ (PENDING/IN_PROGRESS/RESOLVED). Test 8/8.
+- App giáo viên: sửa EquipmentIncidentItem (incidentId UUID, reportedAt) nên danh sách phiếu đã gửi hiện lại; hiện ghi chú của giáo vụ.
+- Web giáo vụ: tab EquipmentIncidentReportsTab tại /academic/equipment-incidents, menu "Phiếu Báo Hỏng CSVC" (GIAO_VU, BGH).
+
+## 2026-11-22: Sửa tràn chữ thẻ phiếu báo hỏng (app giáo viên)
+- Tên thiết bị bọc Expanded để tự xuống dòng; rút gọn nhãn trạng thái (CHỜ XỬ LÝ / ĐANG SỬA / ĐÃ SỬA XONG).
+
+## 2026-11-22: Báo hỏng CSVC & kế hoạch sửa chữa / mua sắm theo RP3 UC-66 A1, UC-67, BR-052
+- DB: docs/migration_facility_uc66_uc67.sql (equipment_incident thêm equipment_id, damaged_quantity, severity NORMAL/URGENT; bảng facility.maintenance_proposal).
+- Backend: báo hỏng chọn thiết bị trong danh mục phòng (GET .../incidents/class/{id}/equipment), chuyển số lượng GOOD->DAMAGED khi báo và DAMAGED->GOOD khi sửa xong; MSG-214/215/216; báo cả BGH + giáo vụ, khẩn cấp nhắc 2 giờ; ảnh facility chỉ JPG/PNG <= 10MB. Kế hoạch sửa chữa/mua sắm /api/academic/equipment/proposals: sửa chữa <= 10 triệu giáo vụ tự duyệt, > 10 triệu và mua sắm chờ BGH; BGH duyệt MSG-217 / từ chối (bắt buộc lý do) / MSG-218. Test 10 + 5 qua.
+- Web: giáo viên chọn thiết bị trong danh mục; giáo vụ có cảnh báo quá 2 giờ, nút "Lập kế hoạch sửa chữa", tab "Kế hoạch sửa chữa / mua sắm"; BGH tab "Sửa Chữa & Mua Sắm CSVC" (/bgh/school-setup?tab=facility); đề xuất mua sắm ở trang kiểm kê lớp gọi API thật, chặn 0 hạng mục.
+- App: form báo hỏng chọn thiết bị trong danh mục, số lượng, mức độ, kiểm tra ảnh.
+- Test WF14 (VI/EN): TC 01-07 sửa theo code, thêm Phase 6 TC 17-19, Cover v8.3 (331 TC).
+
+## 2026-11-22: Hiển thị người gửi trong chat nhóm lớp (app phụ huynh)
+- App: ChatMessage đọc thêm senderType, studentName; màn chat_detail_screen hiển thị nhãn trên bong bóng tin nhắn của người khác: "Giáo viên · {tên}" (màu primary) hoặc "{tên} (PH bé {tên con})". BE đã trả sẵn các trường này, không đổi BE.
+
+## 2026-11-23: Sửa lịch sử dặn thuốc trống trên app phụ huynh
+- Backend: GET /api/parents/medications đọc query param tên "studentIdParam" trong khi app gửi "studentId" -> luôn trả danh sách rỗng. Đổi thành @RequestParam(name = "studentId") (giống ParentAllergyPortalController). Đơn vẫn được lưu bình thường, chỉ lỗi khi đọc lại.
+
+## 2026-11-23: Gắn ảnh đơn thuốc (Cloudinary) và lưu đúng nội dung đơn dặn thuốc từ app
+- Backend: POST /api/parents/medications nay đọc prescriptionPhotoId (ảnh đã upload Cloudinary qua /prescription-photo, folder kidpro/prescriptions) và nhận instructions/startDate/endDate từ app; vẫn tương thích kiểu web (medicationName/dosage/courseDays). Trước đây bỏ qua các trường này nên đơn lưu "Thuốc | 1 liều" và mất ảnh.
+- App: thẻ lịch sử dặn thuốc hiển thị ảnh đơn thuốc từ prescriptionPhotoUrl.
+
+## 2026-11-23: Thông báo chuông cho luồng dặn thuốc (phụ huynh + giáo viên)
+- Backend MedicationAdminServiceImpl: dùng SystemNotificationService.notifyUser (ghi sau commit). Gửi đơn -> giáo viên được phân công lớp (ưu tiên APPROVED) + xác nhận cho phụ huynh; giáo viên tiếp nhận / từ chối (kèm lý do) / cho uống (kèm giờ) -> phụ huynh; phụ huynh hủy đơn -> giáo viên. Lỗi gửi thông báo không làm hỏng nghiệp vụ.
+- NotificationController.inferType: nhận diện "dặn thuốc" là REQUEST. Unit test MedicationAdminServiceImplTest thêm mock, 8/8 pass.
+
+## 2026-11-23: Sửa "Ngày đo" trống ở Sổ y tế WHO (app phụ huynh)
+- App HealthGrowthMetricModel: đọc measurementDate (BE) thay vì measuredDate, hiển thị dd/MM/yyyy; đọc zscoreStatus (enum NORMAL/MALNUTRITION/UNDERWEIGHT/OBESE) và hiển thị nhãn tiếng Việt thay vì luôn "Bình thường".
+
+## 2026-11-23: Khảo sát ý kiến phụ huynh trên app (G11-UC-06)
+- App: màn "Khảo sát ý kiến" (danh sách khảo sát đang mở, trạng thái Chưa làm/Đã gửi) và màn điền khảo sát (chọn 1, chọn nhiều, chấm 1-5 sao, góp ý tự do; kiểm tra câu bắt buộc) - survey_screens.dart, route /parent/surveys và /parent/surveys/:id, ô "Khảo sát" trên dashboard. Thông báo "[KHẢO SÁT Ý KIẾN]" có nút "Làm khảo sát ngay" mở thẳng phiếu tương ứng.
+- Backend: GET /api/surveys/my-open (khảo sát PUBLISHED còn hạn, lọc theo khối của con, kèm hasSubmitted); check-submission kiểm tra thật theo tài khoản; nộp phiếu gắn tài khoản đang đăng nhập, chặn nộp trùng, chặn phiếu nháp/hết hạn/chưa mở, bắt buộc trả lời câu bắt buộc. Thông báo khảo sát có actionUrl /parent?tab=survey. SurveyServiceImplTest 7/7 pass.
+
+## 2026-11-24: Giáo viên chưa có lớp vẫn vào được phần xe buýt
+- App teacher_dashboard_screen.dart: khi giáo viên chưa được phân công lớp nhưng có phân công phụ trách xe (finance.teacher_bus_assignment, hasBusAssignment) thì dưới thẻ "Chưa Được Phân Công Lớp" hiện mục "NHIỆM VỤ ĐƯỢC GIAO" với nút "Xe buýt - Điểm danh & Đóng chuyến" mở /teacher/bus. Trước đây toàn bộ thao tác nhanh (kể cả xe buýt) bị ẩn khi chưa có lớp.
+
+## Quy tắc mốc 08:00 cho đơn xin nghỉ (2026-11-24)
+- Nộp đơn trước 08:00 ngày nghỉ: hệ thống tự điểm danh VẮNG CÓ PHÉP (ABSENT_WITH_LEAVE) + trừ tiền ăn sáng & trưa vào hóa đơn cuối tháng.
+- Nộp từ 08:00: tự điểm danh VẮNG KHÔNG PHÉP (ABSENT_WITHOUT_LEAVE), không trừ tiền ăn. Bỏ mốc 07:00 cũ.
+- Sửa LeaveRequestServiceImpl, TuitionManagementServiceImpl, test; cập nhật text trên app phụ huynh/giáo viên.

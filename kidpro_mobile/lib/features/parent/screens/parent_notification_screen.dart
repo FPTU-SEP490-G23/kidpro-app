@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
@@ -189,6 +190,30 @@ class _ParentNotificationScreenState extends State<ParentNotificationScreen>
               ),
             ),
             const SizedBox(height: 20),
+            // Lời mời khảo sát: mở thẳng màn làm khảo sát
+            if (item.title.contains('[KHẢO SÁT Ý KIẾN]')) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push(Uri(
+                      path: '/parent/surveys',
+                      queryParameters: {'open': item.title},
+                    ).toString());
+                  },
+                  icon: const Icon(Icons.edit_note),
+                  label: const Text('Làm khảo sát ngay', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(

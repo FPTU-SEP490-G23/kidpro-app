@@ -46,6 +46,8 @@ class _ParentPickupCameraScreenState extends State<ParentPickupCameraScreen>
   // Liveness: phải thấy mắt mở -> nhắm -> mở (chớp mắt 80-1800 ms) mới chụp, chống dùng ảnh in/màn hình
   bool _sawEyesOpen = false;
   DateTime? _eyesClosedAt;
+  // Thời điểm phát hiện khuôn mặt vào khung hình
+  DateTime? _faceDetectedTime;
   bool _livenessPassed = false;
   // Ảnh đã chụp của lần nhận diện gần nhất, dùng lại khi cô giáo bấm xác nhận bàn giao
   Uint8List? _lastPhotoBytes;

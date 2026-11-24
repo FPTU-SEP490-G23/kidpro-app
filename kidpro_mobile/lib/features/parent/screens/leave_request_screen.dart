@@ -68,22 +68,23 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen>
       return;
     }
 
-    // Check cutoff: if start date is today and past 08:00 AM
+    // Mốc 08:00 (cả bữa sáng và bữa trưa): trước 08:00 -> vắng có phép + trừ tiền ăn;
+    // từ 08:00 -> vắng không phép, không trừ tiền ăn ngày hôm đó.
     final now = DateTime.now();
     final isToday = _startDate.year == now.year &&
         _startDate.month == now.month &&
         _startDate.day == now.day;
-    final isAfter8Am = now.hour > 8 || (now.hour == 8 && now.minute > 0);
+    final isAfterCutoff = now.hour >= 8;
 
     bool eligibleMealRefund = true;
-    if (isToday && isAfter8Am) {
+    if (isToday && isAfterCutoff) {
       eligibleMealRefund = false;
       final proceed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Quá 08:00 AM (BR-036)'),
+          title: const Text('Đã quá 08:00'),
           content: const Text(
-            'Đơn xin nghỉ nộp sau 08:00 sáng hôm nay sẽ KHÔNG được hoàn tiền ăn bán trú của ngày hôm nay theo quy chế nhà trường.\n\nBạn vẫn muốn tiếp tục gửi đơn?',
+            'Đơn nghỉ gửi từ 08:00 sáng hôm nay sẽ được ghi nhận VẮNG KHÔNG PHÉP và KHÔNG được trừ tiền ăn sáng/trưa của ngày hôm nay.\n\nBạn vẫn muốn tiếp tục gửi đơn?',
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy bỏ')),
@@ -182,7 +183,8 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen>
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Quy định BR-018 / BR-036: Đơn xin nghỉ nộp trước 08:00 sáng sẽ được hệ thống tự động hoàn lại tiền ăn bán trú vào hóa đơn kỳ tới.',
+                      'Gửi đơn trước 08:00 sáng ngày nghỉ: bé được điểm danh VẮNG CÓ PHÉP và trừ tiền ăn sáng, ăn trưa '
+                      '(nếu có đăng ký) vào hóa đơn cuối tháng. Gửi từ 08:00 trở đi: VẮNG KHÔNG PHÉP, không trừ tiền ăn ngày đó.',
                       style: TextStyle(color: Colors.orange.shade900, fontSize: 13, height: 1.4),
                     ),
                   ),
@@ -416,7 +418,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen>
                           Text(
                             req.eligibleForMealRefund
                                 ? 'Đủ điều kiện hoàn tiền ăn bán trú'
-                                : 'Không hoàn tiền ăn (Nộp sau 08:00 AM)',
+                                : 'Không hoàn tiền ăn (nộp sau mốc báo ăn của gói bán trú)',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
