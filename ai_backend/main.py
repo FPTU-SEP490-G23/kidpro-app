@@ -640,7 +640,8 @@ def sync_pickup_encodings_from_backend(backend_url: str) -> dict:
     if not backend_url:
         raise RuntimeError("BACKEND_URL chưa được cấu hình.")
 
-    url = f"{backend_url.rstrip('/')}/api/internal/ai/face-encodings/pickup"
+    base_url = f"{backend_url.rstrip('/')}/api/internal/ai/face-encodings"
+    url = f"{base_url}/pickup"
     headers = {
         "User-Agent": "KidPro-AI-Engine",
         "X-Internal-Service-Key": INTERNAL_SERVICE_KEY,
@@ -660,7 +661,7 @@ def sync_pickup_encodings_from_backend(backend_url: str) -> dict:
         if embedding is None:
             raise RuntimeError(f"Không thể tạo vector cho faceFileId={face_file.get('faceFileId')}.")
 
-        update_url = f"{url}/{face_file['faceFileId']}"
+        update_url = f"{base_url}/{face_file['faceFileId']}"
         update_body = json.dumps({
             "faceEmbedding": embedding.tolist(),
             "modelName": MODEL_NAME,
