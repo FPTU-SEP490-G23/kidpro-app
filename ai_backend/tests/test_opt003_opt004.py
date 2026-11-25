@@ -6,6 +6,7 @@ import cv2
 from fastapi.testclient import TestClient
 import sys
 
+os.environ.setdefault("INTERNAL_SERVICE_KEY", "test-internal-key")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from main import (
