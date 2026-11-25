@@ -6,6 +6,7 @@ import pickle
 import sqlite3
 import threading
 import urllib.request
+from urllib.parse import urljoin, urlsplit
 from datetime import datetime
 from typing import List, Optional
 
@@ -35,11 +36,14 @@ ONNX_INTER_THREADS = int(os.getenv("ONNX_INTER_THREADS", "1"))
 DB_PATH = os.getenv("DB_PATH", "attendance.db")
 EMBEDDINGS_FILE = os.getenv("EMBEDDINGS_FILE", "embeddings.npz")
 PICKUP_CACHE_FILE = os.getenv("PICKUP_CACHE_FILE", "pickup_embeddings.pkl")
+BACKEND_URL = os.getenv("BACKEND_URL", "").rstrip("/")
+VECTOR_STORE_MODE = os.getenv("VECTOR_STORE_MODE", "database").strip().lower()
+DATABASE_VECTOR_STORE = VECTOR_STORE_MODE == "database"
 # SIMILARITY_THRESHOLD removed in OPT-002: Single Source of Truth on Spring Boot
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.60"))
 PICKUP_FACE_THRESHOLD = float(os.getenv("PICKUP_FACE_THRESHOLD", "0.60"))
 BLUR_THRESHOLD = float(os.getenv("BLUR_THRESHOLD", "50.0"))
-INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "kidpro_internal_secret_key_2026")
+INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "")
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "face_yolov8n.pt")
 YOLO_FACE_MODEL_PATH = os.getenv("YOLO_FACE_MODEL_PATH", YOLO_MODEL_PATH)
 ARCFACE_MODEL_PATH = os.getenv("ARCFACE_MODEL_PATH", "arcface_w600k_r50.onnx")
@@ -54,7 +58,7 @@ def verify_internal_key(x_internal_service_key: Optional[str] = Header(None, ali
     OPT-003: Constant-time authentication for internal server-to-server calls.
     Rejects unauthenticated direct client access.
     """
-    if not x_internal_service_key or not hmac.compare_digest(x_internal_service_key, INTERNAL_SERVICE_KEY):
+    if not INTERNAL_SERVICE_KEY or not x_internal_service_key or not hmac.compare_digest(x_internal_service_key, INTERNAL_SERVICE_KEY):
         raise HTTPException(
             status_code=401,
             detail="UNAUTHORIZED: Missing or invalid X-Internal-Service-Key"
@@ -233,9 +237,13 @@ def check_image_blur(img: np.ndarray, threshold: float = BLUR_THRESHOLD) -> tupl
 async def lifespan(app: FastAPI):
     global yolo_detector, face_detector, arcface_session, arcface_input_name, arcface_output_name
     print("🚀 [Lifespan] Khởi tạo AI Engine và nạp weights mô hình...")
+    if not INTERNAL_SERVICE_KEY:
+        raise RuntimeError("INTERNAL_SERVICE_KEY phải được cấu hình trước khi chạy AI Backend.")
+    if VECTOR_STORE_MODE not in ("database", "file"):
+        raise RuntimeError("VECTOR_STORE_MODE chỉ nhận 'database' hoặc 'file'.")
+    if DATABASE_VECTOR_STORE and not BACKEND_URL:
+        raise RuntimeError("BACKEND_URL phải được cấu hình khi VECTOR_STORE_MODE=database.")
     init_db()
-    load_embeddings_cache()
-    load_pickup_cache()
 
     # 1. Load YOLOv8-Face detector (OPT-001)
     model_path_to_use = YOLO_FACE_MODEL_PATH if os.path.exists(YOLO_FACE_MODEL_PATH) else YOLO_MODEL_PATH
@@ -268,6 +276,15 @@ async def lifespan(app: FastAPI):
     arcface_output_name = arcface_session.get_outputs()[0].name
     app.state.arcface_session = arcface_session
     print("✅ ArcFace ONNX feature extractor đã sẵn sàng!")
+
+    if DATABASE_VECTOR_STORE:
+        sync_embeddings_from_backend(BACKEND_URL)
+        sync_pickup_encodings_from_backend(BACKEND_URL)
+        update_pickup_cache_atomic({})
+        print("✅ Đã nạp vector khuôn mặt từ Spring Boot/PostgreSQL.")
+    else:
+        load_embeddings_cache()
+        load_pickup_cache()
 
     yield
 
@@ -340,6 +357,9 @@ def load_embeddings_cache():
 
 def save_embeddings_cache():
     global cached_pipeline_version
+    if DATABASE_VECTOR_STORE:
+        return
+
     snap_embeddings, snap_student_ids = get_embeddings_snapshot()
     if snap_embeddings is not None and len(snap_student_ids) > 0:
         meta = {
@@ -354,6 +374,10 @@ def save_embeddings_cache():
 
 
 def load_pickup_cache():
+    if DATABASE_VECTOR_STORE:
+        update_pickup_cache_atomic({})
+        return
+
     if os.path.exists(PICKUP_CACHE_FILE):
         try:
             with open(PICKUP_CACHE_FILE, "rb") as f:
@@ -368,6 +392,9 @@ def load_pickup_cache():
 
 
 def save_pickup_cache():
+    if DATABASE_VECTOR_STORE:
+        return
+
     snap_cache = get_pickup_cache_snapshot()
     try:
         with open(PICKUP_CACHE_FILE, "wb") as f:
@@ -447,6 +474,212 @@ def extract_l2_normalized_embedding(img: np.ndarray, require_face: bool = False)
     return combined_emb
 
 
+def _parse_face_embedding(value) -> Optional[np.ndarray]:
+    if value is None:
+        return None
+    try:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                value = np.fromstring(value.strip().strip("[]"), sep=",")
+        embedding = np.asarray(value, dtype=np.float32).reshape(-1)
+    except (TypeError, ValueError):
+        return None
+    if embedding.shape != (EMBEDDING_DIM,) or not np.isfinite(embedding).all():
+        return None
+    if np.linalg.norm(embedding) == 0:
+        return None
+    return embedding
+
+
+def _load_legacy_student_embeddings() -> dict:
+    npz_path = EMBEDDINGS_FILE if EMBEDDINGS_FILE.endswith(".npz") else f"{os.path.splitext(EMBEDDINGS_FILE)[0]}.npz"
+    if not os.path.exists(npz_path):
+        return {}
+
+    try:
+        with np.load(npz_path, allow_pickle=False) as data:
+            metadata = {}
+            meta_raw = data.get("metadata")
+            if meta_raw is not None and len(meta_raw) > 0:
+                metadata = json.loads(str(meta_raw[0]))
+            if metadata.get("pipeline_version") != PIPELINE_VERSION or metadata.get("model_name") != MODEL_NAME:
+                print("⚠️ Bỏ qua vector cũ vì khác phiên bản model/pipeline; sẽ trích xuất lại từ ảnh.")
+                return {}
+            embeddings = data["embeddings"]
+            student_ids = [str(student_id) for student_id in data["student_ids"]]
+            if embeddings.ndim != 2 or embeddings.shape != (len(student_ids), EMBEDDING_DIM):
+                print("⚠️ Bỏ qua file vector cũ do kích thước dữ liệu không hợp lệ.")
+                return {}
+            return {
+                student_id: embedding.astype(np.float32)
+                for student_id, embedding in zip(student_ids, embeddings)
+                if _parse_face_embedding(embedding) is not None
+            }
+    except Exception as exc:
+        print(f"⚠️ Không thể đọc file vector cũ để chuyển dữ liệu: {exc}")
+        return {}
+
+
+class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        source = urlsplit(req.full_url)
+        destination = urlsplit(newurl)
+        if (source.scheme, source.netloc) != (destination.scheme, destination.netloc):
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_internal_request(request, timeout: int):
+    opener = urllib.request.build_opener(_SameOriginRedirectHandler)
+    return opener.open(request, timeout=timeout)
+
+
+def _download_face_embedding(backend_url: str, photo_url: str) -> Optional[np.ndarray]:
+    image_url = photo_url if photo_url.startswith(("http://", "https://")) else urljoin(f"{backend_url}/", photo_url)
+    backend_origin = urlsplit(backend_url)
+    image_origin = urlsplit(image_url)
+    is_backend_origin = (backend_origin.scheme, backend_origin.netloc) == (image_origin.scheme, image_origin.netloc)
+    headers = {"User-Agent": "KidPro-AI-Engine"}
+    if is_backend_origin:
+        headers["X-Internal-Service-Key"] = INTERNAL_SERVICE_KEY
+    request = urllib.request.Request(
+        image_url,
+        headers=headers,
+    )
+    opener = urllib.request.build_opener(_SameOriginRedirectHandler) if is_backend_origin else urllib.request.build_opener()
+    with opener.open(request, timeout=20) as response:
+        image_bytes = response.read()
+    image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+    return extract_l2_normalized_embedding(image) if image is not None else None
+
+
+def sync_embeddings_from_backend(backend_url: str, class_id: Optional[str] = None) -> dict:
+    global cached_pipeline_version
+    if not backend_url:
+        raise RuntimeError("BACKEND_URL chưa được cấu hình.")
+
+    url = f"{backend_url.rstrip('/')}/api/internal/ai/face-encodings"
+    if class_id:
+        url += f"?classId={class_id}"
+    headers = {
+        "User-Agent": "KidPro-AI-Engine",
+        "X-Internal-Service-Key": INTERNAL_SERVICE_KEY,
+    }
+    request = urllib.request.Request(url, headers=headers)
+    with _open_internal_request(request, timeout=30) as response:
+        face_files = json.loads(response.read().decode("utf-8"))
+
+    legacy_embeddings = _load_legacy_student_embeddings()
+    embeddings_by_student = {}
+    migrated_count = 0
+
+    for face_file in face_files:
+        student_id = str(face_file["studentId"])
+        if student_id in embeddings_by_student:
+            raise RuntimeError(f"Nhiều ảnh khuôn mặt đang hoạt động cho học sinh {student_id}.")
+
+        stored_embedding = _parse_face_embedding(face_file.get("faceEmbedding"))
+        stored_is_current = (
+            stored_embedding is not None
+            and face_file.get("modelName") == MODEL_NAME
+            and face_file.get("pipelineVersion") == PIPELINE_VERSION
+        )
+        embedding = stored_embedding if stored_is_current else _parse_face_embedding(legacy_embeddings.get(student_id))
+
+        if embedding is None:
+            photo_url = face_file.get("photoUrl")
+            embedding = _download_face_embedding(backend_url, photo_url) if photo_url else None
+        if embedding is None:
+            raise RuntimeError(f"Không thể tạo vector cho faceFileId={face_file.get('faceFileId')}.")
+
+        if not stored_is_current:
+            update_url = f"{url.split('?')[0]}/{face_file['faceFileId']}"
+            update_body = json.dumps({
+                "faceEmbedding": embedding.tolist(),
+                "modelName": MODEL_NAME,
+                "pipelineVersion": PIPELINE_VERSION,
+            }).encode("utf-8")
+            update_request = urllib.request.Request(
+                update_url,
+                data=update_body,
+                headers={**headers, "Content-Type": "application/json"},
+                method="PUT",
+            )
+            with _open_internal_request(update_request, timeout=30):
+                pass
+            migrated_count += 1
+
+        embeddings_by_student[student_id] = embedding
+
+        connection = sqlite3.connect(DB_PATH)
+        try:
+            connection.execute(
+                "INSERT OR REPLACE INTO students (student_id, name, class_name, class_id) VALUES (?, ?, ?, ?)",
+                (
+                    student_id,
+                    face_file.get("studentName") or "Học sinh",
+                    face_file.get("className") or "",
+                    face_file.get("classId") or class_id or "",
+                ),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    student_ids = list(embeddings_by_student)
+    embeddings = np.vstack([embeddings_by_student[student_id] for student_id in student_ids]) if student_ids else None
+    update_embeddings_atomic(embeddings, student_ids)
+    cached_pipeline_version = PIPELINE_VERSION
+    print(f"📦 Đã nạp {len(student_ids)} vector từ PostgreSQL; đã chuyển/cập nhật {migrated_count} vector.")
+    return {"synced_count": len(student_ids), "migrated_count": migrated_count}
+
+
+def sync_pickup_encodings_from_backend(backend_url: str) -> dict:
+    if not backend_url:
+        raise RuntimeError("BACKEND_URL chưa được cấu hình.")
+
+    url = f"{backend_url.rstrip('/')}/api/internal/ai/face-encodings/pickup"
+    headers = {
+        "User-Agent": "KidPro-AI-Engine",
+        "X-Internal-Service-Key": INTERNAL_SERVICE_KEY,
+    }
+    request = urllib.request.Request(url, headers=headers)
+    with _open_internal_request(request, timeout=30) as response:
+        face_files = json.loads(response.read().decode("utf-8"))
+
+    migrated_count = 0
+    for face_file in face_files:
+        embedding = _parse_face_embedding(face_file.get("faceEmbedding"))
+        if embedding is not None:
+            continue
+
+        photo_url = face_file.get("photoUrl")
+        embedding = _download_face_embedding(backend_url, photo_url) if photo_url else None
+        if embedding is None:
+            raise RuntimeError(f"Không thể tạo vector cho faceFileId={face_file.get('faceFileId')}.")
+
+        update_url = f"{url}/{face_file['faceFileId']}"
+        update_body = json.dumps({
+            "faceEmbedding": embedding.tolist(),
+            "modelName": MODEL_NAME,
+            "pipelineVersion": PIPELINE_VERSION,
+        }).encode("utf-8")
+        update_request = urllib.request.Request(
+            update_url,
+            data=update_body,
+            headers={**headers, "Content-Type": "application/json"},
+            method="PUT",
+        )
+        with _open_internal_request(update_request, timeout=30):
+            pass
+        migrated_count += 1
+
+    print(f"📦 Đã xác minh {len(face_files)} vector phụ huynh/người giám hộ; đã bổ sung {migrated_count} vector.")
+    return {"synced_count": len(face_files), "migrated_count": migrated_count}
+
+
 # ==========================================
 # API ENDPOINTS
 # ==========================================
@@ -468,7 +701,7 @@ def root():
     }
 
 
-@app.post("/api/v1/register")
+@app.post("/api/v1/register", dependencies=[Depends(verify_internal_key)])
 async def register_student(
     student_id: str = Form(..., description="Mã số học sinh"),
     name: str = Form(..., description="Họ và tên học sinh"),
@@ -490,45 +723,48 @@ async def register_student(
     elif err == "NO_FACE":
         raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh chân dung.")
 
-    # 2. Lưu thông tin vào SQLite
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "INSERT OR REPLACE INTO students (student_id, name, class_name, class_id) VALUES (?, ?, ?, ?)",
-            (student_id, name, class_name, class_id),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    # 3. Cập nhật Vector Cache trong RAM nguyên tử
-    with embeddings_lock:
-        snap_emb, snap_ids = get_embeddings_snapshot()
-        if len(snap_ids) > 0 and cached_pipeline_version != PIPELINE_VERSION:
-            raise HTTPException(
-                status_code=409,
-                detail=f"EMBEDDING_VERSION_MISMATCH: Kho vector đang ở phiên bản '{cached_pipeline_version}'. Không thể đăng ký mới khi chưa recalculate sang '{PIPELINE_VERSION}'."
+    if not DATABASE_VECTOR_STORE:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT OR REPLACE INTO students (student_id, name, class_name, class_id) VALUES (?, ?, ?, ?)",
+                (student_id, name, class_name, class_id),
             )
-        if student_id in snap_ids:
-            idx = snap_ids.index(student_id)
-            new_emb = snap_emb.copy()
-            new_emb[idx] = embedding
-            new_ids = list(snap_ids)
-        else:
-            new_ids = list(snap_ids) + [student_id]
-            if snap_emb is None or len(snap_emb) == 0:
-                new_emb = np.expand_dims(embedding, axis=0)
-            else:
-                new_emb = np.vstack([snap_emb, embedding])
-        update_embeddings_atomic(new_emb, new_ids)
+            conn.commit()
+        finally:
+            conn.close()
 
-    # 4. Lưu ra đĩa
-    save_embeddings_cache()
+        # Chế độ độc lập phục vụ phát triển; production nạp lại từ PostgreSQL sau khi Spring commit.
+        global cached_pipeline_version
+        with embeddings_lock:
+            snap_emb, snap_ids = get_embeddings_snapshot()
+            if len(snap_ids) > 0 and cached_pipeline_version != PIPELINE_VERSION:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"EMBEDDING_VERSION_MISMATCH: Kho vector đang ở phiên bản '{cached_pipeline_version}'. Không thể đăng ký mới khi chưa recalculate sang '{PIPELINE_VERSION}'."
+                )
+            if student_id in snap_ids:
+                idx = snap_ids.index(student_id)
+                new_emb = snap_emb.copy()
+                new_emb[idx] = embedding
+                new_ids = list(snap_ids)
+            else:
+                new_ids = list(snap_ids) + [student_id]
+                if snap_emb is None or len(snap_emb) == 0:
+                    new_emb = np.expand_dims(embedding, axis=0)
+                else:
+                    new_emb = np.vstack([snap_emb, embedding])
+            update_embeddings_atomic(new_emb, new_ids)
+            cached_pipeline_version = PIPELINE_VERSION
+        save_embeddings_cache()
 
     return {
         "success": True,
         "student_id": student_id,
+        "embedding": embedding.tolist(),
+        "model_name": MODEL_NAME,
+        "pipeline_version": PIPELINE_VERSION,
         "name": name,
         "class_name": class_name,
         "class_id": class_id,
@@ -536,86 +772,20 @@ async def register_student(
     }
 
 
-@app.post("/api/v1/sync")
-def sync_from_backend(backend_url: str = "http://127.0.0.1:8080", class_id: Optional[str] = None):
-    """Đồng bộ ảnh khuôn mặt học sinh (hỗ trợ lọc phạm vi lớp học class_id) từ Spring Boot Backend vào AI Engine"""
-    global registered_embeddings, registered_student_ids
+@app.post("/api/v1/sync", dependencies=[Depends(verify_internal_key)])
+def sync_from_backend(backend_url: Optional[str] = None, class_id: Optional[str] = None):
+    """Nạp vector học sinh từ kho PostgreSQL thông qua API nội bộ Spring Boot."""
     try:
-        url = f"{backend_url}/api/attendance/face-logs/registered-faces"
-        if class_id:
-            url += f"?classId={class_id}"
-
-        headers = {
-            'User-Agent': 'KidPro-AI-Engine',
-            'X-Internal-Service-Key': INTERNAL_SERVICE_KEY
-        }
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-
-        synced_count = 0
-        for item in data:
-            sid = str(item.get("studentId"))
-            sname = item.get("studentName", "Học sinh")
-            cname = item.get("className", "")
-            cid = item.get("classId") or class_id or ""
-            photo_url = item.get("photoUrl", "")
-            if not photo_url:
-                continue
-
-            # Tải ảnh từ backend URL
-            full_img_url = photo_url if photo_url.startswith("http") else f"{backend_url}{photo_url}"
-            try:
-                img_req = urllib.request.Request(
-                    full_img_url,
-                    headers={'User-Agent': 'KidPro-AI-Engine', 'X-Internal-Service-Key': INTERNAL_SERVICE_KEY}
-                )
-                with urllib.request.urlopen(img_req, timeout=5) as img_resp:
-                    img_bytes = img_resp.read()
-                nparr = np.frombuffer(img_bytes, np.uint8)
-                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                if img is None:
-                    continue
-                emb = extract_l2_normalized_embedding(img)
-                if emb is None:
-                    continue
-
-                with embeddings_lock:
-                    snap_emb, snap_ids = get_embeddings_snapshot()
-                    if sid in snap_ids:
-                        idx = snap_ids.index(sid)
-                        new_emb = snap_emb.copy()
-                        new_emb[idx] = emb
-                        new_ids = list(snap_ids)
-                    else:
-                        new_ids = list(snap_ids) + [sid]
-                        if snap_emb is None or len(snap_emb) == 0:
-                            new_emb = np.expand_dims(emb, axis=0)
-                        else:
-                            new_emb = np.vstack([snap_emb, emb])
-                    update_embeddings_atomic(new_emb, new_ids)
-
-                conn = sqlite3.connect(DB_PATH)
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT OR REPLACE INTO students (student_id, name, class_name, class_id) VALUES (?, ?, ?, ?)",
-                    (sid, sname, cname, cid),
-                )
-                conn.commit()
-                conn.close()
-                synced_count += 1
-            except Exception as e:
-                print(f"Lỗi tải ảnh bé {sid}: {e}")
-
-        save_embeddings_cache()
+        result = sync_embeddings_from_backend(backend_url or BACKEND_URL, class_id)
         _, snap_ids = get_embeddings_snapshot()
         return {
             "success": True,
-            "synced_count": synced_count,
+            **result,
             "total_registered": len(snap_ids),
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"Không thể đồng bộ vector từ PostgreSQL: {e}")
+        raise HTTPException(status_code=502, detail="Không thể đồng bộ vector từ PostgreSQL.")
 
 
 def _sync_extract_and_blur_check(img_bytes: bytes, threshold: float, require_face: bool = False):
@@ -865,7 +1035,7 @@ async def estimate_yaw_endpoint(
         }
 
 
-@app.post("/api/v1/register-pickup")
+@app.post("/api/v1/register-pickup", dependencies=[Depends(verify_internal_key)])
 async def register_pickup_face(
     photo_url: str = Form(""),
     file: UploadFile = File(..., description="Ảnh chân dung người đón"),
@@ -888,7 +1058,7 @@ async def register_pickup_face(
     elif err == "NO_FACE":
         raise HTTPException(status_code=400, detail="Không phát hiện khuôn mặt rõ ràng trong ảnh.")
 
-    # 3. Lưu vào RAM cache và đĩa
+    # Keep a process-local cache; persistent storage is handled by Spring Boot.
     if photo_url:
         with pickup_lock:
             snap_pickup = get_pickup_cache_snapshot()
@@ -899,6 +1069,8 @@ async def register_pickup_face(
     return {
         "status": "SUCCESS",
         "embedding": embedding.tolist(),
+        "model_name": MODEL_NAME,
+        "pipeline_version": PIPELINE_VERSION,
         "photo_url": photo_url,
         "message": "Đã trích xuất và nạp cache vector đặc trưng người đón thành công."
     }
@@ -1026,7 +1198,7 @@ def _sync_recognize_pickup(img_bytes: bytes, class_id: Optional[str], candidates
     }
 
 
-@app.post("/api/v1/recognize-pickup")
+@app.post("/api/v1/recognize-pickup", dependencies=[Depends(verify_internal_key)])
 async def recognize_pickup(
     file: UploadFile = File(..., description="Ảnh chụp khuôn mặt người đến đón"),
     class_id: Optional[str] = Form(None, description="Mã lớp học"),
