@@ -44,24 +44,12 @@ class SecureStorageHelper {
   static Future<String?> getCustomBaseUrl() =>
       _storage.read(key: _baseUrlKey);
 
-  // Custom AI Server URL
-  static const _aiServerUrlKey = 'custom_ai_server_url';
-  static Future<void> saveAiServerUrl(String url) =>
-      _storage.write(key: _aiServerUrlKey, value: url);
-
-  static Future<String?> getAiServerUrl() =>
-      _storage.read(key: _aiServerUrlKey);
-
   // Clear all on logout
   static Future<void> clearAll() async {
     final customUrl = await getCustomBaseUrl();
-    final customAiUrl = await getAiServerUrl();
     await _storage.deleteAll();
     if (customUrl != null) {
       await saveCustomBaseUrl(customUrl); // Preserve server IP across logouts
-    }
-    if (customAiUrl != null) {
-      await saveAiServerUrl(customAiUrl); // Preserve AI Server URL across logouts
     }
   }
 }

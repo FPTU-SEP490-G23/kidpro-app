@@ -19,23 +19,6 @@ class ApiClient {
   String get baseUrl => dio.options.baseUrl;
   String get currentBaseUrl => dio.options.baseUrl;
 
-  /// Tự động lấy URL của AI Backend từ môi trường hoặc theo Host của Backend
-  String get aiBaseUrl {
-    const envAiUrl = String.fromEnvironment('AI_BASE_URL', defaultValue: '');
-    if (envAiUrl.isNotEmpty) {
-      return envAiUrl;
-    }
-    try {
-      final uri = Uri.parse(dio.options.baseUrl);
-      if (uri.host.isNotEmpty) {
-        final scheme = uri.scheme.isNotEmpty ? uri.scheme : 'http';
-        final port = (uri.port != 0 && uri.port != 80 && uri.port != 443) ? ':8000' : '';
-        return '$scheme://${uri.host}$port';
-      }
-    } catch (_) {}
-    return 'https://ai.kidpro.edu.vn';
-  }
-
   ApiClient._() {
     dio = Dio(BaseOptions(
       baseUrl: defaultHostUrl,

@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/core/network/api_client.dart';
-import 'package:kidpro_mobile/core/storage/secure_storage_helper.dart';
 import 'package:kidpro_mobile/features/auth/providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -197,24 +196,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final ctrl = TextEditingController(text: ApiClient().currentBaseUrl);
     String? backendPingResult;
     bool backendSuccess = false;
-    String? aiPingResult;
-    bool aiSuccess = false;
     bool isPinging = false;
 
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          final currentInput = ctrl.text.trim().replaceAll(RegExp(r"/+$"), "");
-          String derivedAiUrl = 'http://192.168.10.51:8000';
-          try {
-            final uri = Uri.parse(currentInput);
-            if (uri.host.isNotEmpty) {
-              final scheme = uri.scheme.isNotEmpty ? uri.scheme : 'http';
-              derivedAiUrl = '$scheme://${uri.host}:8000';
-            }
-          } catch (_) {}
-
           return AlertDialog(
             title: const Row(
               children: [
@@ -242,12 +229,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     onChanged: (_) => setDialogState(() {
                       backendPingResult = null;
-                      aiPingResult = null;
                     }),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'AI Face Backend (cổng 8000): $derivedAiUrl',
+                    'Nhận diện khuôn mặt được xử lý nội bộ qua backend này; ứng dụng không kết nối trực tiếp cổng AI 8000.',
                     style: const TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
@@ -263,7 +249,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: () => setDialogState(() {
                           ctrl.text = 'http://192.168.10.51:8080';
                           backendPingResult = null;
-                          aiPingResult = null;
                         }),
                       ),
                                             ActionChip(
@@ -272,7 +257,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: () => setDialogState(() {
                           ctrl.text = 'http://192.168.137.1:8080';
                           backendPingResult = null;
-                          aiPingResult = null;
                         }),
                       ),
                       ActionChip(
@@ -281,7 +265,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: () => setDialogState(() {
                           ctrl.text = 'http://127.0.0.1:8080';
                           backendPingResult = null;
-                          aiPingResult = null;
                         }),
                       ),
                       ActionChip(
@@ -290,7 +273,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: () => setDialogState(() {
                           ctrl.text = 'http://10.0.2.2:8080';
                           backendPingResult = null;
-                          aiPingResult = null;
                         }),
                       ),
                     ],
@@ -309,7 +291,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 setDialogState(() {
                                   isPinging = true;
                                   backendPingResult = null;
-                                  aiPingResult = null;
                                 });
 
                                 final base = ctrl.text.trim().replaceAll(RegExp(r"/+$"), "");
@@ -340,32 +321,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                   backendPingResult = 'Backend (8080): $e';
                                 }
 
-                                // 2. Ping Python AI Server (cổng 8000)
-                                try {
-                                  final dioAi = Dio(BaseOptions(
-                                    connectTimeout: const Duration(seconds: 4),
-                                    receiveTimeout: const Duration(seconds: 4),
-                                  ));
-                                  final resAi = await dioAi.get(derivedAiUrl);
-                                  aiSuccess = true;
-                                  final count = resAi.data is Map ? (resAi.data['registered_students_count'] ?? 0) : 0;
-                                  aiPingResult = 'AI Server (8000): ONLINE ($count học sinh)';
-                                } on DioException catch (e) {
-                                  if (e.response != null) {
-                                    aiSuccess = true;
-                                    aiPingResult = 'AI Server (8000): Phản hồi HTTP ${e.response?.statusCode} (Kết nối tốt!)';
-                                  } else if (e.type == DioExceptionType.connectionTimeout) {
-                                    aiSuccess = false;
-                                    aiPingResult = 'AI Server (8000): Timeout! Kiểm tra Wi-Fi / Firewall';
-                                  } else {
-                                    aiSuccess = false;
-                                    aiPingResult = 'AI Server (8000): Chưa chạy hoặc bị chặn (${e.type.name}) - Kiểm tra xem Python AI Server đã chạy chưa!';
-                                  }
-                                } catch (e) {
-                                  aiSuccess = false;
-                                  aiPingResult = 'AI Server (8000): $e';
-                                }
-
                                 setDialogState(() {
                                   isPinging = false;
                                 });
@@ -373,49 +328,27 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
-                  if (backendPingResult != null || aiPingResult != null) ...[
+                  if (backendPingResult != null) ...[
                     const SizedBox(height: 10),
-                    if (backendPingResult != null)
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: backendSuccess ? Colors.green.shade50 : Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: backendSuccess ? Colors.green.shade300 : Colors.red.shade300,
-                          ),
-                        ),
-                        child: Text(
-                          backendPingResult!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: backendSuccess ? Colors.green.shade900 : Colors.red.shade900,
-                            fontWeight: FontWeight.w500,
-                          ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: backendSuccess ? Colors.green.shade50 : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: backendSuccess ? Colors.green.shade300 : Colors.red.shade300,
                         ),
                       ),
-                    if (aiPingResult != null)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: aiSuccess ? Colors.green.shade50 : Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: aiSuccess ? Colors.green.shade300 : Colors.red.shade300,
-                          ),
-                        ),
-                        child: Text(
-                          aiPingResult!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: aiSuccess ? Colors.green.shade900 : Colors.red.shade900,
-                            fontWeight: FontWeight.w500,
-                          ),
+                      child: Text(
+                        backendPingResult!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: backendSuccess ? Colors.green.shade900 : Colors.red.shade900,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
+                    ),
                   ],
                 ],
               ),
@@ -430,12 +363,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   final newUrl = ctrl.text.trim();
                   if (newUrl.isNotEmpty) {
                     await ApiClient().updateBaseUrl(newUrl);
-                    await SecureStorageHelper.saveAiServerUrl(derivedAiUrl);
                     if (context.mounted) {
                       setState(() {});
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Đã cập nhật Backend ($newUrl) & AI ($derivedAiUrl)')),
+                        SnackBar(content: Text('Đã cập nhật Backend ($newUrl); AI sẽ được xử lý nội bộ qua backend.')),
                       );
                     }
                   }

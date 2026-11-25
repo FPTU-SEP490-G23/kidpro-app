@@ -11,7 +11,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:kidpro_mobile/core/constants/api_endpoints.dart';
 import 'package:kidpro_mobile/core/network/api_client.dart';
-import 'package:kidpro_mobile/core/storage/secure_storage_helper.dart';
 import 'package:kidpro_mobile/core/constants/app_colors.dart';
 import 'package:kidpro_mobile/features/teacher/providers/teacher_provider.dart';
 import 'package:kidpro_mobile/features/teacher/utils/liveness_direction_mapper.dart';
@@ -34,10 +33,6 @@ class FaceAttendanceCameraScreen extends StatefulWidget {
 
 class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  // Configurable AI server URL (Wi-Fi LAN IP or USB adb reverse)
-  String _serverBaseUrl = ApiClient().aiBaseUrl;
-  final _urlCtrl = TextEditingController();
-
   // Camera & ML Kit
   List<CameraDescription> _cameras = [];
   CameraController? _cameraController;
@@ -96,9 +91,6 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _serverBaseUrl = ApiClient().aiBaseUrl;
-    _urlCtrl.text = _serverBaseUrl;
-    _initAiServer();
 
     _animCtrl = AnimationController(
       vsync: this,
@@ -130,7 +122,6 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     _autoResetTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _animCtrl.dispose();
-    _urlCtrl.dispose();
     _stopAndDisposeCamera();
     _faceDetector.close();
     super.dispose();
@@ -709,19 +700,6 @@ class _FaceAttendanceCameraScreenState extends State<FaceAttendanceCameraScreen>
     }
   }
 
-  Future<void> _initAiServer() async {
-    final saved = await SecureStorageHelper.getAiServerUrl();
-    if (saved != null && saved.isNotEmpty && saved != 'http://192.168.10.131:8000' && saved != 'http://192.168.10.125:8000') {
-      _serverBaseUrl = saved;
-    } else {
-      _serverBaseUrl = ApiClient().aiBaseUrl;
-    }
-    if (mounted) {
-      setState(() => _urlCtrl.text = _serverBaseUrl);
-    }
-  }
-
-  
   /// Widget hiển thị 4 bước kiểm tra người thật tương tác trực quan
   Widget _buildLivenessStepper() {
     final bool step1Done = _livenessStep != LivenessStep.searchingFace;
