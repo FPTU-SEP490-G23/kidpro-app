@@ -5,6 +5,7 @@ import pickle
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import numpy as np
 
 # Add paths
@@ -79,6 +80,188 @@ class TestOPT007VersioningAndGuard(unittest.TestCase):
         loaded_vecs, loaded_ids, loaded_meta = load_embeddings_from_file(pkl_path)
         self.assertEqual(loaded_ids, student_ids)
         self.assertEqual(loaded_meta.get("pipeline_version"), "v1_raw_crop")
+
+
+class TestDatabaseVectorStore(unittest.TestCase):
+    def test_embedding_parser_requires_512_finite_values(self):
+        from main import _parse_face_embedding
+
+        vector = np.zeros(512, dtype=np.float32)
+        vector[0] = 1.0
+        np.testing.assert_array_equal(_parse_face_embedding(vector.tolist()), vector)
+        self.assertIsNone(_parse_face_embedding([1.0] * 511))
+        self.assertIsNone(_parse_face_embedding([float("nan")] + [0.0] * 511))
+
+    def test_internal_image_fetch_rejects_cross_origin_redirects(self):
+        import main
+        from urllib.request import Request
+
+        request = Request(
+            "http://backend/uploads/face.jpg",
+            headers={"X-Internal-Service-Key": "internal-test-key"},
+        )
+        handler = main._SameOriginRedirectHandler()
+
+        self.assertIsNone(handler.redirect_request(
+            request, None, 302, "Found", {}, "https://images.example/face.jpg"
+        ))
+
+    def test_external_image_request_does_not_include_internal_key(self):
+        import main
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def read(self):
+                return b"image"
+
+        captured_requests = []
+
+        class FakeOpener:
+            def open(self, request, timeout):
+                captured_requests.append(request)
+                return FakeResponse()
+
+        expected_embedding = np.zeros(512, dtype=np.float32)
+        expected_embedding[0] = 1.0
+        with patch("main.urllib.request.build_opener", return_value=FakeOpener()), \
+                patch("main.cv2.imdecode", return_value=np.zeros((1, 1, 3), dtype=np.uint8)), \
+                patch("main.extract_l2_normalized_embedding", return_value=expected_embedding):
+            main._download_face_embedding("http://backend", "https://images.example/face.jpg")
+
+        self.assertNotIn(
+            "x-internal-service-key",
+            {name.lower() for name, _ in captured_requests[0].header_items()},
+        )
+
+    def test_database_mode_does_not_write_local_vector_caches(self):
+        import main
+
+        embeddings = np.ones((1, 512), dtype=np.float32)
+        with patch.object(main, "BACKEND_URL", "http://backend"), \
+                patch.object(main, "DATABASE_VECTOR_STORE", True), \
+                patch.object(main, "save_embeddings_to_npz") as save_npz:
+            main.update_embeddings_atomic(embeddings, ["student-1"])
+            main.save_embeddings_cache()
+            save_npz.assert_not_called()
+
+        with patch.object(main, "BACKEND_URL", "http://backend"), \
+                patch.object(main, "DATABASE_VECTOR_STORE", True), \
+                patch("builtins.open", side_effect=AssertionError("unexpected file write")):
+            main.update_pickup_cache_atomic({"photo": embeddings[0]})
+            main.save_pickup_cache()
+
+        main.update_embeddings_atomic(None, [])
+        main.update_pickup_cache_atomic({})
+
+    def test_database_sync_migrates_legacy_vector_through_internal_api(self):
+        import main
+
+        student_id = "student-legacy-1"
+        vector = np.zeros(512, dtype=np.float32)
+        vector[0] = 1.0
+        face_file = {
+            "faceFileId": 15,
+            "studentId": student_id,
+            "studentName": "Student",
+            "classId": None,
+            "className": "Class",
+            "photoUrl": "https://images.example/face.jpg",
+            "faceEmbedding": None,
+            "modelName": "arcface_w600k_r50",
+            "pipelineVersion": "v1_raw_crop",
+        }
+
+        class FakeResponse:
+            def __init__(self, body=b""):
+                self.body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def read(self):
+                return self.body
+
+        opened_requests = []
+        responses = iter([
+            FakeResponse(json.dumps([face_file]).encode("utf-8")),
+            FakeResponse(),
+        ])
+
+        class FakeOpener:
+            def open(self, request, timeout):
+                opened_requests.append(request)
+                return next(responses)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = os.path.join(temp_dir, "attendance.db")
+            with patch.object(main, "DB_PATH", db_path), \
+                    patch.object(main, "cached_pipeline_version", "v1_raw_crop"), \
+                    patch.object(main, "_load_legacy_student_embeddings", return_value={student_id: vector}), \
+                    patch("main.urllib.request.build_opener", return_value=FakeOpener()):
+                main.init_db()
+                result = main.sync_embeddings_from_backend("http://backend")
+
+                self.assertEqual(result, {"synced_count": 1, "migrated_count": 1})
+                put_request = opened_requests[1]
+                self.assertEqual(put_request.get_method(), "PUT")
+                update_payload = json.loads(put_request.data.decode("utf-8"))
+                self.assertEqual(len(update_payload["faceEmbedding"]), 512)
+                self.assertEqual(update_payload["pipelineVersion"], main.PIPELINE_VERSION)
+                self.assertEqual(main.get_embeddings_snapshot()[1], [student_id])
+                np.testing.assert_array_equal(main.get_embeddings_snapshot()[0][0], vector)
+
+        main.update_embeddings_atomic(None, [])
+
+    def test_database_sync_fills_missing_pickup_vector(self):
+        import main
+
+        face_file = {
+            "faceFileId": 27,
+            "photoUrl": "https://images.example/pickup.jpg",
+            "faceEmbedding": None,
+        }
+        vector = np.zeros(512, dtype=np.float32)
+        vector[0] = 1.0
+        opened_requests = []
+
+        class FakeResponse:
+            def __init__(self, body=b""):
+                self.body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def read(self):
+                return self.body
+
+        responses = iter([
+            FakeResponse(json.dumps([face_file]).encode("utf-8")),
+            FakeResponse(),
+        ])
+
+        class FakeOpener:
+            def open(self, request, timeout):
+                opened_requests.append(request)
+                return next(responses)
+
+        with patch("main.urllib.request.build_opener", return_value=FakeOpener()), \
+                patch("main._download_face_embedding", return_value=vector):
+            result = main.sync_pickup_encodings_from_backend("http://backend")
+
+        self.assertEqual(result, {"synced_count": 1, "migrated_count": 1})
+        self.assertEqual(opened_requests[1].get_method(), "PUT")
+        self.assertEqual(len(json.loads(opened_requests[1].data)["faceEmbedding"]), 512)
 
 if __name__ == "__main__":
     unittest.main()
