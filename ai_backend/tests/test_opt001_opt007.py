@@ -260,7 +260,15 @@ class TestDatabaseVectorStore(unittest.TestCase):
             result = main.sync_pickup_encodings_from_backend("http://backend")
 
         self.assertEqual(result, {"synced_count": 1, "migrated_count": 1})
+        self.assertEqual(
+            opened_requests[0].full_url,
+            "http://backend/api/internal/ai/face-encodings/pickup",
+        )
         self.assertEqual(opened_requests[1].get_method(), "PUT")
+        self.assertEqual(
+            opened_requests[1].full_url,
+            "http://backend/api/internal/ai/face-encodings/27",
+        )
         self.assertEqual(len(json.loads(opened_requests[1].data)["faceEmbedding"]), 512)
 
 if __name__ == "__main__":
